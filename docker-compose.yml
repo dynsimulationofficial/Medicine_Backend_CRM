@@ -1,34 +1,51 @@
-version: "3.9"
+name: medicine-staging
 
 services:
   db:
+    container_name: medicine-db-staging
     image: postgres:14
     restart: always
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-medicine_staging_db}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "127.0.0.1:5635:5432"
+      - "127.0.0.1:5630:5432"
     volumes:
-      - compress_pgdata:/var/lib/postgresql/data
+      - medicine_staging_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
   backend:
-    image: ghcr.io/danishkkhan13/manageleadcrmbackend-prod:latest
+    container_name: medicine-backend-staging
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: medicine-backend-staging:latest
     restart: unless-stopped
     env_file:
-      - .env
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: staging
+      MANAGE_LEAD_PORT: 8016
     ports:
-      - "127.0.0.1:8015:8015"
+      - "127.0.0.1:8016:8016"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - ./uploads:/usr/src/app/uploads
+      - medicine_staging_uploads:/usr/src/app/uploads
       - ./config:/usr/src/app/config
 
 volumes:
-  compress_pgdata:
+  medicine_staging_pgdata:
+    name: medicine_staging_pgdata
+  medicine_staging_uploads:
+    name: medicine_staging_uploads

@@ -21,6 +21,9 @@ FROM node:18
 
 WORKDIR /usr/src/app
 
+# Set default staging environment
+ENV NODE_ENV=staging
+
 # Copy only necessary files from builder stage
 COPY --from=builder /usr/src/app/package.json ./package.json
 COPY --from=builder /usr/src/app/node_modules ./node_modules
@@ -30,5 +33,5 @@ COPY --from=builder /usr/src/app/start.sh ./start.sh
 # Make start script executable
 RUN chmod +x ./start.sh
 
-EXPOSE 8015
+EXPOSE 8016
 CMD ["./start.sh"]
