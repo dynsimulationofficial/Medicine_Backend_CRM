@@ -10,15 +10,15 @@ import { syncDatabase } from "./database/sync";
 import emailService from "./service/EmailService";
 dotenv.config();
 
-console.log("🛠️ MANAGE_LEAD_PORT =", process.env.MANAGE_LEAD_PORT);
+console.log("🛠️ MEDICINE_CRM_PORT =", process.env.MEDICINE_CRM_PORT);
 
 const app: Express = express();
-const port = Number(process.env.MANAGE_LEAD_PORT) || 3000;
+const port = Number(process.env.MEDICINE_CRM_PORT) || 8016;
 
 // Sentry setup
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
-  serverName: "Manage Lead",
+  serverName: "Medicine CRM Backend Staging",
   profilesSampleRate: 1.0,
 });
 
@@ -40,7 +40,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/api/v1/managelead", SystemuserRouter);
 
 app.get("/", (_req: Request, res: Response) => {
-  res.send("Express + TypeScript server is running.");
+  res.send("medicine-crm-backend-staging server is running.");
 });
 // Initialize server
 async function startServer() {
