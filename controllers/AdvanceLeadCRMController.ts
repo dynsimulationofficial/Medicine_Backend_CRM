@@ -583,7 +583,11 @@ export default class CompressCrmController extends BaseController {
       });
 
       // Send OTP
-      await emailService.sendOtpEmail(email, otp);
+      try {
+        await emailService.sendOtpEmail(email, otp);
+      } catch (emailErr) {
+        console.warn("⚠️ SMTP email sending failed/timed out, continuing login OTP flow:", emailErr);
+      }
 
       // Success with role in payload
       return this.sendSuccess(

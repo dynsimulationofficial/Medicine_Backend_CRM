@@ -14,3 +14,18 @@
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:33:24.162Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:39:34.588Z"}
 {"error":{"code":"EAUTH","command":"AUTH PLAIN","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-3267c385ec7sm5370006eec.20 - gsmtp","responseCode":535},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T11:40:45.946Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T12:09:44.824Z"}
+{"error":{"code":"ETIMEDOUT","command":"CONN"},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T13:09:01.898Z"}
+{"error":{"code":"ETIMEDOUT","command":"CONN"},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T13:09:25.741Z"}
+{"error":{"code":"ETIMEDOUT","command":"CONN"},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T13:14:53.997Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6ImQ2YmYxZGQ1LTU3NzUtNDk2Yi04ZTFhLWQ0ZDY4MzQyOTY4MyIsImVtYWlsIjoid2FzaXF1ZWtoYW45MEBnbWFpbC5jb20iLCJpYXQiOjE3ODY5Njg2NjAsImV4cCI6MTc4NzAxMTg2MH0.hfI4fuSCeDger8GjtcrCkhUDnb2wZcziZ3odKLQKjEw","timestamp":"2026-08-17T13:17:34.441Z"}
+{"error":{"code":"ETIMEDOUT","command":"CONN"},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T13:17:56.543Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T13:18:58.786Z"}
+{"error":{"code":"ETIMEDOUT","command":"CONN"},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T13:19:37.143Z"}
+{"error":{"code":"ETIMEDOUT","command":"CONN"},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T13:22:29.402Z"}
+{"error":{"code":"ETIMEDOUT","command":"CONN"},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T13:22:56.383Z"}
+{"error":{"code":"ETIMEDOUT","command":"CONN"},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T13:23:31.971Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T13:26:42.906Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T13:28:34.106Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T13:28:50.721Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T13:29:45.680Z"}

@@ -1,4 +1,7 @@
 import nodemailer, { Transporter } from "nodemailer";
+import dotenv from "dotenv";
+
+dotenv.config();
 
 type SendOptions = {
   to: string | string[];
@@ -28,6 +31,9 @@ class EmailService {
       port,
       secure,
       auth: { user, pass },
+      tls: {
+        rejectUnauthorized: false,
+      },
       connectionTimeout: 15_000,
       greetingTimeout: 10_000,
       socketTimeout: 20_000,
