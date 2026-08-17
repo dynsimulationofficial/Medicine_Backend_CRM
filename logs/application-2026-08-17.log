@@ -1,0 +1,16 @@
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T10:39:28.447Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T10:56:32.324Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T10:56:48.534Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T10:56:54.064Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T10:57:16.053Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T10:57:21.238Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T10:58:22.888Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:01:34.421Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:06:45.997Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:25:28.532Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:25:40.510Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:26:44.726Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:30:25.389Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:33:24.162Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-17T11:39:34.588Z"}
+{"error":{"code":"EAUTH","command":"AUTH PLAIN","response":"535-5.7.8 Username and Password not accepted. For more information, go to\n535 5.7.8  https://support.google.com/mail/?p=BadCredentials 5a478bee46e88-3267c385ec7sm5370006eec.20 - gsmtp","responseCode":535},"level":"error","message":"Login OTP error","timestamp":"2026-08-17T11:40:45.946Z"}

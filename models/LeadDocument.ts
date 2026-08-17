@@ -10,7 +10,9 @@ export interface LeadDocumentAttrs {
   file_size: number;
   storage_path: string;
   is_image: boolean;
-  notes?: string | null;          // 👈 NEW
+  notes?: string | null;
+  is_edited?: boolean;
+  edited_by?: string | null;
   created_at?: Date;
   updated_at?: Date;
   deleted_at?: Date | null;
@@ -18,7 +20,7 @@ export interface LeadDocumentAttrs {
 
 type LeadDocumentCreation = Optional<
   LeadDocumentAttrs,
-  "id" | "uploaded_by" | "notes" | "created_at" | "updated_at" | "deleted_at"
+  "id" | "uploaded_by" | "notes" | "is_edited" | "edited_by" | "created_at" | "updated_at" | "deleted_at"
 >;
 
 export const initLeadDocumentModel = (sequelize: Sequelize) => {
@@ -32,7 +34,9 @@ export const initLeadDocumentModel = (sequelize: Sequelize) => {
     public file_size!: number;
     public storage_path!: string;
     public is_image!: boolean;
-    public notes?: string | null;       // 👈 NEW
+    public notes?: string | null;
+    public is_edited!: boolean;
+    public edited_by?: string | null;
     public created_at!: Date;
     public updated_at!: Date;
     public deleted_at!: Date | null;
@@ -48,7 +52,9 @@ export const initLeadDocumentModel = (sequelize: Sequelize) => {
       file_size: { type: DataTypes.INTEGER, allowNull: false },
       storage_path: { type: DataTypes.STRING, allowNull: false },
       is_image: { type: DataTypes.BOOLEAN, defaultValue: false },
-      notes: { type: DataTypes.TEXT, allowNull: true },   // 👈 NEW
+      notes: { type: DataTypes.TEXT, allowNull: true },
+      is_edited: { type: DataTypes.BOOLEAN, defaultValue: false, allowNull: false },
+      edited_by: { type: DataTypes.UUID, allowNull: true },
       created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
       updated_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
       deleted_at: { type: DataTypes.DATE, allowNull: true },

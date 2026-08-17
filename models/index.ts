@@ -24,6 +24,10 @@ import { initLeadSourceModel } from "./LeadSource";
 import { initLeadDebtStatusModel } from "./LeadDebtStatus";
 import { initEmailTemplateModel } from "./EmailTemplate";
 import initUserLoginModel from "./UserLogin";
+import { initAssignedLeadNotificationModel } from "./AssignedLeadNotification";
+import { initExpenseModel } from "./Expense";
+import { initSystemUserSecretModel } from "./SystemUserSecret";
+import { initLeadBulkDocumentModel } from "./LeadBulkDocument";
 
 const dbService = new DBServices();
 const sequelize: Sequelize = dbService.sequelizeWriter;
@@ -53,6 +57,11 @@ const LeadDebtStatus = initLeadDebtStatusModel(sequelize);
 
 const UserLogin = initUserLoginModel(sequelize);
 const EmailTemplate = initEmailTemplateModel(sequelize);
+
+const AssignedLeadNotification = initAssignedLeadNotificationModel(sequelize);
+const Expense = initExpenseModel(sequelize);
+const SystemUserSecret = initSystemUserSecretModel(sequelize);
+const LeadBulkDocument = initLeadBulkDocumentModel(sequelize);
 
 /* ------------- Associations ------------- */
 
@@ -310,6 +319,10 @@ const db = {
   WebPushNotification,
   WebPushToken,
   EmailTemplate,
+  AssignedLeadNotification,
+  Expense,
+  SystemUserSecret,
+  LeadBulkDocument,
 };
 
 export default db;
@@ -335,4 +348,8 @@ export {
   UserOtp,
   WebPushToken,
   EmailTemplate,
+  AssignedLeadNotification,
+  Expense,
+  SystemUserSecret,
+  LeadBulkDocument,
 };

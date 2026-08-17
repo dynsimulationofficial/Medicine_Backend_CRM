@@ -264,19 +264,26 @@ export async function seedInitialData() {
   }
 }
 
+async function ensureSequencesExist(sequelize: Sequelize) {
+  await sequelize.query(`CREATE SEQUENCE IF NOT EXISTS lead_number_seq START 1;`);
+}
+
 export async function syncDatabase(sequelize: Sequelize) {
   try {
     console.log("🔄 Syncing database...");
 
-    // 1) Ensure new columns/index/FK exist for system_users
-    await ensureSystemUsersBlockColumns(sequelize);
+    // 1) Ensure required sequences exist for model defaults
+    await ensureSequencesExist(sequelize);
 
-    // 2) Sync models (no drop)
-    await sequelize.sync(); // or { alter: true } if you want Sequelize to auto-add missing columns
+    // 2) Sync models (creates missing tables)
+    await sequelize.sync();
+
+    // 3) Ensure new columns/index/FK exist for system_users
+    await ensureSystemUsersBlockColumns(sequelize);
 
     console.log("✅ Tables are in sync");
 
-    // 3) Seed fixed data
+    // 4) Seed fixed data
     await seedInitialData();
   } catch (error) {
     console.error("❌ Database sync failed:", error);
