@@ -65,14 +65,17 @@ interface LeadDocRow {
 // AWS S3 Client
 
 
-// Canada (Eastern) timezone
-const ZONE = "America/New_York";
+// Multi-Country Timezone Support (India IST, USA EST/PST, UK GMT)
+import { getTimezoneForCountry, formatToCountryDateTime, formatToCountryDate, getRemainingMinutes } from "../utils/timeZoneHelper";
+
+// Default timezone set to India (IST)
+const ZONE = "Asia/Kolkata";
 
 // Required output formats
 const DATE_FMT = "MM-dd-yyyy";
 const DATETIME_FMT = "MM-dd-yyyy hh:mm a";
 
-// Accept common input formats *in Canada TZ*
+// Accept common input formats in target TZ
 const INPUT_FORMATS = [
     "MM-dd-yyyy",          // ✅ allow date only
     "yyyy-MM-dd",          // ✅ ISO-like date only
@@ -85,38 +88,29 @@ const INPUT_FORMATS = [
     "yyyy-MM-dd'T'HH:mm",
 ];
 
-// Parse user text -> Luxon DateTime in Canada TZ
-function parseInCA(text?: string | null): DateTime | null {
+// Parse user text -> Luxon DateTime in target TZ
+function parseInCA(text?: string | null, countryOrZone?: string): DateTime | null {
     if (!text) return null;
+    const targetZone = countryOrZone ? getTimezoneForCountry(countryOrZone) : ZONE;
     for (const f of INPUT_FORMATS) {
         const dt = (f === "MM-dd-yyyy" || f === "yyyy-MM-dd")
-            ? DateTime.fromFormat(text, f, { zone: ZONE }).startOf("day")
-            : DateTime.fromFormat(text, f, { zone: ZONE });
+            ? DateTime.fromFormat(text, f, { zone: targetZone }).startOf("day")
+            : DateTime.fromFormat(text, f, { zone: targetZone });
         if (dt.isValid) return dt;
     }
-    const iso = DateTime.fromISO(text, { zone: ZONE });
+    const iso = DateTime.fromISO(text, { zone: targetZone });
     return iso.isValid ? iso : null;
 }
 
-
-function toCAString(d: any): string | null {
-    if (!d) return null;
-    return DateTime.fromJSDate(new Date(d), { zone: "utc" }).setZone(ZONE).toFormat(DATETIME_FMT);
+function toCAString(d: any, countryOrZone?: string): string | null {
+    return formatToCountryDateTime(d, countryOrZone || ZONE);
 }
-function toCADate(d: any): string | null {
-    if (!d) return null;
-    return DateTime.fromJSDate(new Date(d), { zone: "utc" }).setZone(ZONE).toFormat(DATE_FMT);
+function toCADate(d: any, countryOrZone?: string): string | null {
+    return formatToCountryDate(d, countryOrZone || ZONE);
 }
-// Remaining minutes from now (in Canada TZ) until a UTC JS Date
-function remainingMinutesCA(dueUtc: Date): number {
-    return Math.max(
-        0,
-        Math.ceil(
-            DateTime.fromJSDate(dueUtc, { zone: "utc" })
-                .setZone(ZONE)
-                .diff(DateTime.now().setZone(ZONE), "minutes").minutes
-        )
-    );
+// Remaining minutes from now until a UTC JS Date
+function remainingMinutesCA(dueUtc: Date, countryOrZone?: string): number {
+    return getRemainingMinutes(dueUtc, countryOrZone || ZONE);
 }
 
 // Convert timer pair for display (unchanged logic)
@@ -4215,8 +4209,8 @@ export default class LeadController extends BaseController {
             const targetAgentId = isAdmin && qp.agent_id ? qp.agent_id : me;
             const windowDays = Number(qp.days ?? 7);
 
-            // -------- EST TZ helpers
-            const ZONE = "America/New_York";
+            // -------- IST TZ helpers
+            const ZONE = "Asia/Kolkata";
             const DATE_FMT = "MM-dd-yyyy";
             const DATETIME_FMT = "MM-dd-yyyy hh:mm a";
 
@@ -4351,7 +4345,7 @@ export default class LeadController extends BaseController {
             const lastNDaysRows: any[] = await this.db_services.sequelizeWriter.query(
                 `
                 SELECT
-                    (t.start_at AT TIME ZONE 'UTC' AT TIME ZONE 'America/New_York')::date AS day_est,
+                    (t.start_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date AS day_est,
                     COUNT(*)::int AS c
                 ${baseWhere}
                 AND t.start_at >= :start_utc
@@ -4933,8 +4927,8 @@ export default class LeadController extends BaseController {
             const qp = await schema.validate(req.query, { abortEarly: false });
             const windowDays = Number(qp.days ?? 7);
 
-            // ---- Canada TZ window helpers
-            const ZONE = "America/New_York";
+            // ---- IST TZ window helpers
+            const ZONE = "Asia/Kolkata";
             const DATE_FMT = "MM-dd-yyyy";
             const DATETIME_FMT = "MM-dd-yyyy hh:mm a";
 
