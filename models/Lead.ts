@@ -24,6 +24,9 @@ export interface LeadAttributes {
   debt_consolidation_status_id?: string | null;
   note?: string | null;
   status?: string | null;
+  lead_status?: string | null;
+  payment_status?: string | null;
+  delivery_status?: string | null;
   company?: string | null;
   activity_summary?: string | null;
   medicine_name?: string | null;
@@ -42,7 +45,8 @@ export type LeadCreationAttributes = Optional<
   | "city" | "state" | "postal_code" | "country" | "lead_score" | "lead_quality"
   | "best_time_to_call" | "agent_id" | "consolidated_credit_status_id"
   | "whatsapp_number" | "lead_source_id" | "debt_consolidation_status_id"
-  | "note" | "status" | "company" | "activity_summary"
+  | "note" | "status" | "lead_status" | "payment_status" | "delivery_status"
+  | "company" | "activity_summary"
   | "medicine_name" | "order_amount" | "currency" | "courier_name" | "tracking_number"
   | "created_at" | "updated_at" | "deleted_at"
 >;
@@ -72,6 +76,9 @@ export const initLeadModel = (sequelize: Sequelize) => {
     public debt_consolidation_status_id!: string | null;
     public note!: string | null;
     public status!: string | null;
+    public lead_status!: string | null;
+    public payment_status!: string | null;
+    public delivery_status!: string | null;
     public company!: string | null;
     public activity_summary!: string | null;
     public medicine_name!: string | null;
@@ -114,6 +121,9 @@ export const initLeadModel = (sequelize: Sequelize) => {
       debt_consolidation_status_id: { type: DataTypes.UUID, allowNull: true },
       note: { type: DataTypes.TEXT, allowNull: true },
       status: { type: DataTypes.STRING(100), allowNull: true },
+      lead_status: { type: DataTypes.STRING(50), allowNull: true, defaultValue: "New" },
+      payment_status: { type: DataTypes.STRING(50), allowNull: true, defaultValue: "Pending" },
+      delivery_status: { type: DataTypes.STRING(50), allowNull: true, defaultValue: "Pending" },
       company: { type: DataTypes.STRING(255), allowNull: true },
       activity_summary: { type: DataTypes.TEXT, allowNull: true },
       medicine_name: { type: DataTypes.STRING(255), allowNull: true },

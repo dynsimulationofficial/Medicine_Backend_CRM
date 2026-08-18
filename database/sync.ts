@@ -261,7 +261,10 @@ async function ensureMedicineColumns(sequelize: Sequelize) {
       ADD COLUMN IF NOT EXISTS order_amount numeric(10, 2) NULL,
       ADD COLUMN IF NOT EXISTS currency varchar(10) NULL DEFAULT 'USD',
       ADD COLUMN IF NOT EXISTS courier_name varchar(100) NULL,
-      ADD COLUMN IF NOT EXISTS tracking_number varchar(100) NULL;
+      ADD COLUMN IF NOT EXISTS tracking_number varchar(100) NULL,
+      ADD COLUMN IF NOT EXISTS lead_status varchar(50) NULL DEFAULT 'New',
+      ADD COLUMN IF NOT EXISTS payment_status varchar(50) NULL DEFAULT 'Pending',
+      ADD COLUMN IF NOT EXISTS delivery_status varchar(50) NULL DEFAULT 'Pending';
   `);
 }
 

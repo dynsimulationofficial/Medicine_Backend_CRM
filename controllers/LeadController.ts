@@ -308,6 +308,9 @@ export default class LeadController extends BaseController {
                 currency: s().optional(),
                 courier_name: s().optional(),
                 tracking_number: s().optional(),
+                lead_status: s().optional(),
+                payment_status: s().optional(),
+                delivery_status: s().optional(),
             });
 
             const input = await schema.validate(req.body, { abortEarly: false });
@@ -364,7 +367,8 @@ export default class LeadController extends BaseController {
                 "lead_score", "lead_quality", "best_time_to_call",
                 "agent_id", "whatsapp_number", "created_at", "updated_at",
                 "lead_source_id", "debt_consolidation_status_id", "consolidated_credit_status_id",
-                "medicine_name", "order_amount", "currency", "courier_name", "tracking_number"
+                "medicine_name", "order_amount", "currency", "courier_name", "tracking_number",
+                "lead_status", "payment_status", "delivery_status"
             ];
             const vals = [
                 ":id", ":full_name", ":email", ":phone",
@@ -372,7 +376,8 @@ export default class LeadController extends BaseController {
                 "COALESCE(:lead_score,0)", ":lead_quality", ":best_time_to_call",
                 ":agent_id", ":whatsapp_number", "NOW()", "NOW()",
                 ":lead_source_id", ":debt_consolidation_status_id", ":consolidated_credit_status_id",
-                ":medicine_name", ":order_amount", ":currency", ":courier_name", ":tracking_number"
+                ":medicine_name", ":order_amount", ":currency", ":courier_name", ":tracking_number",
+                ":lead_status", ":payment_status", ":delivery_status"
             ];
 
             const replacements: Record<string, any> = {
@@ -399,6 +404,9 @@ export default class LeadController extends BaseController {
                 currency: toNull(input.currency) ?? "USD",
                 courier_name: toNull(input.courier_name),
                 tracking_number: toNull(input.tracking_number),
+                lead_status: toNull(input.lead_status) ?? "New",
+                payment_status: toNull(input.payment_status) ?? "Pending",
+                delivery_status: toNull(input.delivery_status) ?? "Pending",
             };
 
             const insertSql = `
