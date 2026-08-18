@@ -254,6 +254,17 @@ async function ensureSequencesExist(sequelize: Sequelize) {
   await sequelize.query(`CREATE SEQUENCE IF NOT EXISTS lead_number_seq START 1;`);
 }
 
+async function ensureMedicineColumns(sequelize: Sequelize) {
+  await sequelize.query(`
+    ALTER TABLE public.leads
+      ADD COLUMN IF NOT EXISTS medicine_name varchar(255) NULL,
+      ADD COLUMN IF NOT EXISTS order_amount numeric(10, 2) NULL,
+      ADD COLUMN IF NOT EXISTS currency varchar(10) NULL DEFAULT 'USD',
+      ADD COLUMN IF NOT EXISTS courier_name varchar(100) NULL,
+      ADD COLUMN IF NOT EXISTS tracking_number varchar(100) NULL;
+  `);
+}
+
 export async function syncDatabase(sequelize: Sequelize) {
   try {
     console.log("🔄 Syncing database...");
@@ -264,8 +275,9 @@ export async function syncDatabase(sequelize: Sequelize) {
     // 2) Sync models (creates missing tables)
     await sequelize.sync();
 
-    // 3) Ensure new columns/index/FK exist for system_users
+    // 3) Ensure new columns/index/FK exist for system_users and leads
     await ensureSystemUsersBlockColumns(sequelize);
+    await ensureMedicineColumns(sequelize);
 
     console.log("✅ Tables are in sync");
 

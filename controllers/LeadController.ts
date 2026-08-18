@@ -303,6 +303,11 @@ export default class LeadController extends BaseController {
                 lead_source_id: s().uuid().optional(),
                 debt_consolidation_status_id: s().uuid().optional(),
                 consolidated_credit_status_id: s().uuid().optional(),
+                medicine_name: s().optional(),
+                order_amount: Yup.number().min(0).optional(),
+                currency: s().optional(),
+                courier_name: s().optional(),
+                tracking_number: s().optional(),
             });
 
             const input = await schema.validate(req.body, { abortEarly: false });
@@ -358,14 +363,16 @@ export default class LeadController extends BaseController {
                 "address_line1", "address_line2", "city", "state", "postal_code", "country",
                 "lead_score", "lead_quality", "best_time_to_call",
                 "agent_id", "whatsapp_number", "created_at", "updated_at",
-                "lead_source_id", "debt_consolidation_status_id", "consolidated_credit_status_id"
+                "lead_source_id", "debt_consolidation_status_id", "consolidated_credit_status_id",
+                "medicine_name", "order_amount", "currency", "courier_name", "tracking_number"
             ];
             const vals = [
                 ":id", ":full_name", ":email", ":phone",
                 ":address_line1", ":address_line2", ":city", ":state", ":postal_code", ":country",
                 "COALESCE(:lead_score,0)", ":lead_quality", ":best_time_to_call",
                 ":agent_id", ":whatsapp_number", "NOW()", "NOW()",
-                ":lead_source_id", ":debt_consolidation_status_id", ":consolidated_credit_status_id"
+                ":lead_source_id", ":debt_consolidation_status_id", ":consolidated_credit_status_id",
+                ":medicine_name", ":order_amount", ":currency", ":courier_name", ":tracking_number"
             ];
 
             const replacements: Record<string, any> = {
@@ -387,6 +394,11 @@ export default class LeadController extends BaseController {
                 lead_source_id: toNull(input.lead_source_id),
                 debt_consolidation_status_id: toNull(input.debt_consolidation_status_id),
                 consolidated_credit_status_id: toNull(input.consolidated_credit_status_id),
+                medicine_name: toNull(input.medicine_name),
+                order_amount: input.order_amount ?? null,
+                currency: toNull(input.currency) ?? "USD",
+                courier_name: toNull(input.courier_name),
+                tracking_number: toNull(input.tracking_number),
             };
 
             const insertSql = `

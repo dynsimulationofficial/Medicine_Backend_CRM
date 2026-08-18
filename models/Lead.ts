@@ -26,6 +26,11 @@ export interface LeadAttributes {
   status?: string | null;
   company?: string | null;
   activity_summary?: string | null;
+  medicine_name?: string | null;
+  order_amount?: number | null;
+  currency?: string | null;
+  courier_name?: string | null;
+  tracking_number?: string | null;
   created_at?: Date;
   updated_at?: Date;
   deleted_at?: Date | null;
@@ -38,6 +43,7 @@ export type LeadCreationAttributes = Optional<
   | "best_time_to_call" | "agent_id" | "consolidated_credit_status_id"
   | "whatsapp_number" | "lead_source_id" | "debt_consolidation_status_id"
   | "note" | "status" | "company" | "activity_summary"
+  | "medicine_name" | "order_amount" | "currency" | "courier_name" | "tracking_number"
   | "created_at" | "updated_at" | "deleted_at"
 >;
 
@@ -68,6 +74,11 @@ export const initLeadModel = (sequelize: Sequelize) => {
     public status!: string | null;
     public company!: string | null;
     public activity_summary!: string | null;
+    public medicine_name!: string | null;
+    public order_amount!: number | null;
+    public currency!: string | null;
+    public courier_name!: string | null;
+    public tracking_number!: string | null;
     public created_at!: Date;
     public updated_at!: Date;
     public deleted_at!: Date | null;
@@ -105,6 +116,11 @@ export const initLeadModel = (sequelize: Sequelize) => {
       status: { type: DataTypes.STRING(100), allowNull: true },
       company: { type: DataTypes.STRING(255), allowNull: true },
       activity_summary: { type: DataTypes.TEXT, allowNull: true },
+      medicine_name: { type: DataTypes.STRING(255), allowNull: true },
+      order_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
+      currency: { type: DataTypes.STRING(10), allowNull: true, defaultValue: "USD" },
+      courier_name: { type: DataTypes.STRING(100), allowNull: true },
+      tracking_number: { type: DataTypes.STRING(100), allowNull: true },
       created_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       updated_at: { type: DataTypes.DATE, allowNull: false, defaultValue: DataTypes.NOW },
       deleted_at: { type: DataTypes.DATE, allowNull: true },
