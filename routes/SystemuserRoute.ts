@@ -2,7 +2,6 @@ import express, { Request, Response } from "express";
 import CompressCrmController from "../controllers/AdvanceLeadCRMController";
 import UserActivityController from "../controllers/UserActivityController";
 import LeadController from "../controllers/LeadController";
-import Emailcontroller from "../controllers/EmailTemplateController";
 import { uploadFile } from "../multerconfig";
 import { requireAuth } from "../middleware/auth";
 import { randomUUID } from 'crypto';
@@ -22,7 +21,6 @@ export const SystemuserRouter = express.Router();
 
 const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
-const emailcontroller = new Emailcontroller();
 const leadController = new LeadController();
 
 
@@ -40,15 +38,7 @@ SystemuserRouter.post("/exportlead", requireAuth, leadController.exportMultipleL
 SystemuserRouter.get("/assigned-lead-notifications", requireAuth, leadController.getAssignedLeadNotifications);
 
 
-/* -------------------- Email Templates -------------------- */
-SystemuserRouter.post("/createtemplate", uploadFile.array("files"), emailcontroller.uploadTemplate);
-SystemuserRouter.post("/updatetemplate", uploadFile.array("files"), emailcontroller.updateTemplate);
-// (if you still need a JSON-only updater, keep the line below, otherwise remove)
-// SystemuserRouter.post("/update", emailcontroller.updateTemplate);
-SystemuserRouter.post("/gettemplateid", emailcontroller.getTemplate);
-SystemuserRouter.post("/gettemplate", emailcontroller.getAllTemplates);
-SystemuserRouter.post("/deletetemplate", emailcontroller.deleteTemplate);
-SystemuserRouter.post("/email-template", emailcontroller.sendTemplateToEmail);
+
 
 /* -------------------- User Activity -------------------- */
 SystemuserRouter.post("/user-activity/log", userActivityController.logUserActivity);

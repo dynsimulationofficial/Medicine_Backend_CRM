@@ -22,7 +22,6 @@ import { initLeadDocumentModel } from "./LeadDocument";
 import { initConsolidatedCreditStatusModel } from "./ConsolidatedCreditStatus";
 import { initLeadSourceModel } from "./LeadSource";
 import { initLeadDebtStatusModel } from "./LeadDebtStatus";
-import { initEmailTemplateModel } from "./EmailTemplate";
 import initUserLoginModel from "./UserLogin";
 import { initAssignedLeadNotificationModel } from "./AssignedLeadNotification";
 import { initExpenseModel } from "./Expense";
@@ -56,7 +55,6 @@ const LeadSource = initLeadSourceModel(sequelize);
 const LeadDebtStatus = initLeadDebtStatusModel(sequelize);
 
 const UserLogin = initUserLoginModel(sequelize);
-const EmailTemplate = initEmailTemplateModel(sequelize);
 
 const AssignedLeadNotification = initAssignedLeadNotificationModel(sequelize);
 const Expense = initExpenseModel(sequelize);
@@ -318,7 +316,6 @@ const db = {
   UserOtp,
   WebPushNotification,
   WebPushToken,
-  EmailTemplate,
   AssignedLeadNotification,
   Expense,
   SystemUserSecret,
@@ -347,7 +344,6 @@ export {
   UserLogin,
   UserOtp,
   WebPushToken,
-  EmailTemplate,
   AssignedLeadNotification,
   Expense,
   SystemUserSecret,
