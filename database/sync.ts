@@ -173,40 +173,26 @@ export async function seedInitialData() {
     } as const;
 
     const leadDebtStatuses = [
-      { id: LEAD_DEBT_STATUS_IDS.FRESH_LEAD, name: "Fresh Lead", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.LIVE_LEAD, name: "Live Lead", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.NO_CONNECT, name: "No Connect", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.TASK_LEAD, name: "Task Lead", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.NURTURE, name: "Nurture", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.CNQ_LOW_DEBTS, name: "CNQ - Low Debts", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.CNQ_NO_DEBTS, name: "CNQ- No Debts", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.FRESH_LEAD, name: "1. New Lead", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.LIVE_LEAD, name: "2. Contacted / In Discussion", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.AGREEMENT_SENT, name: "3. Prescription / Quote Shared", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.ADMIN_FEE_PENDING, name: "4. Payment Pending", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.FULL_FEE_PAID, name: "5. Order Placed / Paid", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.FINALIZED_AND_SENT, name: "6. Dispatched / In Transit", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.DOCUMENTS_RECEIVED, name: "7. Delivered / Deal Closed", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.TASK_LEAD, name: "8. Refill / Repeat Order Due", is_active: true },
       { id: LEAD_DEBT_STATUS_IDS.NOT_INTERESTED, name: "Not Interested", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.AGREEMENT_SENT, name: "Agreement Sent", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.SIGNED_AGREEMENT_RECEIVED, name: "Signed Agreement Received", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.DOCUMENTS_PENDING, name: "Documents Pending", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.DOCUMENTS_RECEIVED, name: "Documents Received", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.PARTIAL_FEE_PAID, name: "Partial Fee Paid", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.FULL_FEE_PAID, name: "Full Fee Paid", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.PAD_SET, name: "PAD Set", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.ADMIN_FEE_PENDING, name: "Admin Fee Pending", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.NSF, name: "NSF", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.REFUND, name: "Refund", is_active: true },
       { id: LEAD_DEBT_STATUS_IDS.WRONG_NUMBER, name: "Wrong Number", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.CNQ_BK_CP, name: "CNQ - BK/CP", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.CANCELLED_BTM, name: "Cancelled - BTM", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.CANCELLED_ATM, name: "Cancelled - ATM", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.DNC, name: "DNC", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.COMPLAINT_SENSITIVE, name: "Complaint Sensitive", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.AWAITING_DOCS, name: "Awaiting Docs", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.FINALIZATION_PENDING, name: "Finalization Pending", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.FINALIZED_AND_SENT, name: "Finalized and Sent", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.TRANSFERRED_TO_C3, name: "Transferred To C3", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.CANCELLED_BTM, name: "Cancelled Order", is_active: true },
+      { id: LEAD_DEBT_STATUS_IDS.DNC, name: "DNC (Do Not Call)", is_active: true },
     ];
 
-    await LeadDebtStatus.bulkCreate(leadDebtStatuses, { ignoreDuplicates: true });
-    console.log("✅ Lead Debt Statuses seeded");
+    for (const status of leadDebtStatuses) {
+      await LeadDebtStatus.upsert(status);
+    }
+    console.log("✅ Medicine Order Pipeline Statuses seeded");
 
-    // --- CONSOLIDATED CREDIT STATUSES ---
+    // --- CONSOLIDATED CREDIT STATUSES (Medicine Order Categories) ---
     const CONSOLIDATED_STATUS_IDS = {
       CONVERTED_DMP: "9aa5f29b-b689-4e76-9e2d-63b0e5fa8d0f",
       CONVERTED_HEW: "af8c13e5-0c4e-47d8-a6ef-7cf6db87c5c1",
@@ -219,17 +205,17 @@ export async function seedInitialData() {
     } as const;
 
     const consolidatedStatuses = [
-      { id: CONSOLIDATED_STATUS_IDS.CONVERTED_DMP, name: "Converted - DMP" },
-      { id: CONSOLIDATED_STATUS_IDS.CONVERTED_HEW, name: "Converted - HEW" },
-      { id: CONSOLIDATED_STATUS_IDS.DUPLICATE_DMP, name: "Duplicate - DMP" },
-      { id: CONSOLIDATED_STATUS_IDS.DUPLICATE_HEW, name: "Duplicate - HEW" },
-      { id: CONSOLIDATED_STATUS_IDS.CBO_DMP, name: "CBO - DMP" },
-      { id: CONSOLIDATED_STATUS_IDS.CBO_HEW, name: "CBO - HEW" },
-      { id: CONSOLIDATED_STATUS_IDS.IN_PROCESS_DMP, name: "In Process - DMP" },
-      { id: CONSOLIDATED_STATUS_IDS.IN_PROCESS_HEW, name: "In Process - HEW" },
+      { id: CONSOLIDATED_STATUS_IDS.CONVERTED_DMP, name: "Domestic Order (India 🇮🇳)" },
+      { id: CONSOLIDATED_STATUS_IDS.CONVERTED_HEW, name: "Export Order (USA 🇺🇸)" },
+      { id: CONSOLIDATED_STATUS_IDS.IN_PROCESS_DMP, name: "Export Order (UK 🇬🇧)" },
+      { id: CONSOLIDATED_STATUS_IDS.IN_PROCESS_HEW, name: "Repeat / Refill Order" },
+      { id: CONSOLIDATED_STATUS_IDS.DUPLICATE_DMP, name: "Duplicate Lead" },
+      { id: CONSOLIDATED_STATUS_IDS.CBO_DMP, name: "Cancelled by Operations" },
     ];
-    await ConsolidatedCreditStatus.bulkCreate(consolidatedStatuses, { ignoreDuplicates: true });
-    console.log("✅ Consolidated Credit Statuses seeded");
+    for (const status of consolidatedStatuses) {
+      await ConsolidatedCreditStatus.upsert(status);
+    }
+    console.log("✅ Medicine Order Categories seeded");
 
     // --- ROLE PERMISSIONS ---
     const rolePermissions: { role_id: string; permission_id: string }[] = [];
