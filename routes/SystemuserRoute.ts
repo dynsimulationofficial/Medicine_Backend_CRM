@@ -35,7 +35,7 @@ SystemuserRouter.get("/allusers", UserManagementController.getAllUsers);
 SystemuserRouter.post("/blockuser", requireAuth, UserManagementController.blockUser);
 SystemuserRouter.post("/unblockuser", requireAuth, systemuserController.unblockUser);
 SystemuserRouter.get("/listblockuser", requireAuth, systemuserController.listBlockedUsers);
-SystemuserRouter.post("/exportlead", requireAuth, leadController.exportMultipleLeadsData);
+
 SystemuserRouter.get("/assigned-lead-notifications", requireAuth, leadController.getAssignedLeadNotifications);
 
 

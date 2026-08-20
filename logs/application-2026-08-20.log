@@ -2,3 +2,10 @@
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-20T08:23:44.461Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-20T08:39:32.453Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-20T08:43:59.843Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-20T08:44:46.043Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiIxMjBkMmQ2Ny02NTM1LTQwMDgtOTQ0MS1iZmU3ZGNiZjk0ZmUiLCJzZWNyZXRLZXkiOiJONUNWT01EV0tSQ0VHT1JGT0pJU0daM1hJRldGSVQzNSIsImlhdCI6MTc4NzIxMjA0NSwiZXhwIjoxNzg3Mjk4NDQ1fQ.OsOt_-LgvQSjpMdlBrfJolFyAVrz-YXwj9xpicYimaY","timestamp":"2026-08-20T08:46:36.500Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6ImQ2YmYxZGQ1LTU3NzUtNDk2Yi04ZTFhLWQ0ZDY4MzQyOTY4MyIsImVtYWlsIjoid2FzaXF1ZWtoYW45MEBnbWFpbC5jb20iLCJpYXQiOjE3ODcyMTU2NzIsImV4cCI6MTc4NzI1ODg3Mn0.lEgEiYOeZpWhGKPTkz7U_YESPvEKmVqbjNYDGcW9L94","timestamp":"2026-08-20T08:50:39.628Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6ImQ2YmYxZGQ1LTU3NzUtNDk2Yi04ZTFhLWQ0ZDY4MzQyOTY4MyIsImVtYWlsIjoid2FzaXF1ZWtoYW45MEBnbWFpbC5jb20iLCJpYXQiOjE3ODcyMTY4ODYsImV4cCI6MTc4NzI2MDA4Nn0.b3Ru52fcrj82__5YtoeW6CaRSF0X7s9w1EDyA46aAWk","timestamp":"2026-08-20T09:10:23.469Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-20T09:27:25.269Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6ImQ2YmYxZGQ1LTU3NzUtNDk2Yi04ZTFhLWQ0ZDY4MzQyOTY4MyIsImVtYWlsIjoid2FzaXF1ZWtoYW45MEBnbWFpbC5jb20iLCJpYXQiOjE3ODcyMTcwNTAsImV4cCI6MTc4NzI2MDI1MH0.XCxwLNs3c2Q2JGRuPYAozqmPMAwdQGpbKMmwRHhTKd0","timestamp":"2026-08-20T09:30:17.755Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-20T09:36:30.017Z"}
