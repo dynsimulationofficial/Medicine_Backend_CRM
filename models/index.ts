@@ -163,18 +163,8 @@ LeadSource.hasMany(Lead, {
 });
 
 // Lead ↔ LeadDebtStatus
-Lead.belongsTo(LeadDebtStatus, {
-  foreignKey: { name: "debt_consolidation_status_id", allowNull: true },
-  as: "debtConsolidationStatus",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-LeadDebtStatus.hasMany(Lead, {
-  foreignKey: { name: "debt_consolidation_status_id", allowNull: true },
-  as: "leads",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
+
+
 
 // Lead ↔ ConsolidatedCreditStatus
 Lead.belongsTo(ConsolidatedCreditStatus, {

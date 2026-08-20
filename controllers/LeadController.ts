@@ -301,8 +301,8 @@ export default class LeadController extends BaseController {
                 best_time_to_call: s().optional(),
                 agent_id: s().uuid().optional(), // <- may be provided
                 lead_source_id: s().uuid().optional(),
-                debt_consolidation_status_id: s().uuid().optional(),
-                consolidated_credit_status_id: s().uuid().optional(),
+                
+                
                 medicine_name: s().optional(),
                 order_amount: Yup.number().min(0).optional(),
                 currency: s().optional(),
@@ -366,7 +366,7 @@ export default class LeadController extends BaseController {
                 "address_line1", "address_line2", "city", "state", "postal_code", "country",
                 "lead_score", "lead_quality", "best_time_to_call",
                 "agent_id", "whatsapp_number", "created_at", "updated_at",
-                "lead_source_id", "debt_consolidation_status_id", "consolidated_credit_status_id",
+                "lead_source_id", 
                 "medicine_name", "order_amount", "currency", "courier_name", "tracking_number",
                 "lead_status", "payment_status", "delivery_status"
             ];
@@ -375,7 +375,7 @@ export default class LeadController extends BaseController {
                 ":address_line1", ":address_line2", ":city", ":state", ":postal_code", ":country",
                 "COALESCE(:lead_score,0)", ":lead_quality", ":best_time_to_call",
                 ":agent_id", ":whatsapp_number", "NOW()", "NOW()",
-                ":lead_source_id", ":debt_consolidation_status_id", ":consolidated_credit_status_id",
+                ":lead_source_id", 
                 ":medicine_name", ":order_amount", ":currency", ":courier_name", ":tracking_number",
                 ":lead_status", ":payment_status", ":delivery_status"
             ];
@@ -397,8 +397,8 @@ export default class LeadController extends BaseController {
                 agent_id: toNull(input.agent_id),        // <-- if provided, it will be set now
                 whatsapp_number: whatsappNorm,
                 lead_source_id: toNull(input.lead_source_id),
-                debt_consolidation_status_id: toNull(input.debt_consolidation_status_id),
-                consolidated_credit_status_id: toNull(input.consolidated_credit_status_id),
+                
+                
                 medicine_name: toNull(input.medicine_name),
                 order_amount: input.order_amount ?? null,
                 currency: toNull(input.currency) ?? "USD",
@@ -591,16 +591,16 @@ export default class LeadController extends BaseController {
                   l.agent_id, su.name AS agent_name,
                   l.created_at, l.updated_at,
                   ls.name AS lead_source_name,
-                  ds.name AS debt_consolidation_status_name,
-                  ccs.name AS consolidated_credit_status_name,
+                  
+                  
                   l.whatsapp_number,
                   l.note,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
                 LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
-                LEFT JOIN public.lead_debt_statuses ds ON ds.id = l.debt_consolidation_status_id
-                LEFT JOIN public.consolidated_credit_statuses ccs ON ccs.id = l.consolidated_credit_status_id
+                
+                
                 ${whereSql}
                 ORDER BY l.created_at DESC
                 LIMIT :limit OFFSET :offset
@@ -614,8 +614,8 @@ export default class LeadController extends BaseController {
                 owner_name: r.agent_name,
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
-                debt_consolidation_status: r.debt_consolidation_status_name ?? null,
-                consolidated_credit_status: r.consolidated_credit_status_name ?? null,
+                
+                
                 whatsapp_number: r.whatsapp_number ?? null,
                 first_name: r.first_name ?? null,
                 last_name: r.last_name ?? null,
@@ -713,16 +713,16 @@ export default class LeadController extends BaseController {
                   l.agent_id, su.name AS agent_name,
                   l.created_at, l.updated_at,
                   ls.name AS lead_source_name,
-                  ds.name AS debt_consolidation_status_name,
-                  ccs.name AS consolidated_credit_status_name,
+                  
+                  
                   l.whatsapp_number,
                   l.note,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
                 LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
-                LEFT JOIN public.lead_debt_statuses ds ON ds.id = l.debt_consolidation_status_id
-                LEFT JOIN public.consolidated_credit_statuses ccs ON ccs.id = l.consolidated_credit_status_id
+                
+                
                 ${whereSql}
                 ${orderSql}
                 LIMIT :limit OFFSET :offset
@@ -736,8 +736,8 @@ export default class LeadController extends BaseController {
                 owner_name: r.agent_name,
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
-                debt_consolidation_status: r.debt_consolidation_status_name ?? null,
-                consolidated_credit_status: r.consolidated_credit_status_name ?? null,
+                
+                
                 whatsapp_number: r.whatsapp_number ?? null,
                 first_name: r.first_name ?? null,
                 last_name: r.last_name ?? null,
@@ -799,10 +799,10 @@ export default class LeadController extends BaseController {
 
                 lead_source_id: s().uuid().optional(),
                 lead_source: s().max(120).optional(),
-                debt_consolidation_status_id: s().uuid().optional(),
-                debt_consolidation_status: s().max(120).optional(),
-                consolidated_credit_status_id: s().uuid().optional(),
-                consolidated_credit_status: s().max(120).optional(),
+                
+                
+                
+                
 
                 created_from: s().optional(),
                 created_to: s().optional(),
@@ -815,8 +815,6 @@ export default class LeadController extends BaseController {
                         q, full_name, email, phone, lead_number,
                         city, state, agent_ids,
                         lead_source_id, lead_source,
-                        debt_consolidation_status_id, debt_consolidation_status,
-                        consolidated_credit_status_id, consolidated_credit_status,
                         created_from, created_to
                     } = o as any;
 
@@ -824,8 +822,6 @@ export default class LeadController extends BaseController {
                         q, full_name, email, phone, lead_number,
                         city, state, agent_ids,
                         lead_source_id, lead_source,
-                        debt_consolidation_status_id, debt_consolidation_status,
-                        consolidated_credit_status_id, consolidated_credit_status,
                         created_from, created_to
                     ].some(v => v !== undefined && v !== null && (Array.isArray(v) ? v.length > 0 : String(v).trim() !== ""));
                 }
@@ -841,14 +837,14 @@ export default class LeadController extends BaseController {
             // ----- schema drift checks
             const hasLeadSourceId = await this.columnExists("leads", "lead_source_id");
             const hasLeadSourceText = await this.columnExists("leads", "lead_source");
-            const hasDebtStatusId = await this.columnExists("leads", "debt_consolidation_status_id");
-            const hasDebtStatusText = await this.columnExists("leads", "debt_consolidation_status");
-            const hasCreditStatusId = await this.columnExists("leads", "consolidated_credit_status_id");
-            const hasCreditStatusText = await this.columnExists("leads", "consolidated_credit_status");
+            
+            
+            
+            
 
             let selectLeadSource = `NULL::text AS lead_source_name`;
-            let selectDebtName = `NULL::text AS debt_consolidation_status_name`;
-            let selectCreditName = `NULL::text AS consolidated_credit_status_name`;
+            
+            
             const joinExtras: string[] = [];
 
             if (hasLeadSourceId) {
@@ -858,19 +854,9 @@ export default class LeadController extends BaseController {
                 selectLeadSource = `l.lead_source AS lead_source_name`;
             }
 
-            if (hasDebtStatusId) {
-                selectDebtName = `ds.name AS debt_consolidation_status_name`;
-                joinExtras.push(`LEFT JOIN public.lead_debt_statuses ds ON ds.id = l.debt_consolidation_status_id`);
-            } else if (hasDebtStatusText) {
-                selectDebtName = `l.debt_consolidation_status AS debt_consolidation_status_name`;
-            }
+            
 
-            if (hasCreditStatusId) {
-                selectCreditName = `ccs.name AS consolidated_credit_status_name`;
-                joinExtras.push(`LEFT JOIN public.consolidated_credit_statuses ccs ON ccs.id = l.consolidated_credit_status_id`);
-            } else if (hasCreditStatusText) {
-                selectCreditName = `l.consolidated_credit_status AS consolidated_credit_status_name`;
-            }
+            
 
             // ----- WHERE (all assigned leads)
             const where: string[] = [`l.deleted_at IS NULL`, `l.agent_id IS NOT NULL`];
@@ -897,11 +883,11 @@ export default class LeadController extends BaseController {
             if (qp.lead_source_id && hasLeadSourceId) { where.push(`l.lead_source_id = :lead_source_id`); repl.lead_source_id = qp.lead_source_id; }
             else if (qp.lead_source && hasLeadSourceText) { where.push(`l.lead_source ILIKE :lead_source`); repl.lead_source = `%${qp.lead_source}%`; }
 
-            if (qp.debt_consolidation_status_id && hasDebtStatusId) { where.push(`l.debt_consolidation_status_id = :debt_consolidation_status_id`); repl.debt_consolidation_status_id = qp.debt_consolidation_status_id; }
-            else if (qp.debt_consolidation_status && hasDebtStatusText) { where.push(`l.debt_consolidation_status ILIKE :debt_consolidation_status`); repl.debt_consolidation_status = `%${qp.debt_consolidation_status}%`; }
+            
+            
 
-            if (qp.consolidated_credit_status_id && hasCreditStatusId) { where.push(`l.consolidated_credit_status_id = :consolidated_credit_status_id`); repl.consolidated_credit_status_id = qp.consolidated_credit_status_id; }
-            else if (qp.consolidated_credit_status && hasCreditStatusText) { where.push(`l.consolidated_credit_status ILIKE :consolidated_credit_status`); repl.consolidated_credit_status = `%${qp.consolidated_credit_status}%`; }
+            
+            
 
             if (qp.created_from) {
                 const f = parseInCA(qp.created_from);
@@ -936,8 +922,8 @@ export default class LeadController extends BaseController {
                   l.agent_id, su.name AS agent_name,
                   l.created_at, l.updated_at,
                   ${selectLeadSource},
-                  ${selectDebtName},
-                  ${selectCreditName},
+                  
+                  
                   l.whatsapp_number,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
@@ -956,8 +942,8 @@ export default class LeadController extends BaseController {
                 owner_name: r.agent_name,
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
-                debt_consolidation_status: r.debt_consolidation_status_name ?? null,
-                consolidated_credit_status: r.consolidated_credit_status_name ?? null,
+                
+                
                 whatsapp_number: r.whatsapp_number ?? null,
                 full_name: r.full_name,
                 email: r.email,
@@ -1004,7 +990,7 @@ export default class LeadController extends BaseController {
           }
       
           // --- Body-level controls ---
-          const { agent_id, lead_source_id, debt_consolidation_status_id } = req.body;
+          const { agent_id, lead_source_id } = req.body;
           const UUID36 = /^[0-9a-fA-F-]{36}$/;
       
           // ✅ agent_id now optional
@@ -1016,9 +1002,7 @@ export default class LeadController extends BaseController {
           if (lead_source_id && !UUID36.test(String(lead_source_id))) {
             return this.sendError(res, {}, "lead_source_id must be a valid UUID", 400);
           }
-          if (debt_consolidation_status_id && !UUID36.test(String(debt_consolidation_status_id))) {
-            return this.sendError(res, {}, "debt_consolidation_status_id must be a valid UUID", 400);
-          }
+          
       
           // --- Header normalization map ---
           const HEADER_MAP: Record<string, string> = {
@@ -1060,8 +1044,6 @@ export default class LeadController extends BaseController {
             note: Yup.string().optional(),
             agent_id: Yup.string().uuid().optional(),
             lead_source_id: Yup.string().uuid().optional(),
-            debt_consolidation_status_id: Yup.string().uuid().optional(),
-            consolidated_credit_status_id: Yup.string().uuid().optional(),
           });
       
           // --- Read sheet (Excel/CSV) ---
@@ -1197,7 +1179,7 @@ export default class LeadController extends BaseController {
               // ✅ Prefer row-level > body-level > NULL
               const rowAgentId = toNull(c.data.agent_id) ?? toNull(agent_id);
               const rowLeadSourceId = toNull(c.data.lead_source_id) ?? toNull(lead_source_id);
-              const rowDebtConsolId = toNull(c.data.debt_consolidation_status_id) ?? toNull(debt_consolidation_status_id);
+              
       
               const [inserted]: any[] = await this.db_services.sequelizeWriter.query(
                 `
@@ -1206,7 +1188,7 @@ export default class LeadController extends BaseController {
                    agent_id,
                    address_line1, address_line2, city, state, postal_code, country,
                    lead_score, lead_quality, best_time_to_call, note,
-                   lead_source_id, debt_consolidation_status_id, consolidated_credit_status_id,
+                   lead_source_id,
                    created_at, updated_at)
                 VALUES
                   (:id, :full_name, :email, :phone, :whatsapp_number,
@@ -1236,8 +1218,6 @@ export default class LeadController extends BaseController {
                     best_time_to_call: toNull(c.data.best_time_to_call),
                     note: toNull(c.data.note),
                     lead_source_id: rowLeadSourceId,
-                    debt_consolidation_status_id: rowDebtConsolId,
-                    consolidated_credit_status_id: toNull(c.data.consolidated_credit_status_id),
                   },
                   type: QueryTypes.SELECT,
                 }
@@ -1519,8 +1499,6 @@ export default class LeadController extends BaseController {
             best_time_to_call: Yup.string().optional(),
             agent_id: Yup.string().optional(),
             lead_source_id: Yup.string().optional(),
-            debt_consolidation_status_id: Yup.string().optional(),
-            consolidated_credit_status_id: Yup.string().optional(),
             whatsapp_number: Yup.string().optional(),
             note: Yup.string().optional(),
         });
@@ -1693,10 +1671,10 @@ export default class LeadController extends BaseController {
 
                 lead_source_id: s().uuid().optional(),
                 lead_source: s().max(120).optional(),
-                debt_consolidation_status_id: s().uuid().optional(),
-                debt_consolidation_status: s().max(120).optional(),
-                consolidated_credit_status_id: s().uuid().optional(),
-                consolidated_credit_status: s().max(120).optional(),
+                
+                
+                
+                
 
                 created_from: Yup.string().trim().optional(),
                 created_to: Yup.string().trim().optional(),
@@ -1710,8 +1688,6 @@ export default class LeadController extends BaseController {
                         full_name, email, phone, lead_number,
                         city, state,
                         lead_source_id, lead_source,
-                        debt_consolidation_status_id, debt_consolidation_status,
-                        consolidated_credit_status_id, consolidated_credit_status,
                         created_from, created_to,
                     } = o as any;
                     return [
@@ -1719,8 +1695,6 @@ export default class LeadController extends BaseController {
                         full_name, email, phone, lead_number,
                         city, state,
                         lead_source_id, lead_source,
-                        debt_consolidation_status_id, debt_consolidation_status,
-                        consolidated_credit_status_id, consolidated_credit_status,
                         created_from, created_to,
                     ].some(v => v !== undefined && v !== null && String(v).trim() !== "");
                 }
@@ -1737,14 +1711,14 @@ export default class LeadController extends BaseController {
             // ----- schema drift checks
             const hasLeadSourceId = await this.columnExists("leads", "lead_source_id");
             const hasLeadSourceText = await this.columnExists("leads", "lead_source");
-            const hasDebtStatusId = await this.columnExists("leads", "debt_consolidation_status_id");
-            const hasDebtStatusText = await this.columnExists("leads", "debt_consolidation_status");
-            const hasCreditStatusId = await this.columnExists("leads", "consolidated_credit_status_id");
-            const hasCreditStatusText = await this.columnExists("leads", "consolidated_credit_status");
+            
+            
+            
+            
 
             let selectLeadSource = `NULL::text AS lead_source_name`;
-            let selectDebtName = `NULL::text AS debt_consolidation_status_name`;
-            let selectCreditName = `NULL::text AS consolidated_credit_status_name`;
+            
+            
             const joinExtras: string[] = [];
 
             if (hasLeadSourceId) {
@@ -1754,19 +1728,9 @@ export default class LeadController extends BaseController {
                 selectLeadSource = `l.lead_source AS lead_source_name`;
             }
 
-            if (hasDebtStatusId) {
-                selectDebtName = `ds.name AS debt_consolidation_status_name`;
-                joinExtras.push(`LEFT JOIN public.lead_debt_statuses ds ON ds.id = l.debt_consolidation_status_id`);
-            } else if (hasDebtStatusText) {
-                selectDebtName = `l.debt_consolidation_status AS debt_consolidation_status_name`;
-            }
+            
 
-            if (hasCreditStatusId) {
-                selectCreditName = `ccs.name AS consolidated_credit_status_name`;
-                joinExtras.push(`LEFT JOIN public.consolidated_credit_statuses ccs ON ccs.id = l.consolidated_credit_status_id`);
-            } else if (hasCreditStatusText) {
-                selectCreditName = `l.consolidated_credit_status AS consolidated_credit_status_name`;
-            }
+            
 
             // ----- WHERE (always unassigned)
             const where: string[] = [`l.deleted_at IS NULL`, `l.agent_id IS NULL`];
@@ -1786,11 +1750,11 @@ export default class LeadController extends BaseController {
             if (qp.lead_source_id && hasLeadSourceId) { where.push(`l.lead_source_id = :lead_source_id`); repl.lead_source_id = qp.lead_source_id; }
             else if (qp.lead_source && hasLeadSourceText) { where.push(`l.lead_source ILIKE :lead_source`); repl.lead_source = `%${qp.lead_source}%`; }
 
-            if (qp.debt_consolidation_status_id && hasDebtStatusId) { where.push(`l.debt_consolidation_status_id = :debt_consolidation_status_id`); repl.debt_consolidation_status_id = qp.debt_consolidation_status_id; }
-            else if (qp.debt_consolidation_status && hasDebtStatusText) { where.push(`l.debt_consolidation_status ILIKE :debt_consolidation_status`); repl.debt_consolidation_status = `%${qp.debt_consolidation_status}%`; }
+            
+            
 
-            if (qp.consolidated_credit_status_id && hasCreditStatusId) { where.push(`l.consolidated_credit_status_id = :consolidated_credit_status_id`); repl.consolidated_credit_status_id = qp.consolidated_credit_status_id; }
-            else if (qp.consolidated_credit_status && hasCreditStatusText) { where.push(`l.consolidated_credit_status ILIKE :consolidated_credit_status`); repl.consolidated_credit_status = `%${qp.consolidated_credit_status}%`; }
+            
+            
 
             // inclusive end-of-day for created_to
             if (qp.created_from) {
@@ -1827,8 +1791,8 @@ export default class LeadController extends BaseController {
               l.agent_id, su.name AS agent_name,
               l.created_at, l.updated_at,
               ${selectLeadSource},
-              ${selectDebtName},
-              ${selectCreditName},
+              
+              
               l.whatsapp_number,
               GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
             FROM public.leads l
@@ -1847,8 +1811,8 @@ export default class LeadController extends BaseController {
                 owner_name: r.agent_name, // null for unassigned
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
-                debt_consolidation_status: r.debt_consolidation_status_name ?? null,
-                consolidated_credit_status: r.consolidated_credit_status_name ?? null,
+                
+                
                 whatsapp_number: r.whatsapp_number ?? null,
                 full_name: r.full_name,
                 email: r.email,
@@ -2038,8 +2002,8 @@ export default class LeadController extends BaseController {
                     l.created_at,
                     l.updated_at,
                     ls.name AS lead_source_name,
-                    ds.name AS debt_consolidation_status_name,
-                    ccs.name AS consolidated_credit_status_name,
+                    
+                    
                     l.note,
                     l.whatsapp_number,
                     GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days,
@@ -2047,8 +2011,8 @@ export default class LeadController extends BaseController {
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
                 LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
-                LEFT JOIN public.lead_debt_statuses ds ON ds.id = l.debt_consolidation_status_id
-                LEFT JOIN public.consolidated_credit_statuses ccs ON ccs.id = l.consolidated_credit_status_id
+                
+                
                 LEFT JOIN LATERAL (
                     SELECT d."name" AS latest_disposition
                     FROM public.lead_activity_history ah
@@ -2125,16 +2089,16 @@ export default class LeadController extends BaseController {
                     l.agent_id, su.name AS agent_name,
                     l.created_at, l.updated_at,
                     ls.name AS lead_source_name,
-                    ds.name AS debt_consolidation_status_name,
-                    ccs.name AS consolidated_credit_status_name,
+                    
+                    
                     l.whatsapp_number,
                     l.note,
                     GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
                 LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
-                LEFT JOIN public.lead_debt_statuses ds ON ds.id = l.debt_consolidation_status_id
-                LEFT JOIN public.consolidated_credit_statuses ccs ON ccs.id = l.consolidated_credit_status_id
+                
+                
                 WHERE l.deleted_at IS NULL AND l.agent_id IS NULL
                 ORDER BY RANDOM()
                 LIMIT 1
@@ -2155,8 +2119,8 @@ export default class LeadController extends BaseController {
                 owner_name: r.agent_name,
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
-                debt_consolidation_status: r.debt_consolidation_status_name ?? null,
-                consolidated_credit_status: r.consolidated_credit_status_name ?? null,
+                
+                
                 whatsapp_number: r.whatsapp_number ?? null,
                 first_name: r.first_name ?? null,
                 last_name: r.last_name ?? null,

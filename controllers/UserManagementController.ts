@@ -190,6 +190,25 @@ export const editUser = async (req: Request, res: Response) => {
       await t.rollback();
       return res.status(403).json({ success: false, message: "Only admins can change roles" });
     }
+      if (email || mobile_number) {
+        const existing: any[] = await db.sequelize.query(
+          `SELECT email, mobile_number FROM public.system_users WHERE (email = :email OR mobile_number = :mobile_number) AND id != :id AND deleted_at IS NULL`,
+          { replacements: { email: email || null, mobile_number: mobile_number || null, id: user_id }, type: QueryTypes.SELECT, transaction: t }
+        );
+        if (existing.length) {
+          await t.rollback();
+          const dupEmail = existing.some(e => e.email === email);
+          const dupPhone = existing.some(e => e.mobile_number === mobile_number);
+          if (dupEmail && dupPhone) {
+              return res.status(409).json({ success: false, message: "Email and Mobile number are already in use" });
+          } else if (dupEmail) {
+              return res.status(409).json({ success: false, message: "Email is already in use" });
+          } else {
+              return res.status(409).json({ success: false, message: "Mobile number is already in use" });
+          }
+        }
+      }
+
 
     const sets: string[] = [];
     const repl: any = { id: user_id };

@@ -18,10 +18,8 @@ export interface LeadAttributes {
   lead_quality?: string | null;
   best_time_to_call?: string | null;
   agent_id?: string | null;
-  consolidated_credit_status_id?: string | null;
   whatsapp_number?: string | null;
   lead_source_id?: string | null;
-  debt_consolidation_status_id?: string | null;
   note?: string | null;
   status?: string | null;
   lead_status?: string | null;
@@ -43,8 +41,8 @@ export type LeadCreationAttributes = Optional<
   LeadAttributes,
   | "id" | "lead_number" | "first_name" | "last_name" | "address_line1" | "address_line2"
   | "city" | "state" | "postal_code" | "country" | "lead_score" | "lead_quality"
-  | "best_time_to_call" | "agent_id" | "consolidated_credit_status_id"
-  | "whatsapp_number" | "lead_source_id" | "debt_consolidation_status_id"
+  | "best_time_to_call" | "agent_id"
+  | "whatsapp_number" | "lead_source_id"
   | "note" | "status" | "lead_status" | "payment_status" | "delivery_status"
   | "company" | "activity_summary"
   | "medicine_name" | "order_amount" | "currency" | "courier_name" | "tracking_number"
@@ -70,10 +68,8 @@ export const initLeadModel = (sequelize: Sequelize) => {
     public lead_quality!: string | null;
     public best_time_to_call!: string | null;
     public agent_id!: string | null;
-    public consolidated_credit_status_id!: string | null;
     public whatsapp_number!: string | null;
     public lead_source_id!: string | null;
-    public debt_consolidation_status_id!: string | null;
     public note!: string | null;
     public status!: string | null;
     public lead_status!: string | null;
@@ -115,10 +111,8 @@ export const initLeadModel = (sequelize: Sequelize) => {
       lead_quality: { type: DataTypes.STRING, allowNull: true },
       best_time_to_call: { type: DataTypes.STRING, allowNull: true },
       agent_id: { type: DataTypes.UUID, allowNull: true },
-      consolidated_credit_status_id: { type: DataTypes.UUID, allowNull: true },
       whatsapp_number: { type: DataTypes.STRING(30), allowNull: true },
       lead_source_id: { type: DataTypes.UUID, allowNull: true },
-      debt_consolidation_status_id: { type: DataTypes.UUID, allowNull: true },
       note: { type: DataTypes.TEXT, allowNull: true },
       status: { type: DataTypes.STRING(100), allowNull: true },
       lead_status: { type: DataTypes.STRING(50), allowNull: true, defaultValue: "New" },
