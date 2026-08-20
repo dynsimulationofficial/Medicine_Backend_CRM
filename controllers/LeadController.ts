@@ -651,7 +651,7 @@ export default class LeadController extends BaseController {
 
             return this.sendSuccess(res, {
                 data,
-                pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize) },
+                pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize), total },
             }, "Unassigned leads fetched successfully");
         } catch (err: any) {
             console.error("Error in getUnassignedLeads:", err);
@@ -778,7 +778,7 @@ export default class LeadController extends BaseController {
 
             return this.sendSuccess(
                 res,
-                { data, pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize) } },
+                { data, pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize), total } },
                 "Assigned leads fetched successfully",
                 200
             );
@@ -1667,7 +1667,7 @@ export default class LeadController extends BaseController {
 
             return this.sendSuccess(
                 res,
-                { data: rows, pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize) } },
+                { data: rows, pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize), total } },
                 "Agents fetched"
             );
         } catch (err: any) {
@@ -2461,16 +2461,18 @@ export default class LeadController extends BaseController {
     // LeadController.ts
     public addActivity = async (req: Request, res: Response): Promise<void> => {
         try {
+            const authUser = (req as any)?.user;
             const schema = Yup.object({
                 lead_id: Yup.string().uuid().required("lead_id is required"),
                 disposition_id: Yup.string().uuid().required("disposition_id is required"),
                 conversation: Yup.string().required("conversation is required"),
-                agent_id: Yup.string().uuid().optional(),
+                agent_id: Yup.string().nullable().optional().transform(v => (v === "" ? undefined : v)),
                 occurred_at_text: Yup.string().trim().optional(),
             });
 
             const body = await schema.validate(req.body, { abortEarly: false });
-            const { lead_id, disposition_id, conversation, agent_id, occurred_at_text } = body;
+            const { lead_id, disposition_id, conversation, occurred_at_text } = body;
+            const finalAgentId = body.agent_id || authUser?.system_user_id || null;
 
             // validate disposition
             const disp: { id: string }[] = await this.db_services.sequelizeWriter.query(
@@ -2485,15 +2487,15 @@ export default class LeadController extends BaseController {
 
             const [row]: any[] = await this.db_services.sequelizeWriter.query(
                 `INSERT INTO public.lead_activity_history
-                   (id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at)
+                   (id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at, updated_at)
                  VALUES
-                   (:id, :lead_id, :agent_id, :disposition_id, :conversation, COALESCE(:occurred_at, NOW()), NOW())
-                 RETURNING id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at`,
+                   (:id, :lead_id, :agent_id, :disposition_id, :conversation, COALESCE(:occurred_at, NOW()), NOW(), NOW())
+                 RETURNING id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at, updated_at`,
                 {
                     replacements: {
                         id: uuidv4(),
                         lead_id,
-                        agent_id: agent_id ?? null,
+                        agent_id: finalAgentId,
                         disposition_id,
                         conversation,
                         occurred_at: occurredAtUTC,
@@ -2736,7 +2738,7 @@ export default class LeadController extends BaseController {
 
             return this.sendSuccess(res, {
                 activities: data,
-                pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize) },
+                pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize), total },
             }, "Activity history fetched successfully");
         } catch (err: any) {
             console.error("Error in listActivities:", err);
@@ -3028,8 +3030,6 @@ export default class LeadController extends BaseController {
             const end = parseInCA(body.end_at_text!);
             if (!start || !end) return this.sendError(res, {}, "Invalid start_at_text or end_at_text format", 400);
             if (end <= start) return this.sendError(res, {}, "end_at must be after start_at", 400);
-            if (start.toUTC().toJSDate().getTime() <= Date.now())
-                return this.sendError(res, {}, "start_at must be in the future", 400);
 
             const startAtUtc = start.toUTC().toJSDate();
             const endAtUtc = end.toUTC().toJSDate();
@@ -3050,11 +3050,11 @@ export default class LeadController extends BaseController {
             const rows: any[] = await this.db_services.sequelizeWriter.query(
                 `WITH ins AS (
                INSERT INTO public.lead_tasks
-                 (lead_id, assigned_agent_id, details, task_type, subject, location,
+                 (id, lead_id, assigned_agent_id, details, task_type, subject, location,
                   timer_minutes, timer_hours, due_at, start_at, end_at,
                   status, created_at, updated_at)
                VALUES
-                 (:lead_id, :assigned_agent_id, :details, :task_type, :subject, :location,
+                 (:id, :lead_id, :assigned_agent_id, :details, :task_type, :subject, :location,
                   :timer_minutes, :timer_hours, :due_at, :start_at, :end_at,
                   'pending', NOW(), NOW())
                RETURNING id, lead_id, assigned_agent_id, details, task_type, subject, location,
@@ -3073,6 +3073,7 @@ export default class LeadController extends BaseController {
               LIMIT 1`,
                 {
                     replacements: {
+                        id: uuidv4(),
                         lead_id, assigned_agent_id, details, task_type, subject, location,
                         timer_minutes: dbPair.timer_minutes, timer_hours: dbPair.timer_hours,
                         due_at: startAtUtc, start_at: startAtUtc, end_at: endAtUtc,
@@ -3088,13 +3089,14 @@ export default class LeadController extends BaseController {
             // NOTE: kept key names *_ist for backward-compat; values are CANADA TZ now
             const toCA = (d: any) => toCAString(d);
             // Log activity after the task is created
-            await SystemUserActivity.create({
-                system_user_id: authUserId,  // Use system_user_id from the request's authentication context
-                user_activity: `Created task for lead ${rec.lead_id}`,  // Describe the activity
-                module: 'task_management',  // Module name
-                type: 'create',  // Activity type
-            });
-
+            if (authUserId) {
+                await SystemUserActivity.create({
+                    system_user_id: authUserId,  // Use system_user_id from the request's authentication context
+                    user_activity: `Created task for lead ${rec.lead_id}`,  // Describe the activity
+                    module: 'task_management',  // Module name
+                    type: 'create',  // Activity type
+                });
+            }
 
             return this.sendSuccess(res, {
                 id: rec.id,
@@ -3119,7 +3121,7 @@ export default class LeadController extends BaseController {
         } catch (err: any) {
             console.error("createTask error:", err);
             if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
-            return this.sendError(res, {}, "Internal server error", 500);
+            return this.sendError(res, err, err?.message || "Internal server error", 500);
         }
     };
     public listTasks = async (req: Request, res: Response) => {
@@ -3626,31 +3628,48 @@ export default class LeadController extends BaseController {
           const file = req.file;
       
           const isImage = file.mimetype.startsWith("image/");
-      
-          // S3 Key (unique)
-          const key = `lead-documents/${Date.now()}_${file.originalname}`;
-      
-          // Upload to S3
-          const upload = new Upload({
-            client: s3Client,
-            params: {
-              Bucket: process.env.AWS_S3_BUCKET_NAME!,
-              Key: key,
-              Body: file.buffer,
-              ContentType: file.mimetype,
-              ACL: "private",
-            },
-          });
-      
-          await upload.done();
+          const fileNameClean = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
+          const key = `lead-documents/${Date.now()}_${fileNameClean}`;
+
+          // S3 Upload if configured, otherwise local disk storage fallback
+          if (process.env.AWS_S3_BUCKET_NAME) {
+            try {
+              const upload = new Upload({
+                client: s3Client,
+                params: {
+                  Bucket: process.env.AWS_S3_BUCKET_NAME!,
+                  Key: key,
+                  Body: file.buffer,
+                  ContentType: file.mimetype,
+                  ACL: "private",
+                },
+              });
+              await upload.done();
+            } catch (s3Err) {
+              console.warn("S3 upload failed, using local disk storage fallback:", s3Err);
+              const uploadDir = path.join(process.cwd(), "uploads", "lead-documents");
+              if (!fs.existsSync(uploadDir)) {
+                fs.mkdirSync(uploadDir, { recursive: true });
+              }
+              fs.writeFileSync(path.join(uploadDir, path.basename(key)), file.buffer);
+            }
+          } else {
+            const uploadDir = path.join(process.cwd(), "uploads", "lead-documents");
+            if (!fs.existsSync(uploadDir)) {
+              fs.mkdirSync(uploadDir, { recursive: true });
+            }
+            fs.writeFileSync(path.join(uploadDir, path.basename(key)), file.buffer);
+          }
+
+          const finalUploadedBy = uploaded_by || (req as any)?.user?.system_user_id || null;
       
           // Insert into DB
           const rows: any[] = await this.db_services.sequelizeWriter.query(
             `WITH ins AS (
                 INSERT INTO public.lead_documents
-                    (lead_id, uploaded_by, file_name, mime_type, file_size, storage_path, is_image, notes, created_at, updated_at)
+                    (id, lead_id, uploaded_by, file_name, mime_type, file_size, storage_path, is_image, notes, created_at, updated_at)
                 VALUES
-                    (:lead_id, :uploaded_by, :file_name, :mime_type, :file_size, :storage_path, :is_image, :notes, NOW(), NOW())
+                    (:id, :lead_id, :uploaded_by, :file_name, :mime_type, :file_size, :storage_path, :is_image, :notes, NOW(), NOW())
                 RETURNING *
             )
             SELECT i.*, su.name AS uploaded_by_name
@@ -3659,8 +3678,9 @@ export default class LeadController extends BaseController {
             LIMIT 1;`,
             {
               replacements: {
+                id: uuidv4(),
                 lead_id,
-                uploaded_by,
+                uploaded_by: finalUploadedBy,
                 file_name: file.originalname,
                 mime_type: file.mimetype,
                 file_size: file.size,
@@ -3690,7 +3710,7 @@ export default class LeadController extends BaseController {
           if (err.name === "ValidationError") {
             return this.sendError(res, {}, err.errors.join(", "), 400);
           }
-          return this.sendError(res, err, "Internal server error", 500);
+          return this.sendError(res, err, err?.message || "Internal server error", 500);
         }
       };
       
@@ -3744,14 +3764,21 @@ export default class LeadController extends BaseController {
                             return { ...base, download: null };
                         }
 
-                        const downloadCommand = new GetObjectCommand({
-                            Bucket: process.env.AWS_S3_BUCKET_NAME!,
-                            Key: row.storage_path,
-                            ResponseContentDisposition: `attachment; filename="${row.file_name}"`,
-                        });
-                        const download = await getSignedUrl(s3Client, downloadCommand, { expiresIn: 3600 });
-
-                        return { ...base, download };
+                        if (process.env.AWS_S3_BUCKET_NAME) {
+                            try {
+                                const downloadCommand = new GetObjectCommand({
+                                    Bucket: process.env.AWS_S3_BUCKET_NAME!,
+                                    Key: row.storage_path,
+                                    ResponseContentDisposition: `attachment; filename="${row.file_name}"`,
+                                });
+                                const download = await getSignedUrl(s3Client, downloadCommand, { expiresIn: 3600 });
+                                return { ...base, download };
+                            } catch (s3GetErr) {
+                                return { ...base, download: `http://localhost:${process.env.MEDICINE_CRM_PORT || 8016}/uploads/${row.storage_path}` };
+                            }
+                        } else {
+                            return { ...base, download: `http://localhost:${process.env.MEDICINE_CRM_PORT || 8016}/uploads/${row.storage_path}` };
+                        }
                     } catch (e) {
                         console.error("Signed URL error for", row.storage_path, e);
                         return { ...base, download: null };
@@ -4960,6 +4987,16 @@ export default class LeadController extends BaseController {
                 AND (su.is_blocked = FALSE OR su.is_blocked IS NULL)
                 AND TRIM(LOWER(r.name)) = 'agent'
             ),
+            lead_counts AS (
+              SELECT
+                l.agent_id,
+                COUNT(*)::int AS total_assigned_leads,
+                SUM((l.lead_status = 'New' OR l.lead_status IS NULL)::int)::int AS new_leads,
+                SUM((l.lead_status = 'Converted')::int)::int AS converted_leads
+              FROM public.leads l
+              WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL
+              GROUP BY l.agent_id
+            ),
             norm AS (
               SELECT
                 t.id,
@@ -5017,15 +5054,19 @@ export default class LeadController extends BaseController {
             SELECT
               aa.id   AS agent_id,
               aa.name AS agent_name,
-              COALESCE(tc.total_today, 0)   AS total_today,
-              COALESCE(dc.done_today, 0)    AS done_today,
-              COALESCE(tc.pending_today, 0) AS pending_today,
-              COALESCE(onow.overdue, 0)     AS overdue
+              COALESCE(lc.total_assigned_leads, 0) AS total_assigned_leads,
+              COALESCE(lc.new_leads, 0)            AS new_leads,
+              COALESCE(lc.converted_leads, 0)      AS converted_leads,
+              COALESCE(tc.total_today, 0)          AS total_today,
+              COALESCE(dc.done_today, 0)           AS done_today,
+              COALESCE(tc.pending_today, 0)        AS pending_today,
+              COALESCE(onow.overdue, 0)            AS overdue
             FROM active_agents aa
-            LEFT JOIN today_counts  tc   ON tc.assigned_agent_id = aa.id
-            LEFT JOIN done_counts   dc   ON dc.assigned_agent_id = aa.id
-            LEFT JOIN overdue_now   onow ON onow.assigned_agent_id = aa.id
-            ORDER BY overdue DESC, total_today DESC, agent_name ASC
+            LEFT JOIN lead_counts   lc   ON CAST(lc.agent_id AS TEXT) = CAST(aa.id AS TEXT)
+            LEFT JOIN today_counts  tc   ON CAST(tc.assigned_agent_id AS TEXT) = CAST(aa.id AS TEXT)
+            LEFT JOIN done_counts   dc   ON CAST(dc.assigned_agent_id AS TEXT) = CAST(aa.id AS TEXT)
+            LEFT JOIN overdue_now   onow ON CAST(onow.assigned_agent_id AS TEXT) = CAST(aa.id AS TEXT)
+            ORDER BY total_assigned_leads DESC, overdue DESC, agent_name ASC
             `,
                 {
                     replacements: {
