@@ -2,6 +2,7 @@ import express, { Request, Response } from "express";
 import CompressCrmController from "../controllers/AdvanceLeadCRMController";
 import UserActivityController from "../controllers/UserActivityController";
 import LeadController from "../controllers/LeadController";
+import UserManagementController from "../controllers/UserManagementController";
 import { uploadFile } from "../multerconfig";
 import { requireAuth } from "../middleware/auth";
 import { randomUUID } from 'crypto';
@@ -24,14 +25,14 @@ const userActivityController = new UserActivityController();
 const leadController = new LeadController();
 
 
-SystemuserRouter.post("/register", requireAuth, systemuserController.createUser);
+SystemuserRouter.post("/register", requireAuth, UserManagementController.createUser);
 SystemuserRouter.post("/sendotp", systemuserController.loginRequestOtp);
 SystemuserRouter.post("/login", systemuserController.verifyOtp);
 SystemuserRouter.post("/logout", systemuserController.logout);
-SystemuserRouter.post("/userdelete", requireAuth, systemuserController.softDeleteUser);
-SystemuserRouter.post("/leads/user/edit", requireAuth, systemuserController.editUser);
-SystemuserRouter.get("/allusers", systemuserController.getAllUsers);
-SystemuserRouter.post("/blockuser", requireAuth, systemuserController.blockUser);
+SystemuserRouter.post("/userdelete", requireAuth, UserManagementController.deleteUser);
+SystemuserRouter.post("/leads/user/edit", requireAuth, UserManagementController.editUser);
+SystemuserRouter.get("/allusers", UserManagementController.getAllUsers);
+SystemuserRouter.post("/blockuser", requireAuth, UserManagementController.blockUser);
 SystemuserRouter.post("/unblockuser", requireAuth, systemuserController.unblockUser);
 SystemuserRouter.get("/listblockuser", requireAuth, systemuserController.listBlockedUsers);
 SystemuserRouter.post("/exportlead", requireAuth, leadController.exportMultipleLeadsData);
