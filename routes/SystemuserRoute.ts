@@ -217,8 +217,16 @@ SystemuserRouter.post("/leads/documents/soft-delete", requireAuth, leadControlle
 SystemuserRouter.post("/leads/documents/get", leadController.getDocument);
 SystemuserRouter.post("/leads/documents/filter", leadController.filterDocuments);
 SystemuserRouter.post("/leads/documents/geturl", leadController.getDocumentUrl);
-SystemuserRouter.post("/leads/document/edit", uploadFile.single("file"), requireAuth, leadController.editDocument);
-SystemuserRouter.post("/leads/documents/image", leadController.getDocumentImage);
+/* -------------------- Lead Medicines / Order Items -------------------- */
+SystemuserRouter.post("/leads/medicines/save", requireAuth, leadController.saveLeadMedicines);
+SystemuserRouter.post("/leads/medicines/list", requireAuth, leadController.listLeadMedicines);
+SystemuserRouter.post("/leads/medicines/delete", requireAuth, leadController.deleteLeadMedicine);
+
+/* -------------------- Lead Orders -------------------- */
+SystemuserRouter.post("/leads/orders/save", requireAuth, leadController.saveLeadOrder);
+SystemuserRouter.post("/leads/orders/list", requireAuth, leadController.listLeadOrders);
+SystemuserRouter.post("/leads/orders/delete", requireAuth, leadController.deleteLeadOrder);
+SystemuserRouter.post("/leads/orders/update-status", requireAuth, leadController.updateLeadOrderStatus);
 
 /* -------------------- Dashboards -------------------- */
 SystemuserRouter.post("/leads/task/agent/dashboard", requireAuth, leadController.getAgentTasksDashboard);

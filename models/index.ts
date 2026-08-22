@@ -27,6 +27,9 @@ import { initAssignedLeadNotificationModel } from "./AssignedLeadNotification";
 import { initExpenseModel } from "./Expense";
 import { initSystemUserSecretModel } from "./SystemUserSecret";
 import { initLeadBulkDocumentModel } from "./LeadBulkDocument";
+import { initLeadMedicineModel } from "./LeadMedicine";
+import { initLeadOrderModel } from "./LeadOrder";
+import { initLeadOrderItemModel } from "./LeadOrderItem";
 
 const dbService = new DBServices();
 const sequelize: Sequelize = dbService.sequelizeWriter;
@@ -47,6 +50,9 @@ const LeadDisposition = initLeadDispositionModel(sequelize);
 const LeadActivityHistory = initLeadActivityHistoryModel(sequelize);
 const LeadTask = initLeadTaskModel(sequelize);
 const LeadDocument = initLeadDocumentModel(sequelize);
+const LeadMedicine = initLeadMedicineModel(sequelize);
+const LeadOrder = initLeadOrderModel(sequelize);
+const LeadOrderItem = initLeadOrderItemModel(sequelize);
 
 const WebPushToken = initWebPushTokenModel(sequelize);
 const WebPushNotification = initWebPushNotificationModel(sequelize);
@@ -310,6 +316,9 @@ const db = {
   Expense,
   SystemUserSecret,
   LeadBulkDocument,
+  LeadMedicine,
+  LeadOrder,
+  LeadOrderItem,
 };
 
 export default db;
@@ -329,6 +338,9 @@ export {
   LeadActivityHistory,
   LeadTask,
   LeadDocument,
+  LeadMedicine,
+  LeadOrder,
+  LeadOrderItem,
   LeadSource,
   LeadDebtStatus,
   UserLogin,

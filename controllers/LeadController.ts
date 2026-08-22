@@ -5174,5 +5174,571 @@ export default class LeadController extends BaseController {
 
 
 
-}
 
+    // ==========================================
+    // 💊 LEAD MEDICINES / ORDER ITEMS APIS
+    // ==========================================
+
+    public saveLeadMedicines = async (req: Request, res: Response) => {
+        const transaction = await this.db_services.sequelizeWriter.transaction();
+        try {
+            const schema = Yup.object({
+                lead_id: Yup.string().uuid().required("lead_id is required"),
+                items: Yup.array().of(
+                    Yup.object({
+                        id: Yup.string().uuid().optional(),
+                        medicine_name: Yup.string().trim().required("Medicine name is required"),
+                        unit: Yup.string().trim().default("Strip"),
+                        quantity: Yup.number().integer().min(1, "Quantity must be at least 1").required("Quantity is required"),
+                        rate: Yup.number().min(0, "Rate cannot be negative").required("Rate is required"),
+                    })
+                ).required("items array is required"),
+            });
+
+            const body = await schema.validate(req.body, { abortEarly: false });
+            const { lead_id, items } = body;
+
+            // Verify lead exists
+            const [leadRow]: any[] = await this.db_services.sequelizeWriter.query(
+                `SELECT id, full_name, lead_number FROM public.leads WHERE id = :lead_id AND deleted_at IS NULL LIMIT 1`,
+                { replacements: { lead_id }, type: QueryTypes.SELECT, transaction }
+            );
+            if (!leadRow) {
+                await transaction.rollback();
+                return this.sendError(res, {}, "Lead not found", 404);
+            }
+
+            // Soft-delete existing active items for this lead
+            await this.db_services.sequelizeWriter.query(
+                `UPDATE public.lead_medicines SET deleted_at = NOW() WHERE lead_id = :lead_id AND deleted_at IS NULL`,
+                { replacements: { lead_id }, type: QueryTypes.UPDATE, transaction }
+            );
+
+            // Insert new items
+            const insertedRows: any[] = [];
+            let grandTotal = 0;
+
+            for (const item of items) {
+                const qty = Number(item.quantity) || 1;
+                const rate = Number(item.rate) || 0;
+                const totalPrice = Number((qty * rate).toFixed(2));
+                grandTotal += totalPrice;
+
+                const itemId = uuidv4();
+                const [row]: any[] = await this.db_services.sequelizeWriter.query(
+                    `INSERT INTO public.lead_medicines
+                        (id, lead_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at)
+                      VALUES
+                        (:id, :lead_id, :medicine_name, :unit, :quantity, :rate, :total_price, NOW(), NOW())
+                      RETURNING id, lead_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at`,
+                    {
+                        replacements: {
+                            id: itemId,
+                            lead_id,
+                            medicine_name: item.medicine_name,
+                            unit: item.unit || "Strip",
+                            quantity: qty,
+                            rate,
+                            total_price: totalPrice,
+                        },
+                        type: QueryTypes.SELECT,
+                        transaction,
+                    }
+                );
+                if (row) insertedRows.push(row);
+            }
+
+            await transaction.commit();
+
+            // Log activity
+            const authUserId = (req as any)?.user?.system_user_id;
+            if (authUserId) {
+                await SystemUserActivity.create({
+                    system_user_id: authUserId,
+                    user_activity: `Updated medicines for lead ${leadRow.lead_number} (Total items: ${insertedRows.length}, Grand Total: ${grandTotal.toFixed(2)})`,
+                    module: "order_management",
+                    type: "update",
+                });
+            }
+
+            return this.sendSuccess(
+                res,
+                {
+                    items: insertedRows,
+                    total_items: insertedRows.length,
+                    grand_total: Number(grandTotal.toFixed(2)),
+                },
+                "Lead medicines saved successfully"
+            );
+        } catch (err: any) {
+            await transaction.rollback();
+            console.error("saveLeadMedicines error:", err);
+            if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
+            return this.sendError(res, err, err?.message || "Internal server error", 500);
+        }
+    };
+
+    public listLeadMedicines = async (req: Request, res: Response) => {
+        try {
+            const schema = Yup.object({
+                lead_id: Yup.string().uuid().required("lead_id is required"),
+            });
+            const { lead_id } = await schema.validate(req.body, { abortEarly: false });
+
+            const rows: any[] = await this.db_services.sequelizeWriter.query(
+                `SELECT id, lead_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at
+                   FROM public.lead_medicines
+                  WHERE lead_id = :lead_id AND deleted_at IS NULL
+                  ORDER BY created_at ASC`,
+                { replacements: { lead_id }, type: QueryTypes.SELECT }
+            );
+
+            const grandTotal = rows.reduce((acc, r) => acc + (Number(r.total_price) || 0), 0);
+
+            return this.sendSuccess(
+                res,
+                {
+                    items: rows,
+                    total_items: rows.length,
+                    grand_total: Number(grandTotal.toFixed(2)),
+                },
+                "Lead medicines fetched successfully"
+            );
+        } catch (err: any) {
+            console.error("listLeadMedicines error:", err);
+            if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
+            return this.sendError(res, err, err?.message || "Internal server error", 500);
+        }
+    };
+
+    public deleteLeadMedicine = async (req: Request, res: Response) => {
+        try {
+            const schema = Yup.object({
+                id: Yup.string().uuid().required("id is required"),
+                lead_id: Yup.string().uuid().required("lead_id is required"),
+            });
+            const { id, lead_id } = await schema.validate(req.body, { abortEarly: false });
+
+            const rows: any[] = await this.db_services.sequelizeWriter.query(
+                `UPDATE public.lead_medicines
+                     SET deleted_at = NOW(), updated_at = NOW()
+                   WHERE id = :id AND lead_id = :lead_id AND deleted_at IS NULL
+                   RETURNING id, lead_id, medicine_name`,
+                { replacements: { id, lead_id }, type: QueryTypes.SELECT }
+            );
+
+            if (!rows.length) {
+                return this.sendError(res, {}, "Medicine item not found", 404);
+            }
+
+            // Recalculate remaining grand total
+            const remaining: any[] = await this.db_services.sequelizeWriter.query(
+                `SELECT COALESCE(SUM(total_price), 0)::numeric AS grand_total
+                   FROM public.lead_medicines
+                  WHERE lead_id = :lead_id AND deleted_at IS NULL`,
+                { replacements: { lead_id }, type: QueryTypes.SELECT }
+            );
+            const grandTotal = Number(remaining[0]?.grand_total || 0);
+
+            return this.sendSuccess(
+                res,
+                {
+                    deleted_item: rows[0],
+                    grand_total: Number(grandTotal.toFixed(2)),
+                },
+                "Medicine item deleted successfully"
+            );
+        } catch (err: any) {
+            console.error("deleteLeadMedicine error:", err);
+            if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
+            return this.sendError(res, err, err?.message || "Internal server error", 500);
+        }
+    };
+
+
+    // ==========================================
+    // 📦 MULTI-ORDER MANAGEMENT APIS
+    // ==========================================
+
+    public saveLeadOrder = async (req: Request, res: Response) => {
+        const transaction = await this.db_services.sequelizeWriter.transaction();
+        try {
+            const schema = Yup.object({
+                id: Yup.string().uuid().optional(),
+                lead_id: Yup.string().uuid().required("lead_id is required"),
+                payment_status: Yup.string().default("Pending"),
+                payment_mode: Yup.string().default("COD"),
+                order_status: Yup.string().default("Pending"),
+                order_notes: Yup.string().nullable().optional(),
+                courier_name: Yup.string().nullable().optional(),
+                tracking_number: Yup.string().nullable().optional(),
+                items: Yup.array().of(
+                    Yup.object({
+                        id: Yup.string().uuid().optional(),
+                        medicine_name: Yup.string().trim().required("Medicine name is required"),
+                        unit: Yup.string().trim().default("Strip"),
+                        quantity: Yup.number().integer().min(1, "Quantity must be at least 1").required("Quantity is required"),
+                        rate: Yup.number().min(0, "Rate cannot be negative").required("Rate is required"),
+                    })
+                ).min(1, "At least one medicine item is required").required("items array is required"),
+            });
+
+            const body = await schema.validate(req.body, { abortEarly: false });
+            const { id: existingOrderId, lead_id, payment_status, payment_mode, order_status, order_notes, courier_name, tracking_number, items } = body;
+
+            // Verify lead exists
+            const [leadRow]: any[] = await this.db_services.sequelizeWriter.query(
+                `SELECT id, full_name, lead_number FROM public.leads WHERE id = :lead_id AND deleted_at IS NULL LIMIT 1`,
+                { replacements: { lead_id }, type: QueryTypes.SELECT, transaction }
+            );
+            if (!leadRow) {
+                await transaction.rollback();
+                return this.sendError(res, {}, "Lead not found", 404);
+            }
+
+            const authUserId = (req as any)?.user?.system_user_id || null;
+
+            // Calculate totals
+            let grandTotal = 0;
+            const computedItems: any[] = [];
+            for (const item of items) {
+                const qty = Number(item.quantity) || 1;
+                const rate = Number(item.rate) || 0;
+                const totalPrice = Number((qty * rate).toFixed(2));
+                grandTotal += totalPrice;
+                computedItems.push({
+                    medicine_name: item.medicine_name,
+                    unit: item.unit || "Strip",
+                    quantity: qty,
+                    rate,
+                    total_price: totalPrice,
+                });
+            }
+            grandTotal = Number(grandTotal.toFixed(2));
+
+            let orderId = existingOrderId;
+            let orderNumber = "";
+
+            if (existingOrderId) {
+                // Update existing order
+                const [existingOrder]: any[] = await this.db_services.sequelizeWriter.query(
+                    `SELECT id, order_number FROM public.lead_orders WHERE id = :id AND lead_id = :lead_id AND deleted_at IS NULL LIMIT 1`,
+                    { replacements: { id: existingOrderId, lead_id }, type: QueryTypes.SELECT, transaction }
+                );
+                if (!existingOrder) {
+                    await transaction.rollback();
+                    return this.sendError(res, {}, "Order not found", 404);
+                }
+                orderNumber = existingOrder.order_number;
+
+                await this.db_services.sequelizeWriter.query(
+                    `UPDATE public.lead_orders
+                         SET total_items = :total_items,
+                             grand_total = :grand_total,
+                             order_status = :order_status,
+                             payment_status = :payment_status,
+                             payment_mode = :payment_mode,
+                             order_notes = :order_notes,
+                             courier_name = :courier_name,
+                             tracking_number = :tracking_number,
+                             agent_id = COALESCE(:agent_id, agent_id),
+                             updated_at = NOW()
+                       WHERE id = :id AND lead_id = :lead_id`,
+                    {
+                        replacements: {
+                            id: existingOrderId,
+                            lead_id,
+                            total_items: computedItems.length,
+                            grand_total: grandTotal,
+                            order_status,
+                            payment_status,
+                            payment_mode,
+                            order_notes: order_notes || null,
+                            courier_name: courier_name || null,
+                            tracking_number: tracking_number || null,
+                            agent_id: authUserId,
+                        },
+                        type: QueryTypes.UPDATE,
+                        transaction,
+                    }
+                );
+
+                // Remove existing items
+                await this.db_services.sequelizeWriter.query(
+                    `DELETE FROM public.lead_order_items WHERE order_id = :order_id`,
+                    { replacements: { order_id: existingOrderId }, type: QueryTypes.DELETE, transaction }
+                );
+            } else {
+                // Create brand new order
+                orderId = uuidv4();
+                const [newOrderRow]: any[] = await this.db_services.sequelizeWriter.query(
+                    `INSERT INTO public.lead_orders
+                        (id, lead_id, agent_id, total_items, grand_total, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number, created_at, updated_at)
+                      VALUES
+                        (:id, :lead_id, :agent_id, :total_items, :grand_total, :order_status, :payment_status, :payment_mode, :order_notes, :courier_name, :tracking_number, NOW(), NOW())
+                      RETURNING id, order_number, created_at, updated_at`,
+                    {
+                        replacements: {
+                            id: orderId,
+                            lead_id,
+                            agent_id: authUserId,
+                            total_items: computedItems.length,
+                            grand_total: grandTotal,
+                            order_status,
+                            payment_status,
+                            payment_mode,
+                            order_notes: order_notes || null,
+                            courier_name: courier_name || null,
+                            tracking_number: tracking_number || null,
+                        },
+                        type: QueryTypes.SELECT,
+                        transaction,
+                    }
+                );
+                orderNumber = newOrderRow.order_number;
+            }
+
+            // Insert items into lead_order_items
+            const insertedItems: any[] = [];
+            for (const item of computedItems) {
+                const itemId = uuidv4();
+                const [itemRow]: any[] = await this.db_services.sequelizeWriter.query(
+                    `INSERT INTO public.lead_order_items
+                        (id, order_id, lead_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at)
+                      VALUES
+                        (:id, :order_id, :lead_id, :medicine_name, :unit, :quantity, :rate, :total_price, NOW(), NOW())
+                      RETURNING id, order_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at`,
+                    {
+                        replacements: {
+                            id: itemId,
+                            order_id: orderId,
+                            lead_id,
+                            medicine_name: item.medicine_name,
+                            unit: item.unit,
+                            quantity: item.quantity,
+                            rate: item.rate,
+                            total_price: item.total_price,
+                        },
+                        type: QueryTypes.SELECT,
+                        transaction,
+                    }
+                );
+                if (itemRow) insertedItems.push(itemRow);
+            }
+
+            await transaction.commit();
+
+            // Log activity
+            if (authUserId) {
+                await SystemUserActivity.create({
+                    system_user_id: authUserId,
+                    user_activity: `${existingOrderId ? "Updated" : "Created"} order ${orderNumber} for lead ${leadRow.lead_number} (Items: ${insertedItems.length}, Total: ₹${grandTotal.toFixed(2)})`,
+                    module: "order_management",
+                    type: existingOrderId ? "update" : "create",
+                });
+            }
+
+            return this.sendSuccess(
+                res,
+                {
+                    id: orderId,
+                    order_number: orderNumber,
+                    lead_id,
+                    total_items: insertedItems.length,
+                    grand_total: grandTotal,
+                    order_status,
+                    payment_status,
+                    payment_mode,
+                    courier_name,
+                    tracking_number,
+                    items: insertedItems,
+                },
+                `Order ${orderNumber} saved successfully`
+            );
+        } catch (err: any) {
+            await transaction.rollback();
+            console.error("saveLeadOrder error:", err);
+            if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
+            return this.sendError(res, err, err?.message || "Internal server error", 500);
+        }
+    };
+
+    public listLeadOrders = async (req: Request, res: Response) => {
+        try {
+            const schema = Yup.object({
+                lead_id: Yup.string().uuid().required("lead_id is required"),
+            });
+            const { lead_id } = await schema.validate(req.body, { abortEarly: false });
+
+            const rows: any[] = await this.db_services.sequelizeWriter.query(
+                `SELECT
+                    o.id,
+                    o.order_number,
+                    o.lead_id,
+                    o.agent_id,
+                    u.name AS agent_name,
+                    o.total_items,
+                    o.grand_total,
+                    o.order_status,
+                    o.payment_status,
+                    o.payment_mode,
+                    o.order_notes,
+                    o.courier_name,
+                    o.tracking_number,
+                    o.created_at,
+                    o.updated_at,
+                    COALESCE(
+                        JSON_AGG(
+                            JSON_BUILD_OBJECT(
+                                'id', oi.id,
+                                'order_id', oi.order_id,
+                                'medicine_name', oi.medicine_name,
+                                'unit', oi.unit,
+                                'quantity', oi.quantity,
+                                'rate', oi.rate,
+                                'total_price', oi.total_price
+                            ) ORDER BY oi.created_at ASC
+                        ) FILTER (WHERE oi.id IS NOT NULL), '[]'::json
+                    ) AS items
+                 FROM public.lead_orders o
+                 LEFT JOIN public.system_users u ON o.agent_id = u.id
+                 LEFT JOIN public.lead_order_items oi ON o.id = oi.order_id AND oi.deleted_at IS NULL
+                 WHERE o.lead_id = :lead_id AND o.deleted_at IS NULL
+                 GROUP BY o.id, u.name
+                 ORDER BY o.created_at DESC`,
+                { replacements: { lead_id }, type: QueryTypes.SELECT }
+            );
+
+            const allOrdersTotal = rows.reduce((acc, r) => acc + (Number(r.grand_total) || 0), 0);
+
+            return this.sendSuccess(
+                res,
+                {
+                    orders: rows,
+                    total_orders: rows.length,
+                    all_orders_grand_total: Number(allOrdersTotal.toFixed(2)),
+                },
+                "Lead orders fetched successfully"
+            );
+        } catch (err: any) {
+            console.error("listLeadOrders error:", err);
+            if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
+            return this.sendError(res, err, err?.message || "Internal server error", 500);
+        }
+    };
+
+    public deleteLeadOrder = async (req: Request, res: Response) => {
+        const transaction = await this.db_services.sequelizeWriter.transaction();
+        try {
+            const schema = Yup.object({
+                id: Yup.string().uuid().required("id is required"),
+                lead_id: Yup.string().uuid().required("lead_id is required"),
+            });
+            const { id, lead_id } = await schema.validate(req.body, { abortEarly: false });
+
+            const [orderRow]: any[] = await this.db_services.sequelizeWriter.query(
+                `UPDATE public.lead_orders
+                     SET deleted_at = NOW(), updated_at = NOW()
+                   WHERE id = :id AND lead_id = :lead_id AND deleted_at IS NULL
+                   RETURNING id, order_number`,
+                { replacements: { id, lead_id }, type: QueryTypes.SELECT, transaction }
+            );
+
+            if (!orderRow) {
+                await transaction.rollback();
+                return this.sendError(res, {}, "Order not found", 404);
+            }
+
+            // Soft-delete items
+            await this.db_services.sequelizeWriter.query(
+                `UPDATE public.lead_order_items
+                     SET deleted_at = NOW(), updated_at = NOW()
+                   WHERE order_id = :id`,
+                { replacements: { id }, type: QueryTypes.UPDATE, transaction }
+            );
+
+            await transaction.commit();
+
+            return this.sendSuccess(
+                res,
+                { deleted_order: orderRow },
+                `Order ${orderRow.order_number} deleted successfully`
+            );
+        } catch (err: any) {
+            await transaction.rollback();
+            console.error("deleteLeadOrder error:", err);
+            if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
+            return this.sendError(res, err, err?.message || "Internal server error", 500);
+        }
+    };
+
+
+    public updateLeadOrderStatus = async (req: Request, res: Response) => {
+        try {
+            const schema = Yup.object({
+                id: Yup.string().uuid().required("id is required"),
+                lead_id: Yup.string().uuid().required("lead_id is required"),
+                order_status: Yup.string().optional(),
+                payment_status: Yup.string().optional(),
+                payment_mode: Yup.string().optional(),
+                order_notes: Yup.string().nullable().optional(),
+                courier_name: Yup.string().nullable().optional(),
+                tracking_number: Yup.string().nullable().optional(),
+            });
+            const body = await schema.validate(req.body, { abortEarly: false });
+            const { id, lead_id, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number } = body;
+
+            const authUserId = (req as any)?.user?.system_user_id || null;
+
+            const [updatedOrder]: any[] = await this.db_services.sequelizeWriter.query(
+                `UPDATE public.lead_orders
+                     SET order_status = COALESCE(:order_status, order_status),
+                         payment_status = COALESCE(:payment_status, payment_status),
+                         payment_mode = COALESCE(:payment_mode, payment_mode),
+                         order_notes = COALESCE(:order_notes, order_notes),
+                         courier_name = COALESCE(:courier_name, courier_name),
+                         tracking_number = COALESCE(:tracking_number, tracking_number),
+                         updated_at = NOW()
+                   WHERE id = :id AND lead_id = :lead_id AND deleted_at IS NULL
+                   RETURNING id, order_number, order_status, payment_status, payment_mode, grand_total`,
+                {
+                    replacements: {
+                        id,
+                        lead_id,
+                        order_status: order_status || null,
+                        payment_status: payment_status || null,
+                        payment_mode: payment_mode || null,
+                        order_notes: order_notes !== undefined ? order_notes : null,
+                        courier_name: courier_name !== undefined ? courier_name : null,
+                        tracking_number: tracking_number !== undefined ? tracking_number : null,
+                    },
+                    type: QueryTypes.SELECT,
+                }
+            );
+
+            if (!updatedOrder) {
+                return this.sendError(res, {}, "Order not found", 404);
+            }
+
+            if (authUserId) {
+                await SystemUserActivity.create({
+                    system_user_id: authUserId,
+                    user_activity: `Updated status for order ${updatedOrder.order_number} to Status: ${updatedOrder.order_status}, Payment: ${updatedOrder.payment_status}`,
+                    module: "order_management",
+                    type: "update",
+                });
+            }
+
+            return this.sendSuccess(
+                res,
+                { order: updatedOrder },
+                `Order ${updatedOrder.order_number} status updated successfully`
+            );
+        } catch (err: any) {
+            console.error("updateLeadOrderStatus error:", err);
+            if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
+            return this.sendError(res, err, err?.message || "Internal server error", 500);
+        }
+    };
+
+}

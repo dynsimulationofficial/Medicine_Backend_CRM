@@ -4,3 +4,13 @@
 {"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6IjUzN2NmYmMxLWE0M2UtNDNiZS1iODRiLTAyZmFmMTEwZmNhZSIsInVzZXJJZCI6IjUzN2NmYmMxLWE0M2UtNDNiZS1iODRiLTAyZmFmMTEwZmNhZSIsInNlY3JldEtleSI6Ik9KSFZFVkJKSVpKRlFQUktLUlVFTVYyR0xOUkVLVkNTIiwiaWF0IjoxNzg3MzA1NzE5LCJleHAiOjE3ODczOTIxMTl9.kMXHgK62o6mfEZPjC8lmvRFbY9yzGoXFoVsU66pJtdo","timestamp":"2026-08-22T09:28:23.275Z"}
 {"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6IjRlYmNkYzQ1LTQ3NDQtNGQ5MC05MGNkLWM3N2YyNDFhMTNkYiIsImVtYWlsIjoid2FzaXF1ZWtoYW44MEBnbWFpbC5jb20iLCJpYXQiOjE3ODczOTA5OTQsImV4cCI6MTc4NzQzNDE5NH0.pXTlc-ZWV_BGT1y0KFLIAEA7q_FMKiDKGqzKu5wtZzg","timestamp":"2026-08-22T09:37:17.013Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T10:16:37.359Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T10:19:45.332Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T10:28:48.182Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T10:29:13.826Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T10:29:36.275Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T10:29:48.862Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T10:34:42.147Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T11:36:47.269Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T11:37:11.606Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T11:42:11.395Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-22T11:56:28.626Z"}
