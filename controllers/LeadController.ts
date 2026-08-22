@@ -301,10 +301,6 @@ export default class LeadController extends BaseController {
                 best_time_to_call: s().optional(),
                 agent_id: s().uuid().optional(), // <- may be provided
                 lead_source_id: s().uuid().optional(),
-                
-                
-                medicine_name: s().optional(),
-                order_amount: Yup.number().min(0).optional(),
                 currency: s().optional(),
                 courier_name: s().optional(),
                 tracking_number: s().optional(),
@@ -367,7 +363,7 @@ export default class LeadController extends BaseController {
                 "lead_score", "lead_quality", "best_time_to_call",
                 "agent_id", "whatsapp_number", "created_at", "updated_at",
                 "lead_source_id", 
-                "medicine_name", "order_amount", "currency", "courier_name", "tracking_number",
+                "currency", "courier_name", "tracking_number",
                 "lead_status", "payment_status", "delivery_status"
             ];
             const vals = [
@@ -376,7 +372,7 @@ export default class LeadController extends BaseController {
                 "COALESCE(:lead_score,0)", ":lead_quality", ":best_time_to_call",
                 ":agent_id", ":whatsapp_number", "NOW()", "NOW()",
                 ":lead_source_id", 
-                ":medicine_name", ":order_amount", ":currency", ":courier_name", ":tracking_number",
+                ":currency", ":courier_name", ":tracking_number",
                 ":lead_status", ":payment_status", ":delivery_status"
             ];
 
@@ -397,10 +393,6 @@ export default class LeadController extends BaseController {
                 agent_id: toNull(input.agent_id),        // <-- if provided, it will be set now
                 whatsapp_number: whatsappNorm,
                 lead_source_id: toNull(input.lead_source_id),
-                
-                
-                medicine_name: toNull(input.medicine_name),
-                order_amount: input.order_amount ?? null,
                 currency: toNull(input.currency) ?? "USD",
                 courier_name: toNull(input.courier_name),
                 tracking_number: toNull(input.tracking_number),
@@ -593,7 +585,7 @@ export default class LeadController extends BaseController {
                   ls.name AS lead_source_name,
                   
                   
-                  l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.medicine_name, l.order_amount, l.currency, l.courier_name, l.tracking_number,
+                  l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -617,8 +609,6 @@ export default class LeadController extends BaseController {
                 lead_status: r.lead_status ?? null,
                 payment_status: r.payment_status ?? null,
                 delivery_status: r.delivery_status ?? null,
-                medicine_name: r.medicine_name ?? null,
-                order_amount: r.order_amount ?? null,
                 currency: r.currency ?? null,
                 courier_name: r.courier_name ?? null,
                 tracking_number: r.tracking_number ?? null,
@@ -723,7 +713,7 @@ export default class LeadController extends BaseController {
                   ls.name AS lead_source_name,
                   
                   
-                  l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.medicine_name, l.order_amount, l.currency, l.courier_name, l.tracking_number,
+                  l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -747,8 +737,6 @@ export default class LeadController extends BaseController {
                 lead_status: r.lead_status ?? null,
                 payment_status: r.payment_status ?? null,
                 delivery_status: r.delivery_status ?? null,
-                medicine_name: r.medicine_name ?? null,
-                order_amount: r.order_amount ?? null,
                 currency: r.currency ?? null,
                 courier_name: r.courier_name ?? null,
                 tracking_number: r.tracking_number ?? null,
@@ -940,7 +928,7 @@ export default class LeadController extends BaseController {
                   ${selectLeadSource},
                   
                   
-                  l.whatsapp_number, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.medicine_name, l.order_amount, l.currency, l.courier_name, l.tracking_number,
+                  l.whatsapp_number, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -962,8 +950,6 @@ export default class LeadController extends BaseController {
                 lead_status: r.lead_status ?? null,
                 payment_status: r.payment_status ?? null,
                 delivery_status: r.delivery_status ?? null,
-                medicine_name: r.medicine_name ?? null,
-                order_amount: r.order_amount ?? null,
                 currency: r.currency ?? null,
                 courier_name: r.courier_name ?? null,
                 tracking_number: r.tracking_number ?? null,
@@ -1505,7 +1491,7 @@ export default class LeadController extends BaseController {
             "lead_score", "lead_quality", "best_time_to_call",
             "agent_id", "lead_source_id",
             "whatsapp_number", "note",
-            "medicine_name", "order_amount", "currency",
+            "currency",
             "courier_name", "tracking_number",
             "lead_status", "payment_status", "delivery_status",
         ]);
@@ -1528,8 +1514,6 @@ export default class LeadController extends BaseController {
             lead_source_id: Yup.string().optional(),
             whatsapp_number: Yup.string().optional(),
             note: Yup.string().optional(),
-            medicine_name: Yup.string().optional(),
-            order_amount: Yup.number().optional(),
             currency: Yup.string().optional(),
             courier_name: Yup.string().optional(),
             tracking_number: Yup.string().optional(),
@@ -1828,7 +1812,7 @@ export default class LeadController extends BaseController {
               ${selectLeadSource},
               
               
-              l.whatsapp_number, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.medicine_name, l.order_amount, l.currency, l.courier_name, l.tracking_number,
+              l.whatsapp_number, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
             FROM public.leads l
             LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -1850,8 +1834,6 @@ export default class LeadController extends BaseController {
                 lead_status: r.lead_status ?? null,
                 payment_status: r.payment_status ?? null,
                 delivery_status: r.delivery_status ?? null,
-                medicine_name: r.medicine_name ?? null,
-                order_amount: r.order_amount ?? null,
                 currency: r.currency ?? null,
                 courier_name: r.courier_name ?? null,
                 tracking_number: r.tracking_number ?? null,
@@ -2049,7 +2031,7 @@ export default class LeadController extends BaseController {
                     
                     
                     l.note,
-                    l.whatsapp_number, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.medicine_name, l.order_amount, l.currency, l.courier_name, l.tracking_number,
+                    l.whatsapp_number, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days,
                     last_disp.latest_disposition
                 FROM public.leads l
@@ -2087,8 +2069,6 @@ export default class LeadController extends BaseController {
                 lead_status: raw.lead_status ?? null,
                 payment_status: raw.payment_status ?? null,
                 delivery_status: raw.delivery_status ?? null,
-                medicine_name: raw.medicine_name ?? null,
-                order_amount: raw.order_amount ?? null,
                 currency: raw.currency ?? null,
                 courier_name: raw.courier_name ?? null,
                 tracking_number: raw.tracking_number ?? null,
@@ -2144,7 +2124,7 @@ export default class LeadController extends BaseController {
                     ls.name AS lead_source_name,
                     
                     
-                    l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.medicine_name, l.order_amount, l.currency, l.courier_name, l.tracking_number,
+                    l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
                     GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -2175,8 +2155,6 @@ export default class LeadController extends BaseController {
                 lead_status: r.lead_status ?? null,
                 payment_status: r.payment_status ?? null,
                 delivery_status: r.delivery_status ?? null,
-                medicine_name: r.medicine_name ?? null,
-                order_amount: r.order_amount ?? null,
                 currency: r.currency ?? null,
                 courier_name: r.courier_name ?? null,
                 tracking_number: r.tracking_number ?? null,

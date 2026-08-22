@@ -27,8 +27,6 @@ export interface LeadAttributes {
   delivery_status?: string | null;
   company?: string | null;
   activity_summary?: string | null;
-  medicine_name?: string | null;
-  order_amount?: number | null;
   currency?: string | null;
   courier_name?: string | null;
   tracking_number?: string | null;
@@ -45,7 +43,7 @@ export type LeadCreationAttributes = Optional<
   | "whatsapp_number" | "lead_source_id"
   | "note" | "status" | "lead_status" | "payment_status" | "delivery_status"
   | "company" | "activity_summary"
-  | "medicine_name" | "order_amount" | "currency" | "courier_name" | "tracking_number"
+  | "currency" | "courier_name" | "tracking_number"
   | "created_at" | "updated_at" | "deleted_at"
 >;
 
@@ -77,8 +75,6 @@ export const initLeadModel = (sequelize: Sequelize) => {
     public delivery_status!: string | null;
     public company!: string | null;
     public activity_summary!: string | null;
-    public medicine_name!: string | null;
-    public order_amount!: number | null;
     public currency!: string | null;
     public courier_name!: string | null;
     public tracking_number!: string | null;
@@ -120,8 +116,6 @@ export const initLeadModel = (sequelize: Sequelize) => {
       delivery_status: { type: DataTypes.STRING(50), allowNull: true, defaultValue: "Pending" },
       company: { type: DataTypes.STRING(255), allowNull: true },
       activity_summary: { type: DataTypes.TEXT, allowNull: true },
-      medicine_name: { type: DataTypes.STRING(255), allowNull: true },
-      order_amount: { type: DataTypes.DECIMAL(10, 2), allowNull: true },
       currency: { type: DataTypes.STRING(10), allowNull: true, defaultValue: "USD" },
       courier_name: { type: DataTypes.STRING(100), allowNull: true },
       tracking_number: { type: DataTypes.STRING(100), allowNull: true },
