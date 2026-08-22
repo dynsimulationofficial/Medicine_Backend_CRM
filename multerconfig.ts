@@ -17,18 +17,36 @@ const ALLOWED_EXCEL_TYPES = [
 
 const storage = multer.memoryStorage();
 
+const ALLOWED_EXTENSIONS = [
+  ".jpg",
+  ".jpeg",
+  ".png",
+  ".webp",
+  ".pdf",
+  ".xls",
+  ".xlsx",
+  ".csv",
+];
+
 const fileFilter = (
   req: Request,
   file: Express.Multer.File,
   cb: multer.FileFilterCallback
 ) => {
-  const allowed = [
+  const ext = file.originalname ? file.originalname.substring(file.originalname.lastIndexOf(".")).toLowerCase() : "";
+  const allowedMimes = [
     ...ALLOWED_IMAGE_TYPES,
     ...ALLOWED_DOC_TYPES,
     ...ALLOWED_EXCEL_TYPES,
+    "application/octet-stream",
+    "application/x-zip-compressed",
+    "text/plain",
+    "application/csv",
+    "application/x-csv",
+    "text/x-csv",
   ];
 
-  if (allowed.includes(file.mimetype)) {
+  if (ALLOWED_EXTENSIONS.includes(ext) || allowedMimes.includes(file.mimetype)) {
     return cb(null, true);
   }
 

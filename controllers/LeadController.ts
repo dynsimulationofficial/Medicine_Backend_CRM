@@ -1004,57 +1004,63 @@ export default class LeadController extends BaseController {
           const { agent_id, lead_source_id } = req.body;
           const UUID36 = /^[0-9a-fA-F-]{36}$/;
       
-          // ✅ agent_id now optional
           if (agent_id && !UUID36.test(String(agent_id))) {
             return this.sendError(res, {}, "agent_id must be a valid UUID", 400);
           }
       
-          // Optional body defaults (validate only if present)
           if (lead_source_id && !UUID36.test(String(lead_source_id))) {
             return this.sendError(res, {}, "lead_source_id must be a valid UUID", 400);
           }
-          
+      
+          // Pre-fetch all active lead sources for name-to-id mapping
+          const allLeadSources: any[] = await this.db_services.sequelizeWriter.query(
+            `SELECT id, name FROM public.lead_sources`,
+            { type: QueryTypes.SELECT }
+          );
+          const leadSourceMap = new Map<string, string>();
+          for (const s of allLeadSources) {
+            if (s.name) leadSourceMap.set(String(s.name).trim().toLowerCase(), String(s.id));
+          }
       
           // --- Header normalization map ---
           const HEADER_MAP: Record<string, string> = {
-            "full name": "full_name", "fullname": "full_name", "full_name": "full_name",
-            "mobile": "phone", "mobile number": "phone", "mobile no": "phone", "phone": "phone",
-            "email": "email", "e-mail": "email",
+            "full name": "full_name", "fullname": "full_name", "full_name": "full_name", "name": "full_name",
+            "mobile": "phone", "mobile number": "phone", "mobile no": "phone", "phone": "phone", "phone number": "phone",
+            "email": "email", "e-mail": "email", "mail": "email",
             "whatsapp": "whatsapp_number", "whatsapp number": "whatsapp_number", "whatsapp_number": "whatsapp_number",
-            "address line1": "address_line1", "address_line1": "address_line1",
+            "address line1": "address_line1", "address_line1": "address_line1", "address": "address_line1",
             "address line2": "address_line2", "address_line2": "address_line2",
-            "city": "city", "state": "state", "postal code": "postal_code", "postal_code": "postal_code",
+            "city": "city", "state": "state", "postal code": "postal_code", "postal_code": "postal_code", "zip": "postal_code", "pincode": "postal_code",
             "country": "country",
             "lead score": "lead_score", "lead_score": "lead_score",
             "lead quality": "lead_quality", "lead_quality": "lead_quality",
             "best time to call": "best_time_to_call", "best_time_to_call": "best_time_to_call",
             "agent id": "agent_id", "agent_id": "agent_id",
+            "lead source": "lead_source", "lead_source": "lead_source", "source": "lead_source",
             "lead source id": "lead_source_id", "lead_source_id": "lead_source_id",
-            "debt consolidation status id": "debt_consolidation_status_id",
-            "debt_consolidation_status_id": "debt_consolidation_status_id",
-            "consolidated credit status id": "consolidated_credit_status_id",
-            "consolidated_credit_status_id": "consolidated_credit_status_id",
             "note": "note", "notes": "note"
           };
       
-          // --- Row schema (row-level IDs optional, note optional) ---
+          // --- Row schema (empty strings transformed to null) ---
+          const toEmptyNull = (v: any) => (v === "" || v === undefined ? null : v);
           const rowSchema = Yup.object({
-            full_name: Yup.string().required("full_name is required"),
-            email: Yup.string().email("Invalid email").required("email is required"),
-            phone: Yup.string().required("phone is required"),
-            whatsapp_number: Yup.string().optional(),
-            address_line1: Yup.string().optional(),
-            address_line2: Yup.string().optional(),
-            city: Yup.string().optional(),
-            state: Yup.string().optional(),
-            postal_code: Yup.string().optional(),
-            country: Yup.string().optional(),
-            lead_score: Yup.number().integer().min(0).optional(),
-            lead_quality: Yup.string().optional(),
-            best_time_to_call: Yup.string().optional(),
-            note: Yup.string().optional(),
-            agent_id: Yup.string().uuid().optional(),
-            lead_source_id: Yup.string().uuid().optional(),
+            full_name: Yup.string().trim().required("full_name is required"),
+            email: Yup.string().trim().email("Invalid email").required("email is required"),
+            phone: Yup.string().trim().required("phone is required"),
+            whatsapp_number: Yup.string().nullable().transform(toEmptyNull).optional(),
+            address_line1: Yup.string().nullable().transform(toEmptyNull).optional(),
+            address_line2: Yup.string().nullable().transform(toEmptyNull).optional(),
+            city: Yup.string().nullable().transform(toEmptyNull).optional(),
+            state: Yup.string().nullable().transform(toEmptyNull).optional(),
+            postal_code: Yup.string().nullable().transform(toEmptyNull).optional(),
+            country: Yup.string().nullable().transform(toEmptyNull).optional(),
+            lead_score: Yup.number().transform((v, o) => (o === "" || isNaN(v) ? 0 : v)).nullable().optional(),
+            lead_quality: Yup.string().nullable().transform(toEmptyNull).optional(),
+            best_time_to_call: Yup.string().nullable().transform(toEmptyNull).optional(),
+            note: Yup.string().nullable().transform(toEmptyNull).optional(),
+            agent_id: Yup.string().nullable().transform(toEmptyNull).optional(),
+            lead_source: Yup.string().nullable().transform(toEmptyNull).optional(),
+            lead_source_id: Yup.string().nullable().transform(toEmptyNull).optional(),
           });
       
           // --- Read sheet (Excel/CSV) ---
@@ -1098,11 +1104,13 @@ export default class LeadController extends BaseController {
               const v = await rowSchema.validate(rows[i], { abortEarly: false });
       
               const emailNorm = normEmail(v.email ?? null);
-              const phoneNorm = normDigits(v.phone ?? null);
-              const whatsappNorm = normDigits(v.whatsapp_number ?? null);
+              const phoneNorm = typeof v.phone === "string" ? v.phone.trim() : String(v.phone);
+              const phoneDigits = normDigits(v.phone ?? null);
+              const whatsappNorm = v.whatsapp_number ? String(v.whatsapp_number).trim() : null;
+              const whatsDigits = normDigits(v.whatsapp_number ?? null);
       
-              if (!emailNorm && !phoneNorm && !whatsappNorm) {
-                results.push({ index: i, success: false, error: "Row must include at least one of email/phone/whatsapp_number" });
+              if (!emailNorm && !phoneDigits) {
+                results.push({ index: i, success: false, error: "Row must include valid email and phone" });
                 continue;
               }
       
@@ -1113,19 +1121,19 @@ export default class LeadController extends BaseController {
                 }
                 seenEmail.set(emailNorm, i);
               }
-              if (phoneNorm) {
-                if (seenPhone.has(phoneNorm)) {
-                  results.push({ index: i, success: false, error: `Duplicate phone in file (first at row ${seenPhone.get(phoneNorm)! + 1})` });
+              if (phoneDigits) {
+                if (seenPhone.has(phoneDigits)) {
+                  results.push({ index: i, success: false, error: `Duplicate phone in file (first at row ${seenPhone.get(phoneDigits)! + 1})` });
                   continue;
                 }
-                seenPhone.set(phoneNorm, i);
+                seenPhone.set(phoneDigits, i);
               }
-              if (whatsappNorm) {
-                if (seenWhats.has(whatsappNorm)) {
-                  results.push({ index: i, success: false, error: `Duplicate whatsapp_number in file (first at row ${seenWhats.get(whatsappNorm)! + 1})` });
+              if (whatsDigits) {
+                if (seenWhats.has(whatsDigits)) {
+                  results.push({ index: i, success: false, error: `Duplicate whatsapp_number in file (first at row ${seenWhats.get(whatsDigits)! + 1})` });
                   continue;
                 }
-                seenWhats.set(whatsappNorm, i);
+                seenWhats.set(whatsDigits, i);
               }
       
               clean.push({ idx: i, data: v, emailNorm, phoneNorm, whatsappNorm });
@@ -1141,8 +1149,8 @@ export default class LeadController extends BaseController {
       
           // --- DB duplicate check ---
           const emails = Array.from(new Set(clean.map(c => c.emailNorm).filter(Boolean))) as string[];
-          const phones = Array.from(new Set(clean.map(c => c.phoneNorm).filter(Boolean))) as string[];
-          const whats = Array.from(new Set(clean.map(c => c.whatsappNorm).filter(Boolean))) as string[];
+          const phones = Array.from(new Set(clean.map(c => normDigits(c.phoneNorm)).filter(Boolean))) as string[];
+          const whats = Array.from(new Set(clean.map(c => normDigits(c.whatsappNorm)).filter(Boolean))) as string[];
       
           const rep: Record<string, any> = {};
           const emailParams = emails.map((_, i) => `:e${i}`).join(", ") || "NULL";
@@ -1156,14 +1164,14 @@ export default class LeadController extends BaseController {
             `
             SELECT id,
                    LOWER(email) AS email_norm,
-                   REGEXP_REPLACE(phone, '\\\\D', '', 'g') AS phone_norm,
-                   REGEXP_REPLACE(whatsapp_number, '\\\\D', '', 'g') AS whatsapp_norm
+                   REGEXP_REPLACE(phone, '\\D', '', 'g') AS phone_norm,
+                   REGEXP_REPLACE(whatsapp_number, '\\D', '', 'g') AS whatsapp_norm
               FROM public.leads
              WHERE deleted_at IS NULL
                AND (
                      (email IS NOT NULL AND LOWER(email) IN (${emailParams}))
-                  OR (phone IS NOT NULL AND REGEXP_REPLACE(phone, '\\\\D', '', 'g') IN (${phoneParams}))
-                  OR (whatsapp_number IS NOT NULL AND REGEXP_REPLACE(whatsapp_number, '\\\\D', '', 'g') IN (${whatsParams}))
+                  OR (phone IS NOT NULL AND REGEXP_REPLACE(phone, '\\D', '', 'g') IN (${phoneParams}))
+                  OR (whatsapp_number IS NOT NULL AND REGEXP_REPLACE(whatsapp_number, '\\D', '', 'g') IN (${whatsParams}))
                )
             `,
             { replacements: rep, type: QueryTypes.SELECT }
@@ -1175,10 +1183,12 @@ export default class LeadController extends BaseController {
       
           // --- Insert valid non-duplicate rows ---
           for (const c of clean) {
+            const phoneDigits = normDigits(c.phoneNorm);
+            const whatsDigits = normDigits(c.whatsappNorm);
             const dupParts: string[] = [];
             if (c.emailNorm && existEmailSet.has(c.emailNorm)) dupParts.push("email");
-            if (c.phoneNorm && existPhoneSet.has(c.phoneNorm)) dupParts.push("phone");
-            if (c.whatsappNorm && existWhatsSet.has(c.whatsappNorm)) dupParts.push("whatsapp_number");
+            if (phoneDigits && existPhoneSet.has(phoneDigits)) dupParts.push("phone");
+            if (whatsDigits && existWhatsSet.has(whatsDigits)) dupParts.push("whatsapp_number");
             if (dupParts.length) {
               results.push({ index: c.idx, success: false, error: `Duplicate in DB: ${dupParts.join(" & ")}` });
               continue;
@@ -1187,10 +1197,18 @@ export default class LeadController extends BaseController {
             try {
               const id = uuidv4();
       
-              // ✅ Prefer row-level > body-level > NULL
-              const rowAgentId = toNull(c.data.agent_id) ?? toNull(agent_id);
-              const rowLeadSourceId = toNull(c.data.lead_source_id) ?? toNull(lead_source_id);
-              
+              // Resolve agent_id: Row > Body > NULL
+              const rowAgentId = toNull(c.data.agent_id) || toNull(agent_id);
+      
+              // Resolve lead_source_id: Named source in row > Source ID in row > Body Source ID > NULL
+              let resolvedSourceId = null;
+              if (c.data.lead_source && leadSourceMap.has(String(c.data.lead_source).trim().toLowerCase())) {
+                resolvedSourceId = leadSourceMap.get(String(c.data.lead_source).trim().toLowerCase());
+              } else if (c.data.lead_source_id && UUID36.test(String(c.data.lead_source_id))) {
+                resolvedSourceId = c.data.lead_source_id;
+              } else if (lead_source_id && UUID36.test(String(lead_source_id))) {
+                resolvedSourceId = lead_source_id;
+              }
       
               const [inserted]: any[] = await this.db_services.sequelizeWriter.query(
                 `
@@ -1199,14 +1217,14 @@ export default class LeadController extends BaseController {
                    agent_id,
                    address_line1, address_line2, city, state, postal_code, country,
                    lead_score, lead_quality, best_time_to_call, note,
-                   lead_source_id,
+                   lead_source_id, lead_status,
                    created_at, updated_at)
                 VALUES
                   (:id, :full_name, :email, :phone, :whatsapp_number,
                    :agent_id,
                    :address_line1, :address_line2, :city, :state, :postal_code, :country,
                    COALESCE(:lead_score,0), :lead_quality, :best_time_to_call, :note,
-                   :lead_source_id, :debt_consolidation_status_id, :consolidated_credit_status_id,
+                   :lead_source_id, 'New',
                    NOW(), NOW())
                 RETURNING id, lead_number
                 `,
@@ -1228,7 +1246,7 @@ export default class LeadController extends BaseController {
                     lead_quality: toNull(c.data.lead_quality),
                     best_time_to_call: toNull(c.data.best_time_to_call),
                     note: toNull(c.data.note),
-                    lead_source_id: rowLeadSourceId,
+                    lead_source_id: resolvedSourceId,
                   },
                   type: QueryTypes.SELECT,
                 }
@@ -1236,23 +1254,29 @@ export default class LeadController extends BaseController {
       
               results.push({ index: c.idx, success: true, data: inserted });
               if (c.emailNorm) existEmailSet.add(c.emailNorm);
-              if (c.phoneNorm) existPhoneSet.add(c.phoneNorm);
-              if (c.whatsappNorm) existWhatsSet.add(c.whatsappNorm);
+              if (phoneDigits) existPhoneSet.add(phoneDigits);
+              if (whatsDigits) existWhatsSet.add(whatsDigits);
             } catch (e: any) {
               const msg = e?.message || "Row insert failed";
               results.push({ index: c.idx, success: false, error: msg });
             }
           }
       
-          const anySuccess = results.some(r => r.success);
-          if (!anySuccess) {
-            return this.sendError(res, { total: results.length, results }, "Bulk upload failed - all rows invalid", 400);
+          const successCount = results.filter(r => r.success).length;
+          const failedCount = results.filter(r => !r.success).length;
+      
+          if (successCount === 0) {
+            return this.sendError(res, { total: results.length, successCount, failedCount, results }, "Bulk upload failed - all rows invalid", 400);
           }
       
-          return this.sendSuccess(res, { total: results.length, results }, "Bulk upload processed");
+          return this.sendSuccess(
+            res,
+            { total: results.length, successCount, failedCount, results },
+            `Bulk upload completed: ${successCount} lead(s) created, ${failedCount} failed`
+          );
         } catch (err: any) {
           console.error("bulkUploadFromFile error:", err);
-          return this.sendError(res, {}, "Internal server error", 500);
+          return this.sendError(res, { error: err?.message, stack: err?.stack }, err?.message || "Internal server error", 500);
         }
       };
       
