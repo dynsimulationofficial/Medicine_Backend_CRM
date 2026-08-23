@@ -1,0 +1,328 @@
+import { Request, Response } from "express";
+import BaseController from "./BaseController";
+import DBServices from "../database/DBService";
+import { QueryTypes } from "sequelize";
+import * as Yup from "yup";
+import { DateTime } from "luxon";
+
+export class ReportController extends BaseController {
+  private db_services: DBServices;
+
+  constructor() {
+    super();
+    this.db_services = new DBServices();
+  }
+
+  /**
+   * POST /api/v1/managelead/reports/kpi
+   * Aggregates KPI metrics, order status distribution, payment breakdown,
+   * lead sources, and agent performance for given date range and filters.
+   */
+  public getKpiAnalytics = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const schema = Yup.object({
+        startDate: Yup.string().nullable().optional(),
+        endDate: Yup.string().nullable().optional(),
+        agent_id: Yup.string().uuid().nullable().optional(),
+        order_status: Yup.string().nullable().optional(),
+      });
+
+      const body = await schema.validate(req.body, { abortEarly: false });
+      const { startDate, endDate, agent_id, order_status } = body;
+
+      // Determine date boundaries in UTC (default: start of current month to now)
+      const now = DateTime.now().setZone("Asia/Kolkata");
+      const fromDate = startDate
+        ? DateTime.fromISO(startDate, { zone: "Asia/Kolkata" }).startOf("day").toUTC().toISO()
+        : now.startOf("month").toUTC().toISO();
+      const toDate = endDate
+        ? DateTime.fromISO(endDate, { zone: "Asia/Kolkata" }).endOf("day").toUTC().toISO()
+        : now.endOf("day").toUTC().toISO();
+
+      const replacements: Record<string, any> = {
+        fromDate,
+        toDate,
+      };
+
+      let agentFilterLeads = "";
+      let agentFilterOrders = "";
+      if (agent_id) {
+        agentFilterLeads = " AND l.agent_id = :agent_id";
+        agentFilterOrders = " AND o.agent_id = :agent_id";
+        replacements.agent_id = agent_id;
+      }
+
+      let statusFilterOrders = "";
+      if (order_status && order_status !== "All") {
+        statusFilterOrders = " AND o.order_status = :order_status";
+        replacements.order_status = order_status;
+      }
+
+      // 1. Leads Summary & Conversion Metrics
+      const [leadsStats]: any[] = await this.db_services.sequelizeWriter.query(
+        `SELECT
+            COUNT(l.id) AS total_leads,
+            COUNT(CASE WHEN l.lead_status = 'Converted' OR ord_conv.has_order = 1 THEN 1 END) AS converted_leads,
+            COUNT(CASE WHEN l.agent_id IS NULL THEN 1 END) AS unassigned_leads,
+            COUNT(CASE WHEN l.agent_id IS NOT NULL THEN 1 END) AS assigned_leads
+         FROM public.leads l
+         LEFT JOIN (
+            SELECT DISTINCT lead_id, 1 AS has_order
+            FROM public.lead_orders
+            WHERE deleted_at IS NULL
+              AND order_status IN ('Confirmed', 'Shipped', 'Delivered')
+         ) ord_conv ON ord_conv.lead_id = l.id
+         WHERE l.deleted_at IS NULL
+           AND l.created_at >= :fromDate AND l.created_at <= :toDate
+           ${agentFilterLeads}`,
+        { replacements, type: QueryTypes.SELECT }
+      );
+
+      const totalLeads = Number(leadsStats?.total_leads || 0);
+      const convertedLeads = Number(leadsStats?.converted_leads || 0);
+      const unassignedLeads = Number(leadsStats?.unassigned_leads || 0);
+      const assignedLeads = Number(leadsStats?.assigned_leads || 0);
+      const conversionRate = totalLeads > 0 ? Number(((convertedLeads / totalLeads) * 100).toFixed(1)) : 0;
+
+      // 2. Orders & Sales Summary Metrics
+      const [ordersStats]: any[] = await this.db_services.sequelizeWriter.query(
+        `SELECT
+            COUNT(o.id) AS total_orders,
+            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' THEN o.grand_total ELSE 0 END), 0) AS total_revenue,
+            COUNT(CASE WHEN o.order_status = 'Delivered' THEN 1 END) AS delivered_orders,
+            COALESCE(SUM(CASE WHEN o.order_status = 'Delivered' THEN o.grand_total ELSE 0 END), 0) AS delivered_revenue,
+            COUNT(CASE WHEN o.order_status = 'Pending' THEN 1 END) AS pending_orders,
+            COUNT(CASE WHEN o.order_status = 'Shipped' THEN 1 END) AS shipped_orders,
+            COUNT(CASE WHEN o.order_status = 'Confirmed' THEN 1 END) AS confirmed_orders,
+            COUNT(CASE WHEN o.order_status = 'Cancelled' THEN 1 END) AS cancelled_orders,
+            COUNT(CASE WHEN o.payment_status = 'Paid' THEN 1 END) AS paid_orders,
+            COUNT(CASE WHEN o.payment_status = 'Pending' THEN 1 END) AS unpaid_orders
+         FROM public.lead_orders o
+         WHERE o.deleted_at IS NULL
+           AND o.created_at >= :fromDate AND o.created_at <= :toDate
+           ${agentFilterOrders}
+           ${statusFilterOrders}`,
+        { replacements, type: QueryTypes.SELECT }
+      );
+
+      const totalOrders = Number(ordersStats?.total_orders || 0);
+      const totalRevenue = Number(ordersStats?.total_revenue || 0);
+      const deliveredOrders = Number(ordersStats?.delivered_orders || 0);
+      const deliveredRevenue = Number(ordersStats?.delivered_revenue || 0);
+      const pendingOrders = Number(ordersStats?.pending_orders || 0);
+      const shippedOrders = Number(ordersStats?.shipped_orders || 0);
+      const confirmedOrders = Number(ordersStats?.confirmed_orders || 0);
+      const cancelledOrders = Number(ordersStats?.cancelled_orders || 0);
+      const deliverySuccessRate = totalOrders > 0 ? Number(((deliveredOrders / totalOrders) * 100).toFixed(1)) : 0;
+      const avgOrderValue = totalOrders > 0 ? Number((totalRevenue / (totalOrders - cancelledOrders || 1)).toFixed(2)) : 0;
+
+      // 3. Order Status Breakdown
+      const statusBreakdown: any[] = await this.db_services.sequelizeWriter.query(
+        `SELECT
+            COALESCE(o.order_status, 'Pending') AS status,
+            COUNT(o.id) AS count,
+            COALESCE(SUM(o.grand_total), 0) AS total_amount
+         FROM public.lead_orders o
+         WHERE o.deleted_at IS NULL
+           AND o.created_at >= :fromDate AND o.created_at <= :toDate
+           ${agentFilterOrders}
+         GROUP BY o.order_status
+         ORDER BY count DESC`,
+        { replacements, type: QueryTypes.SELECT }
+      );
+
+      const formattedStatusBreakdown = statusBreakdown.map((item) => ({
+        status: item.status,
+        count: Number(item.count),
+        total_amount: Number(item.total_amount),
+        percentage: totalOrders > 0 ? Number(((Number(item.count) / totalOrders) * 100).toFixed(1)) : 0,
+      }));
+
+      // 4. Payment Modes Breakdown
+      const paymentBreakdown: any[] = await this.db_services.sequelizeWriter.query(
+        `SELECT
+            COALESCE(o.payment_mode, 'COD') AS payment_mode,
+            COUNT(o.id) AS count,
+            COALESCE(SUM(o.grand_total), 0) AS total_amount
+         FROM public.lead_orders o
+         WHERE o.deleted_at IS NULL
+           AND o.created_at >= :fromDate AND o.created_at <= :toDate
+           ${agentFilterOrders}
+         GROUP BY o.payment_mode
+         ORDER BY count DESC`,
+        { replacements, type: QueryTypes.SELECT }
+      );
+
+      const formattedPaymentBreakdown = paymentBreakdown.map((item) => ({
+        payment_mode: item.payment_mode,
+        count: Number(item.count),
+        total_amount: Number(item.total_amount),
+        percentage: totalOrders > 0 ? Number(((Number(item.count) / totalOrders) * 100).toFixed(1)) : 0,
+      }));
+
+      // 5. Lead Source Performance Breakdown
+      const sourceBreakdown: any[] = await this.db_services.sequelizeWriter.query(
+        `SELECT
+            COALESCE(ls.name, 'Direct / Unknown') AS source_name,
+            COUNT(l.id) AS leads_count,
+            COUNT(CASE WHEN l.lead_status = 'Converted' OR ord_conv.has_order = 1 THEN 1 END) AS converted_count
+         FROM public.leads l
+         LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
+         LEFT JOIN (
+            SELECT DISTINCT lead_id, 1 AS has_order
+            FROM public.lead_orders
+            WHERE deleted_at IS NULL
+              AND order_status IN ('Confirmed', 'Shipped', 'Delivered')
+         ) ord_conv ON ord_conv.lead_id = l.id
+         WHERE l.deleted_at IS NULL
+           AND l.created_at >= :fromDate AND l.created_at <= :toDate
+           ${agentFilterLeads}
+         GROUP BY ls.name
+         ORDER BY leads_count DESC`,
+        { replacements, type: QueryTypes.SELECT }
+      );
+
+      const formattedSourceBreakdown = sourceBreakdown.map((item) => {
+        const lCount = Number(item.leads_count);
+        const cCount = Number(item.converted_count);
+        return {
+          source_name: item.source_name,
+          leads_count: lCount,
+          converted_count: cCount,
+          conversion_rate: lCount > 0 ? Number(((cCount / lCount) * 100).toFixed(1)) : 0,
+        };
+      });
+
+      // 6. Agent Performance Leaderboard
+      const agentLeaderboard: any[] = await this.db_services.sequelizeWriter.query(
+        `SELECT
+            u.id AS agent_id,
+            u.name AS agent_name,
+            u.email AS agent_email,
+            COALESCE(lead_agg.assigned_count, 0) AS assigned_leads,
+            COALESCE(lead_agg.converted_count, 0) AS converted_leads,
+            COALESCE(ord_agg.total_orders, 0) AS total_orders,
+            COALESCE(ord_agg.total_revenue, 0) AS total_revenue,
+            COALESCE(ord_agg.delivered_orders, 0) AS delivered_orders
+         FROM public.system_users u
+         JOIN public.user_role ur ON ur.system_user_id = u.id
+         JOIN public.roles r ON r.id = ur.role_id AND LOWER(r.name) = 'agent'
+         LEFT JOIN (
+            SELECT
+                l.agent_id,
+                COUNT(l.id) AS assigned_count,
+                COUNT(CASE WHEN l.lead_status = 'Converted' OR conv.has_order = 1 THEN 1 END) AS converted_count
+            FROM public.leads l
+            LEFT JOIN (
+                SELECT DISTINCT lead_id, 1 AS has_order
+                FROM public.lead_orders
+                WHERE deleted_at IS NULL
+                  AND order_status IN ('Confirmed', 'Shipped', 'Delivered')
+            ) conv ON conv.lead_id = l.id
+            WHERE l.deleted_at IS NULL
+              AND l.created_at >= :fromDate AND l.created_at <= :toDate
+            GROUP BY l.agent_id
+         ) lead_agg ON lead_agg.agent_id = u.id
+         LEFT JOIN (
+            SELECT
+                o.agent_id,
+                COUNT(o.id) AS total_orders,
+                SUM(CASE WHEN o.order_status != 'Cancelled' THEN o.grand_total ELSE 0 END) AS total_revenue,
+                COUNT(CASE WHEN o.order_status = 'Delivered' THEN 1 END) AS delivered_orders
+            FROM public.lead_orders o
+            WHERE o.deleted_at IS NULL
+              AND o.created_at >= :fromDate AND o.created_at <= :toDate
+            GROUP BY o.agent_id
+         ) ord_agg ON ord_agg.agent_id = u.id
+         WHERE u.deleted_at IS NULL
+         ORDER BY total_revenue DESC, total_orders DESC, assigned_leads DESC`,
+        { replacements, type: QueryTypes.SELECT }
+      );
+
+      const formattedLeaderboard = agentLeaderboard.map((item, index) => {
+        const aLeads = Number(item.assigned_leads);
+        const cLeads = Number(item.converted_leads);
+        const convRate = aLeads > 0 ? Number(((cLeads / aLeads) * 100).toFixed(1)) : 0;
+        return {
+          rank: index + 1,
+          agent_id: item.agent_id,
+          agent_name: item.agent_name || "Unknown Agent",
+          agent_email: item.agent_email,
+          assigned_leads: aLeads,
+          converted_leads: cLeads,
+          total_orders: Number(item.total_orders),
+          total_revenue: Number(item.total_revenue),
+          delivered_orders: Number(item.delivered_orders),
+          conversion_rate: convRate,
+        };
+      });
+
+      // 7. Recent Orders in selected period
+      const recentOrders: any[] = await this.db_services.sequelizeWriter.query(
+        `SELECT
+            o.id,
+            o.order_number,
+            o.grand_total,
+            o.total_items,
+            o.order_status,
+            o.payment_status,
+            o.payment_mode,
+            o.courier_name,
+            o.tracking_number,
+            o.created_at,
+            l.full_name AS customer_name,
+            l.phone AS customer_phone,
+            u.name AS agent_name
+         FROM public.lead_orders o
+         JOIN public.leads l ON l.id = o.lead_id
+         LEFT JOIN public.system_users u ON u.id = o.agent_id
+         WHERE o.deleted_at IS NULL
+           AND o.created_at >= :fromDate AND o.created_at <= :toDate
+           ${agentFilterOrders}
+           ${statusFilterOrders}
+         ORDER BY o.created_at DESC
+         LIMIT 20`,
+        { replacements, type: QueryTypes.SELECT }
+      );
+
+      const data = {
+        date_range: {
+          start_date: startDate || now.startOf("month").toFormat("yyyy-MM-dd"),
+          end_date: endDate || now.toFormat("yyyy-MM-dd"),
+        },
+        summary: {
+          total_leads: totalLeads,
+          converted_leads: convertedLeads,
+          unassigned_leads: unassignedLeads,
+          assigned_leads: assignedLeads,
+          conversion_rate: conversionRate,
+          total_orders: totalOrders,
+          total_revenue: totalRevenue,
+          delivered_orders: deliveredOrders,
+          delivered_revenue: deliveredRevenue,
+          pending_orders: pendingOrders,
+          shipped_orders: shippedOrders,
+          confirmed_orders: confirmedOrders,
+          cancelled_orders: cancelledOrders,
+          delivery_success_rate: deliverySuccessRate,
+          avg_order_value: avgOrderValue,
+        },
+        status_breakdown: formattedStatusBreakdown,
+        payment_breakdown: formattedPaymentBreakdown,
+        source_breakdown: formattedSourceBreakdown,
+        agent_leaderboard: formattedLeaderboard,
+        recent_orders: recentOrders,
+      };
+
+      return this.sendSuccess(res, data, "KPI analytics retrieved successfully");
+    } catch (err: any) {
+      console.error("getKpiAnalytics error:", err);
+      if (err instanceof Yup.ValidationError) {
+        return this.sendError(res, {}, err.errors.join(", "), 400);
+      }
+      return this.sendError(res, {}, err?.message || "Internal server error", 500);
+    }
+  };
+}
+
+export default new ReportController();

@@ -3,6 +3,7 @@ import CompressCrmController from "../controllers/AdvanceLeadCRMController";
 import UserActivityController from "../controllers/UserActivityController";
 import LeadController from "../controllers/LeadController";
 import UserManagementController from "../controllers/UserManagementController";
+import reportController from "../controllers/ReportController";
 import { uploadFile } from "../multerconfig";
 import { requireAuth } from "../middleware/auth";
 import { randomUUID } from 'crypto';
@@ -10,13 +11,12 @@ import FCMService from "../service/FCMService";
 import { WebPushToken } from "../models";
 import { Op } from "sequelize";
 import db from "../models";
+
 function normalizeFcmToken(raw?: string) {
   if (!raw) return "";
-  // remove leading/trailing space + any accidental newlines/tabs
   const t = raw.trim().replace(/\s+/g, "");
   return t;
 }
-
 
 export const SystemuserRouter = express.Router();
 
@@ -24,7 +24,7 @@ const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
 const leadController = new LeadController();
 
-
+/* -------------------- Authentication & User Management -------------------- */
 SystemuserRouter.post("/register", requireAuth, UserManagementController.createUser);
 SystemuserRouter.post("/sendotp", systemuserController.loginRequestOtp);
 SystemuserRouter.post("/login", systemuserController.verifyOtp);
@@ -35,11 +35,7 @@ SystemuserRouter.get("/allusers", UserManagementController.getAllUsers);
 SystemuserRouter.post("/blockuser", requireAuth, UserManagementController.blockUser);
 SystemuserRouter.post("/unblockuser", requireAuth, systemuserController.unblockUser);
 SystemuserRouter.get("/listblockuser", requireAuth, systemuserController.listBlockedUsers);
-
 SystemuserRouter.get("/assigned-lead-notifications", requireAuth, leadController.getAssignedLeadNotifications);
-
-
-
 
 /* -------------------- User Activity -------------------- */
 SystemuserRouter.post("/user-activity/log", userActivityController.logUserActivity);
@@ -49,8 +45,6 @@ SystemuserRouter.get("/users", userActivityController.getAllUserNamesAndUUIDs);
 SystemuserRouter.get("/users/deleted", userActivityController.getAllDeletedUsers);
 
 /* -------------------- Web Push (FCM) -------------------- */
-
-
 SystemuserRouter.post(
   "/register-fcm",
   requireAuth,
@@ -69,9 +63,6 @@ SystemuserRouter.post(
 
       const userId = user.system_user_id;
 
-      console.log(`📱 Registering FCM token for user ${userId}`);
-
-      // ✅ Simple validation without sending test notification
       if (fcmtoken.length < 100) {
         return res.status(400).json({ 
           success: false, 
@@ -79,13 +70,11 @@ SystemuserRouter.post(
         });
       }
 
-      // Check if user already has an FCM token
       const existingToken = await db.WebPushToken.findOne({
         where: { system_user_id: userId }
       });
 
       if (existingToken) {
-        // UPDATE existing token
         await db.WebPushToken.update(
           { 
             fcmtoken: fcmtoken,
@@ -94,9 +83,7 @@ SystemuserRouter.post(
           },
           { where: { system_user_id: userId } }
         );
-        console.log(`✅ FCM token UPDATED for user ${userId}`);
       } else {
-        // CREATE new token
         await db.WebPushToken.create({
           id: randomUUID(),
           system_user_id: userId,
@@ -105,7 +92,6 @@ SystemuserRouter.post(
           created_at: new Date(),
           updated_at: new Date(),
         });
-        console.log(`✅ FCM token CREATED for user ${userId}`);
       }
 
       return res.json({
@@ -113,20 +99,18 @@ SystemuserRouter.post(
         msg: "FCM token registered successfully",
       });
     } catch (e) {
-      console.error("❌ register-fcm error:", e);
+      console.error("register-fcm error:", e);
       return res.status(500).json({ success: false, msg: "Failed to register FCM token" });
     }
   }
 );
-// Add these debug endpoints
+
 SystemuserRouter.post(
   "/debug-token",
   requireAuth,
   async (req: Request, res: Response) => {
     try {
       const { fcmtoken } = req.body;
-      const user = (req as any).user;
-      
       if (!fcmtoken) {
         return res.status(400).json({ success: false, msg: "FCM token required" });
       }
@@ -165,9 +149,6 @@ SystemuserRouter.post(
     }
   }
 );
-
-
-// Quick test route: send a test push either to a provided token or to all activ
 
 /* -------------------- Leads (core) -------------------- */
 SystemuserRouter.post("/leads", requireAuth, leadController.createLead);
@@ -217,6 +198,7 @@ SystemuserRouter.post("/leads/documents/soft-delete", requireAuth, leadControlle
 SystemuserRouter.post("/leads/documents/get", leadController.getDocument);
 SystemuserRouter.post("/leads/documents/filter", leadController.filterDocuments);
 SystemuserRouter.post("/leads/documents/geturl", leadController.getDocumentUrl);
+
 /* -------------------- Lead Medicines / Order Items -------------------- */
 SystemuserRouter.post("/leads/medicines/save", requireAuth, leadController.saveLeadMedicines);
 SystemuserRouter.post("/leads/medicines/list", requireAuth, leadController.listLeadMedicines);
@@ -232,5 +214,8 @@ SystemuserRouter.post("/leads/orders/update-status", requireAuth, leadController
 SystemuserRouter.post("/leads/task/agent/dashboard", requireAuth, leadController.getAgentTasksDashboard);
 SystemuserRouter.post("/leads/admin/dashboard", requireAuth, leadController.getAdminDashboard);
 SystemuserRouter.get("/leads/search/dashboard", requireAuth, leadController.searchLeadsForDashboard);
+
+/* -------------------- Reports & Analytics -------------------- */
+SystemuserRouter.post("/reports/kpi", requireAuth, reportController.getKpiAnalytics);
 
 export default SystemuserRouter;
