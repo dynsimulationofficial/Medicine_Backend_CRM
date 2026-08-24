@@ -5550,6 +5550,27 @@ export default class LeadController extends BaseController {
                 if (itemRow) insertedItems.push(itemRow);
             }
 
+            // Sync lead_status, payment_status, delivery_status to public.leads
+            const isConverted = ["Confirmed", "Shipped", "Delivered"].includes(order_status) || payment_status === "Paid";
+            await this.db_services.sequelizeWriter.query(
+                `UPDATE public.leads
+                 SET lead_status = CASE WHEN :isConverted THEN 'Converted' ELSE lead_status END,
+                     payment_status = :payment_status,
+                     delivery_status = :order_status,
+                     updated_at = NOW()
+                 WHERE id = :lead_id AND deleted_at IS NULL`,
+                {
+                    replacements: {
+                        isConverted,
+                        payment_status: payment_status || "Pending",
+                        order_status: order_status || "Pending",
+                        lead_id,
+                    },
+                    type: QueryTypes.UPDATE,
+                    transaction,
+                }
+            );
+
             await transaction.commit();
 
             // Log activity
@@ -5743,6 +5764,26 @@ export default class LeadController extends BaseController {
             if (!updatedOrder) {
                 return this.sendError(res, {}, "Order not found", 404);
             }
+
+            // Sync lead_status, payment_status, delivery_status to public.leads
+            const isConverted = ["Confirmed", "Shipped", "Delivered"].includes(updatedOrder.order_status) || updatedOrder.payment_status === "Paid";
+            await this.db_services.sequelizeWriter.query(
+                `UPDATE public.leads
+                 SET lead_status = CASE WHEN :isConverted THEN 'Converted' ELSE lead_status END,
+                     payment_status = COALESCE(:payment_status, payment_status),
+                     delivery_status = COALESCE(:order_status, delivery_status),
+                     updated_at = NOW()
+                 WHERE id = :lead_id AND deleted_at IS NULL`,
+                {
+                    replacements: {
+                        isConverted,
+                        payment_status: updatedOrder.payment_status,
+                        order_status: updatedOrder.order_status,
+                        lead_id,
+                    },
+                    type: QueryTypes.UPDATE,
+                }
+            );
 
             if (authUserId) {
                 await SystemUserActivity.create({
