@@ -149,6 +149,7 @@ SystemuserRouter.post(
     }
   }
 );
+SystemuserRouter.get("/assigned-lead-notifications", requireAuth, leadController.getAssignedLeadNotifications);
 
 /* -------------------- Leads (core) -------------------- */
 SystemuserRouter.post("/leads", requireAuth, leadController.createLead);

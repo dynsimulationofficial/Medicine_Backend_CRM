@@ -1324,14 +1324,11 @@ export default class LeadController extends BaseController {
       
           const where: string[] = [
             `wn.recipient_user_id = :agentUserId`,
-            `(wn.type = 'lead_assigned' OR wn.type = 'bulk_leads_assigned')`,
-            // ✅ COMPLETELY EXCLUDE NOTIFICATIONS FOR DELETED LEADS
-            `(wn.ref_id IS NULL OR (wn.ref_id IS NOT NULL AND l.id IS NOT NULL))`
           ];
           const repl: Record<string, any> = { agentUserId };
       
           if (search && search.length) {
-            where.push(`(wn.title ILIKE :q OR wn.body ILIKE :q OR l.full_name ILIKE :q OR l.lead_number::text ILIKE :q)`);
+            where.push(`(wn.title ILIKE :q OR wn.body ILIKE :q OR COALESCE(l.full_name, '') ILIKE :q OR COALESCE(l.lead_number::text, '') ILIKE :q)`);
             repl.q = `%${search}%`;
           }
       
@@ -1341,7 +1338,7 @@ export default class LeadController extends BaseController {
           const countQuery = `
             SELECT COUNT(*)::int AS total 
             FROM public.web_push_notifications wn
-            LEFT JOIN public.leads l ON wn.ref_id = l.id
+            LEFT JOIN public.leads l ON (wn.ref_id = l.id OR (wn.data->>'lead_id')::uuid = l.id)
             WHERE 1=1 ${whereSql}
           `;
           
@@ -1357,14 +1354,15 @@ export default class LeadController extends BaseController {
               wn.type,
               wn.title,
               wn.body,
+              wn.data,
               wn.created_at,
               wn.updated_at,
-              wn.ref_id AS lead_id,
+              COALESCE((wn.data->>'lead_id')::uuid, wn.ref_id) AS lead_id,
               l.lead_number,
               l.full_name,
               l.agent_id
             FROM public.web_push_notifications wn
-            LEFT JOIN public.leads l ON wn.ref_id = l.id
+            LEFT JOIN public.leads l ON (wn.ref_id = l.id OR (wn.data->>'lead_id')::uuid = l.id)
             WHERE 1=1 ${whereSql}
             ORDER BY wn.created_at DESC
             LIMIT :limit OFFSET :offset
