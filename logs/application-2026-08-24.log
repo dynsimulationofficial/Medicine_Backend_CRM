@@ -14,3 +14,4 @@
 {"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6IjRlYmNkYzQ1LTQ3NDQtNGQ5MC05MGNkLWM3N2YyNDFhMTNkYiIsImVtYWlsIjoid2FzaXF1ZWtoYW44MEBnbWFpbC5jb20iLCJpYXQiOjE3ODc1NjgzMTMsImV4cCI6MTc4NzYxMTUxM30.IvfvDgTQXT4-azMr3uxVy5xXf8cf_bfKvPGJA-x1WmY","timestamp":"2026-08-24T11:05:10.671Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-24T13:25:13.674Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-24T13:25:24.041Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-24T13:40:57.170Z"}

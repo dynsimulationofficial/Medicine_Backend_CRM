@@ -2422,9 +2422,11 @@ export default class LeadController extends BaseController {
                 }
               }
       
-              // Send notifications
-              const notifRes = await FCMService.notifyBulkLeadsAssigned(String(agent_id), leads);
-              console.log("📊 Bulk assign push result:", notifRes);
+              // Send individual notifications for each assigned lead so clicking opens that exact lead
+              for (const lead of leads) {
+                await FCMService.notifyLeadAssigned(String(agent_id), lead);
+              }
+              console.log(`✅ Sent individual notifications for ${leads.length} assigned leads`);
             } catch (e) {
               console.error("❌ BulkAssignLeads push failed:", e);
             }
