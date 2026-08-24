@@ -89,9 +89,9 @@ export class ReportController extends BaseController {
         `SELECT
             COUNT(o.id) AS total_orders,
             COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' THEN o.grand_total ELSE 0 END), 0) AS total_revenue,
-            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.currency = 'INR' OR l.currency IS NULL OR l.currency = '') THEN o.grand_total ELSE 0 END), 0) AS revenue_inr,
-            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND l.currency = 'USD' THEN o.grand_total ELSE 0 END), 0) AS revenue_usd,
-            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND l.currency = 'GBP' THEN o.grand_total ELSE 0 END), 0) AS revenue_gbp,
+            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.phone LIKE '+44%' OR l.phone LIKE '44%' OR (l.phone NOT LIKE '+1%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%UK%' OR l.country ILIKE '%United Kingdom%'))) THEN o.grand_total ELSE 0 END), 0) AS revenue_gbp,
+            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.phone LIKE '+1%' OR (l.phone LIKE '1%' AND LENGTH(l.phone) >= 11) OR (l.phone NOT LIKE '+44%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%USA%' OR l.country ILIKE '%United States%'))) THEN o.grand_total ELSE 0 END), 0) AS revenue_usd,
+            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND NOT (l.phone LIKE '+44%' OR l.phone LIKE '44%' OR (l.phone NOT LIKE '+1%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%UK%' OR l.country ILIKE '%United Kingdom%'))) AND NOT (l.phone LIKE '+1%' OR (l.phone LIKE '1%' AND LENGTH(l.phone) >= 11) OR (l.phone NOT LIKE '+44%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%USA%' OR l.country ILIKE '%United States%'))) THEN o.grand_total ELSE 0 END), 0) AS revenue_inr,
             COUNT(CASE WHEN o.order_status = 'Delivered' THEN 1 END) AS delivered_orders,
             COALESCE(SUM(CASE WHEN o.order_status = 'Delivered' THEN o.grand_total ELSE 0 END), 0) AS delivered_revenue,
             COUNT(CASE WHEN o.order_status = 'Pending' THEN 1 END) AS pending_orders,
@@ -238,9 +238,9 @@ export class ReportController extends BaseController {
                 o.agent_id,
                 COUNT(o.id) AS total_orders,
                 SUM(CASE WHEN o.order_status != 'Cancelled' THEN o.grand_total ELSE 0 END) AS total_revenue,
-                COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.currency = 'INR' OR l.currency IS NULL OR l.currency = '') THEN o.grand_total ELSE 0 END), 0) AS revenue_inr,
-                COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND l.currency = 'USD' THEN o.grand_total ELSE 0 END), 0) AS revenue_usd,
-                COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND l.currency = 'GBP' THEN o.grand_total ELSE 0 END), 0) AS revenue_gbp,
+                COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.phone LIKE '+44%' OR l.phone LIKE '44%' OR (l.phone NOT LIKE '+1%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%UK%' OR l.country ILIKE '%United Kingdom%'))) THEN o.grand_total ELSE 0 END), 0) AS revenue_gbp,
+                COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.phone LIKE '+1%' OR (l.phone LIKE '1%' AND LENGTH(l.phone) >= 11) OR (l.phone NOT LIKE '+44%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%USA%' OR l.country ILIKE '%United States%'))) THEN o.grand_total ELSE 0 END), 0) AS revenue_usd,
+                COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND NOT (l.phone LIKE '+44%' OR l.phone LIKE '44%' OR (l.phone NOT LIKE '+1%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%UK%' OR l.country ILIKE '%United Kingdom%'))) AND NOT (l.phone LIKE '+1%' OR (l.phone LIKE '1%' AND LENGTH(l.phone) >= 11) OR (l.phone NOT LIKE '+44%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%USA%' OR l.country ILIKE '%United States%'))) THEN o.grand_total ELSE 0 END), 0) AS revenue_inr,
                 COUNT(CASE WHEN o.order_status = 'Delivered' THEN 1 END) AS delivered_orders
             FROM public.lead_orders o
             JOIN public.leads l ON l.id = o.lead_id
@@ -287,7 +287,12 @@ export class ReportController extends BaseController {
             o.courier_name,
             o.tracking_number,
             o.created_at,
-            COALESCE(l.currency, 'INR') AS currency,
+            CASE
+                WHEN l.phone LIKE '+44%' OR l.phone LIKE '44%' OR l.country ILIKE '%UK%' OR l.country ILIKE '%United Kingdom%' THEN 'GBP'
+                WHEN l.phone LIKE '+1%' OR (l.phone LIKE '1%' AND LENGTH(l.phone) >= 11) OR l.country ILIKE '%USA%' OR l.country ILIKE '%United States%' THEN 'USD'
+                ELSE 'INR'
+            END AS currency,
+            l.country AS customer_country,
             l.full_name AS customer_name,
             l.phone AS customer_phone,
             u.name AS agent_name

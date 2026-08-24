@@ -376,6 +376,17 @@ export default class LeadController extends BaseController {
                 ":lead_status", ":payment_status", ":delivery_status"
             ];
 
+            let resolvedLeadCurrency = "INR";
+            const cntry = (input.country || "").toLowerCase();
+            const phn = (phoneNorm || "").toLowerCase();
+            if (cntry.includes("uk") || cntry.includes("united kingdom") || phn.startsWith("+44") || phn.startsWith("44")) {
+                resolvedLeadCurrency = "GBP";
+            } else if (cntry.includes("usa") || cntry.includes("united states") || phn.startsWith("+1") || phn.startsWith("1")) {
+                resolvedLeadCurrency = "USD";
+            } else {
+                resolvedLeadCurrency = "INR";
+            }
+
             const replacements: Record<string, any> = {
                 id,
                 full_name: input.full_name,
@@ -393,7 +404,7 @@ export default class LeadController extends BaseController {
                 agent_id: toNull(input.agent_id),        // <-- if provided, it will be set now
                 whatsapp_number: whatsappNorm,
                 lead_source_id: toNull(input.lead_source_id),
-                currency: toNull(input.currency) ?? (input.country === "India" ? "INR" : input.country === "UK" ? "GBP" : "USD"),
+                currency: resolvedLeadCurrency,
                 courier_name: toNull(input.courier_name),
                 tracking_number: toNull(input.tracking_number),
                 lead_status: toNull(input.lead_status) ?? "New",
@@ -1602,6 +1613,16 @@ export default class LeadController extends BaseController {
             if (Object.keys(updateData).length === 0) {
                 await transaction.rollback();
                 return this.sendError(res, {}, "No fields to update", 400);
+            }
+
+            const targetCountry = (updateData.country ?? existingLead.country ?? "").toLowerCase();
+            const targetPhone = (updateData.phone ?? existingLead.phone ?? "").toLowerCase();
+            if (targetCountry.includes("uk") || targetCountry.includes("united kingdom") || targetPhone.startsWith("+44") || targetPhone.startsWith("44")) {
+                updateData.currency = "GBP";
+            } else if (targetCountry.includes("usa") || targetCountry.includes("united states") || targetPhone.startsWith("+1") || targetPhone.startsWith("1")) {
+                updateData.currency = "USD";
+            } else {
+                updateData.currency = "INR";
             }
 
             // ✅ build dynamic update query
