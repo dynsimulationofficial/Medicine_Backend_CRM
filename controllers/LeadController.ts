@@ -393,7 +393,7 @@ export default class LeadController extends BaseController {
                 agent_id: toNull(input.agent_id),        // <-- if provided, it will be set now
                 whatsapp_number: whatsappNorm,
                 lead_source_id: toNull(input.lead_source_id),
-                currency: toNull(input.currency) ?? "USD",
+                currency: toNull(input.currency) ?? (input.country === "India" ? "INR" : input.country === "UK" ? "GBP" : "USD"),
                 courier_name: toNull(input.courier_name),
                 tracking_number: toNull(input.tracking_number),
                 lead_status: toNull(input.lead_status) ?? "New",
@@ -1230,6 +1230,18 @@ export default class LeadController extends BaseController {
                 resolvedSourceId = lead_source_id;
               }
       
+              // Auto-resolve currency from country or phone code
+              let resolvedCurrency = "INR";
+              const cCountry = String(c.data.country || "").trim().toLowerCase();
+              const cPhone = String(c.phoneNorm || "").trim();
+              if (cCountry === "usa" || cCountry === "us" || cCountry === "united states" || cPhone.startsWith("+1") || cPhone.startsWith("1")) {
+                resolvedCurrency = "USD";
+              } else if (cCountry === "uk" || cCountry === "united kingdom" || cCountry === "gb" || cPhone.startsWith("+44") || cPhone.startsWith("44")) {
+                resolvedCurrency = "GBP";
+              } else {
+                resolvedCurrency = "INR";
+              }
+
               const [inserted]: any[] = await this.db_services.sequelizeWriter.query(
                 `
                 INSERT INTO public.leads
@@ -1237,14 +1249,14 @@ export default class LeadController extends BaseController {
                    agent_id,
                    address_line1, address_line2, city, state, postal_code, country,
                    lead_score, lead_quality, best_time_to_call, note,
-                   lead_source_id, lead_status,
+                   lead_source_id, lead_status, currency,
                    created_at, updated_at)
                 VALUES
                   (:id, :full_name, :email, :phone, :whatsapp_number,
                    :agent_id,
                    :address_line1, :address_line2, :city, :state, :postal_code, :country,
                    COALESCE(:lead_score,0), :lead_quality, :best_time_to_call, :note,
-                   :lead_source_id, 'New',
+                   :lead_source_id, 'New', :currency,
                    NOW(), NOW())
                 RETURNING id, lead_number
                 `,
@@ -1267,6 +1279,7 @@ export default class LeadController extends BaseController {
                     best_time_to_call: toNull(c.data.best_time_to_call),
                     note: toNull(c.data.note),
                     lead_source_id: resolvedSourceId,
+                    currency: resolvedCurrency,
                   },
                   type: QueryTypes.SELECT,
                 }
