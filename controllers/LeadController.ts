@@ -711,15 +711,32 @@ export default class LeadController extends BaseController {
                   l.agent_id, su.name AS agent_name,
                   l.created_at, l.updated_at,
                   ls.name AS lead_source_name,
-                  
-                  
-                  l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
+                  l.whatsapp_number, l.note, l.lead_source_id,
+                  CASE WHEN COALESCE(ord_agg.order_count, 0) > 0 THEN 'Converted' ELSE l.lead_status END AS lead_status,
+                  COALESCE(ord_agg.latest_payment_status, l.payment_status) AS payment_status,
+                  COALESCE(ord_agg.latest_order_status, l.delivery_status) AS delivery_status,
+                  l.currency, l.courier_name, l.tracking_number,
+                  COALESCE(ord_agg.order_count, 0) AS order_count,
+                  COALESCE(ord_agg.total_order_amount, 0) AS total_order_amount,
+                  ord_agg.latest_order_number,
+                  ord_agg.latest_order_status,
+                  ord_agg.latest_payment_status,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
                 LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
-                
-                
+                LEFT JOIN (
+                    SELECT 
+                        lead_id, 
+                        COUNT(id)::int AS order_count,
+                        COALESCE(SUM(CASE WHEN order_status != 'Cancelled' THEN grand_total ELSE 0 END), 0)::numeric AS total_order_amount,
+                        (ARRAY_AGG(order_number ORDER BY created_at DESC))[1] AS latest_order_number,
+                        (ARRAY_AGG(order_status ORDER BY created_at DESC))[1] AS latest_order_status,
+                        (ARRAY_AGG(payment_status ORDER BY created_at DESC))[1] AS latest_payment_status
+                    FROM public.lead_orders
+                    WHERE deleted_at IS NULL
+                    GROUP BY lead_id
+                ) ord_agg ON ord_agg.lead_id = l.id
                 ${whereSql}
                 ${orderSql}
                 LIMIT :limit OFFSET :offset
@@ -740,8 +757,11 @@ export default class LeadController extends BaseController {
                 currency: r.currency ?? null,
                 courier_name: r.courier_name ?? null,
                 tracking_number: r.tracking_number ?? null,
-                
-                
+                order_count: Number(r.order_count || 0),
+                total_order_amount: Number(r.total_order_amount || 0),
+                latest_order_number: r.latest_order_number ?? null,
+                latest_order_status: r.latest_order_status ?? null,
+                latest_payment_status: r.latest_payment_status ?? null,
                 whatsapp_number: r.whatsapp_number ?? null,
                 first_name: r.first_name ?? null,
                 last_name: r.last_name ?? null,
