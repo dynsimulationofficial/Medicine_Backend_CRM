@@ -84,11 +84,14 @@ export class ReportController extends BaseController {
       const assignedLeads = Number(leadsStats?.assigned_leads || 0);
       const conversionRate = totalLeads > 0 ? Number(((convertedLeads / totalLeads) * 100).toFixed(1)) : 0;
 
-      // 2. Orders & Sales Summary Metrics
+      // 2. Orders & Sales Summary Metrics (3 Currencies: INR, USD, GBP)
       const [ordersStats]: any[] = await this.db_services.sequelizeWriter.query(
         `SELECT
             COUNT(o.id) AS total_orders,
             COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' THEN o.grand_total ELSE 0 END), 0) AS total_revenue,
+            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.currency = 'INR' OR l.currency IS NULL OR l.currency = '') THEN o.grand_total ELSE 0 END), 0) AS revenue_inr,
+            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND l.currency = 'USD' THEN o.grand_total ELSE 0 END), 0) AS revenue_usd,
+            COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND l.currency = 'GBP' THEN o.grand_total ELSE 0 END), 0) AS revenue_gbp,
             COUNT(CASE WHEN o.order_status = 'Delivered' THEN 1 END) AS delivered_orders,
             COALESCE(SUM(CASE WHEN o.order_status = 'Delivered' THEN o.grand_total ELSE 0 END), 0) AS delivered_revenue,
             COUNT(CASE WHEN o.order_status = 'Pending' THEN 1 END) AS pending_orders,
@@ -98,6 +101,7 @@ export class ReportController extends BaseController {
             COUNT(CASE WHEN o.payment_status = 'Paid' THEN 1 END) AS paid_orders,
             COUNT(CASE WHEN o.payment_status = 'Pending' THEN 1 END) AS unpaid_orders
          FROM public.lead_orders o
+         JOIN public.leads l ON l.id = o.lead_id
          WHERE o.deleted_at IS NULL
            AND o.created_at >= :fromDate AND o.created_at <= :toDate
            ${agentFilterOrders}
@@ -107,6 +111,9 @@ export class ReportController extends BaseController {
 
       const totalOrders = Number(ordersStats?.total_orders || 0);
       const totalRevenue = Number(ordersStats?.total_revenue || 0);
+      const revenueInr = Number(ordersStats?.revenue_inr || 0);
+      const revenueUsd = Number(ordersStats?.revenue_usd || 0);
+      const revenueGbp = Number(ordersStats?.revenue_gbp || 0);
       const deliveredOrders = Number(ordersStats?.delivered_orders || 0);
       const deliveredRevenue = Number(ordersStats?.delivered_revenue || 0);
       const pendingOrders = Number(ordersStats?.pending_orders || 0);
@@ -270,6 +277,7 @@ export class ReportController extends BaseController {
             o.courier_name,
             o.tracking_number,
             o.created_at,
+            COALESCE(l.currency, 'INR') AS currency,
             l.full_name AS customer_name,
             l.phone AS customer_phone,
             u.name AS agent_name
@@ -298,6 +306,9 @@ export class ReportController extends BaseController {
           conversion_rate: conversionRate,
           total_orders: totalOrders,
           total_revenue: totalRevenue,
+          revenue_inr: revenueInr,
+          revenue_usd: revenueUsd,
+          revenue_gbp: revenueGbp,
           delivered_orders: deliveredOrders,
           delivered_revenue: deliveredRevenue,
           pending_orders: pendingOrders,
