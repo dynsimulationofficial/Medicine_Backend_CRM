@@ -3120,6 +3120,25 @@ export default class LeadController extends BaseController {
                 });
             }
 
+            // ✅ Push Notification to assigned agent
+            if (assigned_agent_id) {
+                try {
+                    await FCMService.notifyTaskAssigned(
+                        String(assigned_agent_id),
+                        {
+                            id: String(rec.id),
+                            lead_id: String(rec.lead_id),
+                            lead_name: leadFullName || rec.full_name || "Customer",
+                            subject: subject,
+                            task_type: typeLabel(task_type),
+                            start_at: rec.start_at,
+                        }
+                    );
+                } catch (pushErr) {
+                    console.error("createTask push notification failed:", pushErr);
+                }
+            }
+
             return this.sendSuccess(res, {
                 id: rec.id,
                 type: rec.task_type,
@@ -3534,6 +3553,25 @@ export default class LeadController extends BaseController {
             });
 
             await t.commit();  // Commit transaction if everything is successful
+
+            // ✅ Push Notification if assigned to an agent
+            if (rec.assigned_agent_id) {
+                try {
+                    await FCMService.notifyTaskAssigned(
+                        String(rec.assigned_agent_id),
+                        {
+                            id: String(rec.id),
+                            lead_id: String(rec.lead_id),
+                            lead_name: rec.full_name || rec.lead_first_name || "Customer",
+                            subject: rec.subject || "Follow-up Task",
+                            task_type: rec.task_type || "Follow-up",
+                            start_at: rec.start_at,
+                        }
+                    );
+                } catch (pushErr) {
+                    console.error("editTask push notification failed:", pushErr);
+                }
+            }
 
             return this.sendSuccess(res, {
                 id: rec.id,

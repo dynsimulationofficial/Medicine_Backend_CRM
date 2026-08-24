@@ -75,7 +75,7 @@ class FCMService {
   /** Common FCM sender with logging */
   async sendToMultipleWithLogging(
     tokens: string[],
-    ctx: { type: "lead_created" | "lead_assigned" | "bulk_leads_assigned"; refId?: string | null; recipientUserId?: string | null },
+    ctx: { type: "lead_created" | "lead_assigned" | "bulk_leads_assigned" | "task_assigned"; refId?: string | null; recipientUserId?: string | null },
     title: string,
     body: string,
     data: Record<string, any> = {}
@@ -229,6 +229,44 @@ class FCMService {
 
     console.log(`✅ Sent ONE notification for ${leads.length} bulk assigned leads`);
     return pushResult;
+  }
+
+  /** Notify agent when a task/calling reminder is assigned */
+  async notifyTaskAssigned(
+    agentUserId: string,
+    task: {
+      id: string;
+      lead_id: string;
+      lead_name: string;
+      subject: string;
+      task_type?: string;
+      start_at?: any;
+    }
+  ) {
+    console.log(`📨 Notifying task assignment to agent ${agentUserId} for task ${task.id}`);
+    const tokens = await this.getAgentTokens(agentUserId);
+    if (!tokens.length) {
+      console.log(`❌ No active tokens found for agent ${agentUserId}`);
+      return { success: 0, failure: 0, note: "no tokens for agent" };
+    }
+
+    const title = `New Task: ${task.task_type || "Follow-up"}`;
+    const body = `${task.subject} for ${task.lead_name || "Lead"}`;
+
+    return this.sendToMultipleWithLogging(
+      tokens,
+      { type: "task_assigned", refId: task.id, recipientUserId: agentUserId },
+      title,
+      body,
+      {
+        type: "task_assigned",
+        task_id: task.id,
+        lead_id: task.lead_id,
+        lead_name: task.lead_name,
+        subject: task.subject,
+        task_type: task.task_type || "Follow-up",
+      }
+    );
   }
 
   /** Helper: get all active tokens of an agent */
