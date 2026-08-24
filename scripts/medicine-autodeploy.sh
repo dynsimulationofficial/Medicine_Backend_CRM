@@ -5,7 +5,7 @@ set -e
 # ===== CONFIG =====
 PROJECT_DIR="/root/Medicine_Backend_CRM"
 COMPOSE_FILE="docker-compose.yml"
-BRANCH="main"
+BRANCH="staging.0.0.1"
 
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 echo "🚀 Auto Deployment Started"
