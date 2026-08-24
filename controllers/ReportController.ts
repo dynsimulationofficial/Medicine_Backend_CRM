@@ -210,6 +210,9 @@ export class ReportController extends BaseController {
             COALESCE(lead_agg.converted_count, 0) AS converted_leads,
             COALESCE(ord_agg.total_orders, 0) AS total_orders,
             COALESCE(ord_agg.total_revenue, 0) AS total_revenue,
+            COALESCE(ord_agg.revenue_inr, 0) AS revenue_inr,
+            COALESCE(ord_agg.revenue_usd, 0) AS revenue_usd,
+            COALESCE(ord_agg.revenue_gbp, 0) AS revenue_gbp,
             COALESCE(ord_agg.delivered_orders, 0) AS delivered_orders
          FROM public.system_users u
          JOIN public.user_role ur ON ur.system_user_id = u.id
@@ -235,8 +238,12 @@ export class ReportController extends BaseController {
                 o.agent_id,
                 COUNT(o.id) AS total_orders,
                 SUM(CASE WHEN o.order_status != 'Cancelled' THEN o.grand_total ELSE 0 END) AS total_revenue,
+                COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.currency = 'INR' OR l.currency IS NULL OR l.currency = '') THEN o.grand_total ELSE 0 END), 0) AS revenue_inr,
+                COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND l.currency = 'USD' THEN o.grand_total ELSE 0 END), 0) AS revenue_usd,
+                COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND l.currency = 'GBP' THEN o.grand_total ELSE 0 END), 0) AS revenue_gbp,
                 COUNT(CASE WHEN o.order_status = 'Delivered' THEN 1 END) AS delivered_orders
             FROM public.lead_orders o
+            JOIN public.leads l ON l.id = o.lead_id
             WHERE o.deleted_at IS NULL
               AND o.created_at >= :fromDate AND o.created_at <= :toDate
             GROUP BY o.agent_id
@@ -259,6 +266,9 @@ export class ReportController extends BaseController {
           converted_leads: cLeads,
           total_orders: Number(item.total_orders),
           total_revenue: Number(item.total_revenue),
+          revenue_inr: Number(item.revenue_inr || 0),
+          revenue_usd: Number(item.revenue_usd || 0),
+          revenue_gbp: Number(item.revenue_gbp || 0),
           delivered_orders: Number(item.delivered_orders),
           conversion_rate: convRate,
         };
