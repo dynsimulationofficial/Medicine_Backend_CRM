@@ -204,6 +204,7 @@ SystemuserRouter.post("/leads/documents/geturl", leadController.getDocumentUrl);
 SystemuserRouter.post("/leads/medicines/save", requireAuth, leadController.saveLeadMedicines);
 SystemuserRouter.post("/leads/medicines/list", requireAuth, leadController.listLeadMedicines);
 SystemuserRouter.post("/leads/medicines/delete", requireAuth, leadController.deleteLeadMedicine);
+SystemuserRouter.get("/leads/medicines/suggestions", requireAuth, leadController.getMedicineSuggestions);
 
 /* -------------------- Lead Orders -------------------- */
 SystemuserRouter.post("/leads/orders/save", requireAuth, leadController.saveLeadOrder);
