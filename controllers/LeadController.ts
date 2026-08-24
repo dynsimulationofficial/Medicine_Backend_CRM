@@ -1338,7 +1338,7 @@ export default class LeadController extends BaseController {
           const countQuery = `
             SELECT COUNT(*)::int AS total 
             FROM public.web_push_notifications wn
-            LEFT JOIN public.leads l ON (wn.ref_id = l.id OR (wn.data->>'lead_id')::uuid = l.id)
+            JOIN public.leads l ON (wn.ref_id = l.id OR (wn.data->>'lead_id')::uuid = l.id) AND l.deleted_at IS NULL
             WHERE 1=1 ${whereSql}
           `;
           
@@ -1362,7 +1362,7 @@ export default class LeadController extends BaseController {
               l.full_name,
               l.agent_id
             FROM public.web_push_notifications wn
-            LEFT JOIN public.leads l ON (wn.ref_id = l.id OR (wn.data->>'lead_id')::uuid = l.id)
+            JOIN public.leads l ON (wn.ref_id = l.id OR (wn.data->>'lead_id')::uuid = l.id) AND l.deleted_at IS NULL
             WHERE 1=1 ${whereSql}
             ORDER BY wn.created_at DESC
             LIMIT :limit OFFSET :offset
