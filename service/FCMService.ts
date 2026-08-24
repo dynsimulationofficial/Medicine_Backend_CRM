@@ -81,12 +81,6 @@ class FCMService {
     data: Record<string, any> = {}
   ) {
     const deduped = [...new Set(tokens.filter(Boolean))];
-    if (!deduped.length) {
-      console.log("❌ No tokens to send notification to");
-      return { success: 0, failure: 0 };
-    }
-
-    console.log(`📨 Sending notification to ${deduped.length} tokens`);
 
     // Filter only valid tokens
     const validTokens: string[] = [];
@@ -97,9 +91,23 @@ class FCMService {
       }
     }
 
-    if (!validTokens.length) {
-      console.log("❌ No valid tokens to send notification to");
-      return { success: 0, failure: 0 };
+    // Always create at least one in-app notification record for recipient
+    if (validTokens.length === 0) {
+      if (ctx.recipientUserId) {
+        await WebPushNotification.create({
+          id: uuidv4(),
+          type: ctx.type,
+          ref_id: ctx.refId ?? null,
+          recipient_user_id: ctx.recipientUserId,
+          fcmtoken: "in_app_only",
+          title,
+          body,
+          data,
+          status: "sent",
+        } as any);
+      }
+      console.log(`ℹ️ Saved in-app notification for user ${ctx.recipientUserId} (No active FCM push tokens)`);
+      return { success: 1, failure: 0, note: "in-app notification created" };
     }
 
     const pending = validTokens.map((t) => ({
@@ -165,13 +173,9 @@ class FCMService {
   ) {
     console.log(`📨 Notifying lead assignment to agent ${agentUserId} for lead ${lead.id}`);
     const tokens = await this.getAgentTokens(agentUserId);
-    if (!tokens.length) {
-      console.log(`❌ No active tokens found for agent ${agentUserId}`);
-      return { success: 0, failure: 0, note: "no tokens for agent" };
-    }
 
-    const title = "Lead Assigned";
-    const body = `${lead.full_name} (#${lead.lead_number}) was assigned to you.`;
+    const title = "New Lead Assigned";
+    const body = `${lead.full_name || 'Customer'} (#${lead.lead_number}) was assigned to you.`;
 
     return this.sendToMultipleWithLogging(
       tokens,
@@ -194,26 +198,22 @@ class FCMService {
   ) {
     console.log(`📨 Notifying bulk lead assignment to agent ${agentUserId} for ${leads.length} leads`);
     const tokens = await this.getAgentTokens(agentUserId);
-    if (!tokens.length) {
-      console.log(`❌ No active tokens found for agent ${agentUserId}`);
-      return { success: 0, failure: 0, note: "no tokens for agent" };
-    }
 
     const count = leads.length;
     const firstLead = leads[0];
 
-    const title = "Leads Assigned";
+    const title = "New Lead Assigned";
     const body =
       count === 1
-        ? `${firstLead.full_name} (#${firstLead.lead_number}) was assigned to you.`
-        : `${count} leads were assigned to you. e.g. ${firstLead.full_name} (#${firstLead.lead_number})`;
+        ? `${firstLead.full_name || 'Customer'} (#${firstLead.lead_number}) was assigned to you.`
+        : `${count} leads were assigned to you.`;
 
     // ✅ ONLY ONE NOTIFICATION - no individual notifications created
     const pushResult = await this.sendToMultipleWithLogging(
       tokens,
       { 
         type: "bulk_leads_assigned", 
-        refId: firstLead.id, // Store first lead ID
+        refId: firstLead.id,
         recipientUserId: agentUserId 
       },
       title,
@@ -221,13 +221,13 @@ class FCMService {
       {
         type: "bulk_leads_assigned",
         count: String(count),
-        lead_id: firstLead.id, // First lead ID for deep linking
+        lead_id: firstLead.id,
         lead_number: firstLead.lead_number,
         full_name: firstLead.full_name,
       }
     );
 
-    console.log(`✅ Sent ONE notification for ${leads.length} bulk assigned leads`);
+    console.log(`✅ Sent notification for ${leads.length} assigned leads`);
     return pushResult;
   }
 
@@ -245,10 +245,6 @@ class FCMService {
   ) {
     console.log(`📨 Notifying task assignment to agent ${agentUserId} for task ${task.id}`);
     const tokens = await this.getAgentTokens(agentUserId);
-    if (!tokens.length) {
-      console.log(`❌ No active tokens found for agent ${agentUserId}`);
-      return { success: 0, failure: 0, note: "no tokens for agent" };
-    }
 
     const title = `New Task: ${task.task_type || "Follow-up"}`;
     const body = `${task.subject} for ${task.lead_name || "Lead"}`;
