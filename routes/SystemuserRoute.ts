@@ -1,3 +1,5 @@
+import adminDashboardController from "../controllers/AdminDashboardController";
+import agentDashboardController from "../controllers/AgentDashboardController";
 import * as masterMedicineController from "../controllers/MasterMedicineController";
 import LeadOrderController from "../controllers/LeadOrderController";
 import LeadDocumentController from "../controllers/LeadDocumentController";
@@ -223,9 +225,9 @@ SystemuserRouter.post("/leads/orders/delete", requireAuth, leadOrderController.d
 SystemuserRouter.post("/leads/orders/update-status", requireAuth, leadOrderController.updateLeadOrderStatus);
 
 /* -------------------- Dashboards -------------------- */
-SystemuserRouter.post("/leads/task/agent/dashboard", requireAuth, leadController.getAgentTasksDashboard);
-SystemuserRouter.post("/leads/admin/dashboard", requireAuth, leadController.getAdminDashboard);
-SystemuserRouter.get("/leads/search/dashboard", requireAuth, leadController.searchLeadsForDashboard);
+SystemuserRouter.post("/leads/task/agent/dashboard", requireAuth, agentDashboardController.getAgentTasksDashboard);
+SystemuserRouter.post("/leads/admin/dashboard", requireAuth, adminDashboardController.getAdminDashboard);
+SystemuserRouter.get("/leads/search/dashboard", requireAuth, agentDashboardController.searchLeadsForDashboard);
 
 /* -------------------- Reports & Analytics -------------------- */
 SystemuserRouter.post("/reports/kpi", requireAuth, reportController.getKpiAnalytics);
