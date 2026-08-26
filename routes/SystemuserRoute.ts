@@ -1,3 +1,4 @@
+import LeadTaskController from "../controllers/LeadTaskController";
 import LeadActivityHistoryController from "../controllers/LeadActivityHistoryController";
 import express, { Request, Response } from "express";
 import CompressCrmController from "../controllers/AdvanceLeadCRMController";
@@ -25,6 +26,7 @@ const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
 const leadController = new LeadController();
 const leadActivityHistoryController = new LeadActivityHistoryController();
+const leadTaskController = new LeadTaskController();
 
 /* -------------------- Authentication & User Management -------------------- */
 SystemuserRouter.post("/register", requireAuth, UserManagementController.createUser);
@@ -184,12 +186,12 @@ SystemuserRouter.get("/getconsolidation", leadController.getConsolidatedCreditSt
 SystemuserRouter.get("/leaddebtstatuses", leadController.getLeadDebtStatuses);
 
 /* -------------------- Lead Tasks -------------------- */
-SystemuserRouter.post("/leads/tasks/create", requireAuth, leadController.createTask);
-SystemuserRouter.post("/leads/tasks/list", leadController.listTasks);
-SystemuserRouter.post("/leads/tasks/edit", requireAuth, leadController.editTask);
-SystemuserRouter.post("/leads/tasks/filter", leadController.filterTasks);
-SystemuserRouter.post("/leads/tasks/complete", requireAuth, leadController.completeTask);
-SystemuserRouter.post("/leads/task/soft-delete", leadController.softDeleteTask);
+SystemuserRouter.post("/leads/tasks/create", requireAuth, leadTaskController.createTask);
+SystemuserRouter.post("/leads/tasks/list", leadTaskController.listTasks);
+SystemuserRouter.post("/leads/tasks/edit", requireAuth, leadTaskController.editTask);
+SystemuserRouter.post("/leads/tasks/filter", leadTaskController.filterTasks);
+SystemuserRouter.post("/leads/tasks/complete", requireAuth, leadTaskController.completeTask);
+SystemuserRouter.post("/leads/task/soft-delete", leadTaskController.softDeleteTask);
 
 /* -------------------- Lead Documents -------------------- */
 SystemuserRouter.post("/leads/documents/list", leadController.listDocuments);

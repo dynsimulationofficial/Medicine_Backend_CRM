@@ -4390,55 +4390,6 @@ export default class LeadController extends BaseController {
             return this.sendError(res, err, "Internal server error", 500);
         }
     };
-    public softDeleteTask = async (req: Request, res: Response) => {
-        const tx = await this.db_services.sequelizeWriter.transaction();
-        try {
-            const schema = Yup.object({
-                id: Yup.string().uuid().required("id is required"),
-                // optional optimistic concurrency guard
-                updated_at: Yup.string().optional(),
-            });
-
-            const { id, updated_at } = await schema.validate(req.body, { abortEarly: false });
-
-            const where: string[] = ["t.id = :id", "t.deleted_at IS NULL"];
-            const repl: any = { id };
-
-            if (updated_at) {
-                where.push("t.updated_at = :updated_at");
-                repl.updated_at = updated_at;
-            }
-
-            const rows = await this.db_services.sequelizeWriter.query(
-                `UPDATE public.lead_tasks AS t
-             SET deleted_at = NOW(),
-                 updated_at = NOW()
-             WHERE ${where.join(" AND ")}
-             RETURNING t.id, t.lead_id, t.deleted_at`,
-                { replacements: repl, type: QueryTypes.SELECT, transaction: tx }
-            );
-
-            await tx.commit();
-
-            if (!rows.length) {
-                return this.sendError(
-                    res,
-                    {},
-                    "No matching active task found (already deleted or concurrency mismatch).",
-                    404
-                );
-            }
-
-            return this.sendSuccess(res, { count: 1, item: rows[0] }, "Task deleted");
-        } catch (err: any) {
-            try { await tx.rollback(); } catch { }
-            if (err.name === "ValidationError") {
-                return this.sendError(res, {}, err.errors.join(", "), 400);
-            }
-            console.error("Error in softDeleteTask:", err);
-            return this.sendError(res, err, "Internal server error", 500);
-        }
-    };
     public getAdminDashboard = async (req: Request, res: Response) => {
         try {
             // --- Auth (admins only)
