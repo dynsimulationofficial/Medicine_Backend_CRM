@@ -1904,13 +1904,11 @@ export default class LeadController extends BaseController {
                 return this.sendError(res, {}, "Unauthorized - Please login again", 401);
             }
 
-            // 2️⃣ Validate request body
-            const schema = Yup.object({
-                lead_id: Yup.string().uuid().required("lead_id is required"),
-            });
-            await schema.validate(req.body, { abortEarly: false });
-
-            const { lead_id } = req.body;
+            // 2️⃣ Get lead_id from body or query
+            const lead_id = req.body.lead_id || req.body.id || req.query.lead_id || req.query.id;
+            if (!lead_id) {
+                return this.sendError(res, {}, "lead_id is required", 400);
+            }
 
             // 3️⃣ Build WHERE condition (only filter by lead existence)
             const whereSql = `WHERE l.id = :lead_id AND l.deleted_at IS NULL`;

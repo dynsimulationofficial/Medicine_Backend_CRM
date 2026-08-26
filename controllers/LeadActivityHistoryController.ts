@@ -8,6 +8,24 @@ import DBServices from "../database/DBService";
 export default class LeadActivityHistoryController extends BaseController {
     db_services: DBServices = new DBServices();
 
+    private async logUserActivity(userId: string, activity: string, type: string, transaction?: any): Promise<void> {
+        try {
+            await this.db_services.sequelizeWriter.query(
+                `INSERT INTO public.system_user_activity
+                   ("uuid", user_activity, module, type, activity_timestamp)
+                 VALUES
+                   (:userId, :activity, 'activity_management', :type, NOW())`,
+                {
+                    replacements: { userId, activity, type },
+                    type: QueryTypes.INSERT,
+                    ...(transaction ? { transaction } : {}),
+                }
+            );
+        } catch (err) {
+            console.warn("Could not log user activity:", err);
+        }
+    }
+
     /* ---------------------------------------------------------------------- */
     /* 1. GET ALL DISPOSITIONS (RAW SQL)                                      */
     /* ---------------------------------------------------------------------- */
@@ -125,7 +143,15 @@ export default class LeadActivityHistoryController extends BaseController {
 
             const body = await schema.validate(req.body, { abortEarly: false });
             const { lead_id, disposition_id, conversation } = body;
-            const finalAgentId = body.agent_id || authUser?.system_user_id || null;
+
+            let finalAgentId = body.agent_id || authUser?.system_user_id || null;
+            if (!finalAgentId) {
+                const leadRows: any[] = await this.db_services.sequelizeWriter.query(
+                    `SELECT agent_id FROM public.leads WHERE id = :lead_id LIMIT 1`,
+                    { replacements: { lead_id }, type: QueryTypes.SELECT }
+                );
+                finalAgentId = leadRows[0]?.agent_id || authUser?.system_user_id || null;
+            }
 
             // Validate disposition via raw SQL
             const disp: any[] = await this.db_services.sequelizeWriter.query(
@@ -154,25 +180,10 @@ export default class LeadActivityHistoryController extends BaseController {
                 }
             );
 
-            // Raw SQL log for system_user_activities
+            // Safe log in system_user_activity
             const authUserId = (req as any)?.user?.system_user_id;
             if (authUserId) {
-                await this.db_services.sequelizeWriter.query(
-                    `INSERT INTO public.system_user_activities
-                       (id, system_user_id, user_activity, module, type, created_at, updated_at)
-                     VALUES
-                       (:id, :system_user_id, :user_activity, :module, :type, NOW(), NOW())`,
-                    {
-                        replacements: {
-                            id: uuidv4(),
-                            system_user_id: authUserId,
-                            user_activity: `Added activity for lead ${lead_id}`,
-                            module: "activity_management",
-                            type: "create",
-                        },
-                        type: QueryTypes.INSERT,
-                    }
-                );
+                await this.logUserActivity(authUserId, `Added activity for lead ${lead_id}`, 'create');
             }
 
             return this.sendSuccess(res, row, "Activity added successfully");
@@ -263,26 +274,10 @@ export default class LeadActivityHistoryController extends BaseController {
                 { replacements: { id }, type: QueryTypes.SELECT, transaction }
             );
 
-            // Raw SQL log in system_user_activities
+            // Safe log in system_user_activity
             const authUserId = (req as any)?.user?.system_user_id;
             if (authUserId) {
-                await this.db_services.sequelizeWriter.query(
-                    `INSERT INTO public.system_user_activities
-                       (id, system_user_id, user_activity, module, type, created_at, updated_at)
-                     VALUES
-                       (:id, :system_user_id, :user_activity, :module, :type, NOW(), NOW())`,
-                    {
-                        replacements: {
-                            id: uuidv4(),
-                            system_user_id: authUserId,
-                            user_activity: `Updated activity ID ${result.id}`,
-                            module: "activity_management",
-                            type: "update",
-                        },
-                        type: QueryTypes.INSERT,
-                        transaction,
-                    }
-                );
+                await this.logUserActivity(authUserId, `Updated activity ID ${result.id}`, 'update', transaction);
             }
 
             await transaction.commit();
@@ -447,23 +442,7 @@ export default class LeadActivityHistoryController extends BaseController {
             // Raw SQL insert for log
             const adminUserId = (req as any)?.user?.system_user_id;
             if (adminUserId) {
-                await this.db_services.sequelizeWriter.query(
-                    `INSERT INTO public.system_user_activities
-                       (id, system_user_id, user_activity, module, type, created_at, updated_at)
-                     VALUES
-                       (:id, :system_user_id, :user_activity, :module, :type, NOW(), NOW())`,
-                    {
-                        replacements: {
-                            id: uuidv4(),
-                            system_user_id: adminUserId,
-                            user_activity: `Deleted activity for lead ${rows[0].lead_id}`,
-                            module: "activity_management",
-                            type: "delete",
-                        },
-                        type: QueryTypes.INSERT,
-                        transaction: tx,
-                    }
-                );
+                await this.logUserActivity(adminUserId, `Deleted activity for lead ${rows[0].lead_id}`, 'delete', tx);
             }
 
             await tx.commit();

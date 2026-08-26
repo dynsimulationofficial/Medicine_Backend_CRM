@@ -186,7 +186,10 @@ SystemuserRouter.post("/leads/getactivity", leadActivityHistoryController.getAct
 SystemuserRouter.post("/leads/update/activity", requireAuth, leadActivityHistoryController.updateActivity);
 SystemuserRouter.get("/leads/dispositions/all", leadActivityHistoryController.getAllDispositions);
 SystemuserRouter.get("/leads/dispositions/id", leadActivityHistoryController.getDispositionById);
+SystemuserRouter.post("/leads/activities/delete", requireAuth, leadActivityHistoryController.softDeleteActivity);
 SystemuserRouter.post("/leads/activities/soft-delete", requireAuth, leadActivityHistoryController.softDeleteActivity);
+SystemuserRouter.post("/leads/activity/delete", requireAuth, leadActivityHistoryController.softDeleteActivity);
+SystemuserRouter.post("/leads/activity/soft-delete", requireAuth, leadActivityHistoryController.softDeleteActivity);
 SystemuserRouter.post("/leads/soft-delete", requireAuth, leadController.softDeleteLeads);
 SystemuserRouter.get("/leadsources", leadController.getLeadSources);
 
@@ -196,7 +199,10 @@ SystemuserRouter.post("/leads/tasks/list", leadTaskController.listTasks);
 SystemuserRouter.post("/leads/tasks/edit", requireAuth, leadTaskController.editTask);
 SystemuserRouter.post("/leads/tasks/filter", leadTaskController.filterTasks);
 SystemuserRouter.post("/leads/tasks/complete", requireAuth, leadTaskController.completeTask);
-SystemuserRouter.post("/leads/task/soft-delete", leadTaskController.softDeleteTask);
+SystemuserRouter.post("/leads/tasks/delete", requireAuth, leadTaskController.softDeleteTask);
+SystemuserRouter.post("/leads/tasks/soft-delete", requireAuth, leadTaskController.softDeleteTask);
+SystemuserRouter.post("/leads/task/delete", requireAuth, leadTaskController.softDeleteTask);
+SystemuserRouter.post("/leads/task/soft-delete", requireAuth, leadTaskController.softDeleteTask);
 
 /* -------------------- Lead Documents -------------------- */
 SystemuserRouter.post("/leads/documents/list", leadDocumentController.listDocuments);
@@ -207,7 +213,14 @@ SystemuserRouter.post(
   leadController.bulkUploadFromFile
 );
 SystemuserRouter.post("/leads/documents/download", leadDocumentController.getDocumentUrl);
+SystemuserRouter.post("/leads/documents/delete", requireAuth, leadDocumentController.softDeleteDocument);
 SystemuserRouter.post("/leads/documents/soft-delete", requireAuth, leadDocumentController.softDeleteDocument);
+SystemuserRouter.post("/leads/document/delete", requireAuth, leadDocumentController.softDeleteDocument);
+SystemuserRouter.post("/leads/document/soft-delete", requireAuth, leadDocumentController.softDeleteDocument);
+SystemuserRouter.post("/leads/document/notes", requireAuth, leadDocumentController.updateDocumentNotes);
+SystemuserRouter.post("/leads/documents/notes", requireAuth, leadDocumentController.updateDocumentNotes);
+SystemuserRouter.post("/leads/documents/update/notes", requireAuth, leadDocumentController.updateDocumentNotes);
+SystemuserRouter.post("/leads/documents/edit", requireAuth, leadDocumentController.updateDocumentNotes);
 SystemuserRouter.post("/leads/documents/get", leadDocumentController.getDocument);
 SystemuserRouter.post("/leads/documents/filter", leadDocumentController.filterDocuments);
 SystemuserRouter.post("/leads/documents/geturl", leadDocumentController.getDocumentUrl);

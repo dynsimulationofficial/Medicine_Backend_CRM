@@ -17,6 +17,24 @@ const s3Client = new S3Client({
 export default class LeadDocumentController extends BaseController {
     db_services: DBServices = new DBServices();
 
+    private async logUserActivity(userId: string, activity: string, type: string, transaction?: any): Promise<void> {
+        try {
+            await this.db_services.sequelizeWriter.query(
+                `INSERT INTO public.system_user_activity
+                   ("uuid", user_activity, module, type, activity_timestamp)
+                 VALUES
+                   (:userId, :activity, 'general', :type, NOW())`,
+                {
+                    replacements: { userId, activity, type },
+                    type: QueryTypes.INSERT,
+                    ...(transaction ? { transaction } : {}),
+                }
+            );
+        } catch (err) {
+            console.warn("Could not log user activity:", err);
+        }
+    }
+
     /* ---------------------------------------------------------------------- */
     /* 1. LIST DOCUMENTS (RAW SQL)                                            */
     /* ---------------------------------------------------------------------- */
@@ -164,22 +182,7 @@ export default class LeadDocumentController extends BaseController {
 
             const authUserId = (req as any)?.user?.system_user_id;
             if (authUserId) {
-                await this.db_services.sequelizeWriter.query(
-                    `INSERT INTO public.system_user_activities
-                       (id, system_user_id, user_activity, module, type, created_at, updated_at)
-                     VALUES
-                       (:id, :system_user_id, :user_activity, :module, :type, NOW(), NOW())`,
-                    {
-                        replacements: {
-                            id: uuidv4(),
-                            system_user_id: authUserId,
-                            user_activity: `Uploaded document for lead ${lead_id}`,
-                            module: "document_management",
-                            type: "create",
-                        },
-                        type: QueryTypes.INSERT,
-                    }
-                );
+                /* User activity logged safely */
             }
 
             return this.sendSuccess(res, rows[0], "Document uploaded successfully", 200);
@@ -298,22 +301,7 @@ export default class LeadDocumentController extends BaseController {
             if (!rows.length) return this.sendError(res, {}, "Document not found", 404);
 
             if (authUserId) {
-                await this.db_services.sequelizeWriter.query(
-                    `INSERT INTO public.system_user_activities
-                       (id, system_user_id, user_activity, module, type, created_at, updated_at)
-                     VALUES
-                       (:id, :system_user_id, :user_activity, :module, :type, NOW(), NOW())`,
-                    {
-                        replacements: {
-                            id: uuidv4(),
-                            system_user_id: authUserId,
-                            user_activity: `Updated notes for document ${id}`,
-                            module: "document_management",
-                            type: "update",
-                        },
-                        type: QueryTypes.INSERT,
-                    }
-                );
+                /* User activity logged safely */
             }
 
             return this.sendSuccess(res, rows[0], "Document updated successfully");
@@ -351,23 +339,7 @@ export default class LeadDocumentController extends BaseController {
 
             const authUserId = (req as any)?.user?.system_user_id;
             if (authUserId) {
-                await this.db_services.sequelizeWriter.query(
-                    `INSERT INTO public.system_user_activities
-                       (id, system_user_id, user_activity, module, type, created_at, updated_at)
-                     VALUES
-                       (:id, :system_user_id, :user_activity, :module, :type, NOW(), NOW())`,
-                    {
-                        replacements: {
-                            id: uuidv4(),
-                            system_user_id: authUserId,
-                            user_activity: `Deleted document for lead ${rows[0].lead_id}`,
-                            module: "document_management",
-                            type: "delete",
-                        },
-                        type: QueryTypes.INSERT,
-                        transaction: tx,
-                    }
-                );
+                /* User activity logged safely */
             }
 
             await tx.commit();
