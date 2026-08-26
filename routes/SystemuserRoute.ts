@@ -1,3 +1,4 @@
+import LeadOrderController from "../controllers/LeadOrderController";
 import LeadDocumentController from "../controllers/LeadDocumentController";
 import LeadTaskController from "../controllers/LeadTaskController";
 import LeadActivityHistoryController from "../controllers/LeadActivityHistoryController";
@@ -29,6 +30,7 @@ const leadController = new LeadController();
 const leadActivityHistoryController = new LeadActivityHistoryController();
 const leadTaskController = new LeadTaskController();
 const leadDocumentController = new LeadDocumentController();
+const leadOrderController = new LeadOrderController();
 
 /* -------------------- Authentication & User Management -------------------- */
 SystemuserRouter.post("/register", requireAuth, UserManagementController.createUser);
@@ -184,8 +186,6 @@ SystemuserRouter.get("/leads/dispositions/id", leadActivityHistoryController.get
 SystemuserRouter.post("/leads/activities/soft-delete", requireAuth, leadActivityHistoryController.softDeleteActivity);
 SystemuserRouter.post("/leads/soft-delete", requireAuth, leadController.softDeleteLeads);
 SystemuserRouter.get("/leadsources", leadController.getLeadSources);
-SystemuserRouter.get("/getconsolidation", leadController.getConsolidatedCreditStatuses);
-SystemuserRouter.get("/leaddebtstatuses", leadController.getLeadDebtStatuses);
 
 /* -------------------- Lead Tasks -------------------- */
 SystemuserRouter.post("/leads/tasks/create", requireAuth, leadTaskController.createTask);
@@ -210,16 +210,16 @@ SystemuserRouter.post("/leads/documents/filter", leadDocumentController.filterDo
 SystemuserRouter.post("/leads/documents/geturl", leadDocumentController.getDocumentUrl);
 
 /* -------------------- Lead Medicines / Order Items -------------------- */
-SystemuserRouter.post("/leads/medicines/save", requireAuth, leadController.saveLeadMedicines);
-SystemuserRouter.post("/leads/medicines/list", requireAuth, leadController.listLeadMedicines);
-SystemuserRouter.post("/leads/medicines/delete", requireAuth, leadController.deleteLeadMedicine);
-SystemuserRouter.get("/leads/medicines/suggestions", requireAuth, leadController.getMedicineSuggestions);
+SystemuserRouter.post("/leads/medicines/save", requireAuth, leadOrderController.saveLeadMedicines);
+SystemuserRouter.post("/leads/medicines/list", requireAuth, leadOrderController.listLeadMedicines);
+SystemuserRouter.post("/leads/medicines/delete", requireAuth, leadOrderController.deleteLeadMedicine);
+SystemuserRouter.get("/leads/medicines/suggestions", requireAuth, leadOrderController.getMedicineSuggestions);
 
 /* -------------------- Lead Orders -------------------- */
-SystemuserRouter.post("/leads/orders/save", requireAuth, leadController.saveLeadOrder);
-SystemuserRouter.post("/leads/orders/list", requireAuth, leadController.listLeadOrders);
-SystemuserRouter.post("/leads/orders/delete", requireAuth, leadController.deleteLeadOrder);
-SystemuserRouter.post("/leads/orders/update-status", requireAuth, leadController.updateLeadOrderStatus);
+SystemuserRouter.post("/leads/orders/save", requireAuth, leadOrderController.saveLeadOrder);
+SystemuserRouter.post("/leads/orders/list", requireAuth, leadOrderController.listLeadOrders);
+SystemuserRouter.post("/leads/orders/delete", requireAuth, leadOrderController.deleteLeadOrder);
+SystemuserRouter.post("/leads/orders/update-status", requireAuth, leadOrderController.updateLeadOrderStatus);
 
 /* -------------------- Dashboards -------------------- */
 SystemuserRouter.post("/leads/task/agent/dashboard", requireAuth, leadController.getAgentTasksDashboard);
