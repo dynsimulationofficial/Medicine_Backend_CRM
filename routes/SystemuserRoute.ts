@@ -1,3 +1,4 @@
+import LeadDocumentController from "../controllers/LeadDocumentController";
 import LeadTaskController from "../controllers/LeadTaskController";
 import LeadActivityHistoryController from "../controllers/LeadActivityHistoryController";
 import express, { Request, Response } from "express";
@@ -27,6 +28,7 @@ const userActivityController = new UserActivityController();
 const leadController = new LeadController();
 const leadActivityHistoryController = new LeadActivityHistoryController();
 const leadTaskController = new LeadTaskController();
+const leadDocumentController = new LeadDocumentController();
 
 /* -------------------- Authentication & User Management -------------------- */
 SystemuserRouter.post("/register", requireAuth, UserManagementController.createUser);
@@ -194,18 +196,18 @@ SystemuserRouter.post("/leads/tasks/complete", requireAuth, leadTaskController.c
 SystemuserRouter.post("/leads/task/soft-delete", leadTaskController.softDeleteTask);
 
 /* -------------------- Lead Documents -------------------- */
-SystemuserRouter.post("/leads/documents/list", leadController.listDocuments);
-SystemuserRouter.post("/leads/documents/upload", uploadFile.single("file"), requireAuth, leadController.uploadDocument);
+SystemuserRouter.post("/leads/documents/list", leadDocumentController.listDocuments);
+SystemuserRouter.post("/leads/documents/upload", uploadFile.single("file"), requireAuth, leadDocumentController.uploadDocument);
 SystemuserRouter.post(
   "/leads/bulk/upload",
   uploadFile.single("file"),
   leadController.bulkUploadFromFile
 );
-SystemuserRouter.post("/leads/documents/download", leadController.downloadDocument);
-SystemuserRouter.post("/leads/documents/soft-delete", requireAuth, leadController.softDeleteDocument);
-SystemuserRouter.post("/leads/documents/get", leadController.getDocument);
-SystemuserRouter.post("/leads/documents/filter", leadController.filterDocuments);
-SystemuserRouter.post("/leads/documents/geturl", leadController.getDocumentUrl);
+SystemuserRouter.post("/leads/documents/download", leadDocumentController.getDocumentUrl);
+SystemuserRouter.post("/leads/documents/soft-delete", requireAuth, leadDocumentController.softDeleteDocument);
+SystemuserRouter.post("/leads/documents/get", leadDocumentController.getDocument);
+SystemuserRouter.post("/leads/documents/filter", leadDocumentController.filterDocuments);
+SystemuserRouter.post("/leads/documents/geturl", leadDocumentController.getDocumentUrl);
 
 /* -------------------- Lead Medicines / Order Items -------------------- */
 SystemuserRouter.post("/leads/medicines/save", requireAuth, leadController.saveLeadMedicines);
