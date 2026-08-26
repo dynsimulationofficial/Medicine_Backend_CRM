@@ -346,12 +346,16 @@ export default class LeadController extends BaseController {
                 if (dupRows.length) {
                     const r = dupRows[0];
                     const conflicts: string[] = [];
-                    if (emailNorm && (r.email || "").toLowerCase() === emailNorm) conflicts.push("email");
-                    if (phoneNorm && normDigits(r.phone) === phoneNorm) conflicts.push("phone");
-                    if (whatsappNorm && normDigits(r.whatsapp_number) === whatsappNorm) conflicts.push("whatsapp_number");
+                    if (emailNorm && (r.email || "").toLowerCase() === emailNorm) conflicts.push(`Email (${emailNorm})`);
+                    if (phoneNorm && normDigits(r.phone) === phoneNorm) conflicts.push(`Mobile (${input.phone})`);
+                    if (whatsappNorm && normDigits(r.whatsapp_number) === whatsappNorm) conflicts.push(`WhatsApp (${input.whatsapp_number})`);
 
                     await transaction.rollback();
-                    this.sendError(res, { conflicts }, `Lead already exists with this ${conflicts.join(" / ")}`, 409);
+                    const conflictMsg = conflicts.length > 0
+                        ? `Lead already exists with this ${conflicts.join(" and ")}`
+                        : "A lead with this contact information already exists.";
+
+                    this.sendError(res, { conflicts }, conflictMsg, 409);
                     return;
                 }
             }
@@ -1613,6 +1617,43 @@ export default class LeadController extends BaseController {
             if (Object.keys(updateData).length === 0) {
                 await transaction.rollback();
                 return this.sendError(res, {}, "No fields to update", 400);
+            }
+
+            // ✅ Check duplicates for updated contact fields
+            const normEmail = updateData.email ? String(updateData.email).trim().toLowerCase() : null;
+            const normPhone = updateData.phone ? String(updateData.phone).trim().replace(/\D/g, "") : null;
+            const normWhatsApp = updateData.whatsapp_number ? String(updateData.whatsapp_number).trim().replace(/\D/g, "") : null;
+
+            const orConds: string[] = [];
+            const replCheck: Record<string, any> = { id };
+            if (normEmail) { orConds.push("LOWER(email) = :ce"); replCheck.ce = normEmail; }
+            if (normPhone) { orConds.push("REGEXP_REPLACE(phone, '\\\\D', '', 'g') = :cp"); replCheck.cp = normPhone; }
+            if (normWhatsApp) { orConds.push("REGEXP_REPLACE(whatsapp_number, '\\\\D', '', 'g') = :cw"); replCheck.cw = normWhatsApp; }
+
+            if (orConds.length > 0) {
+                const dupRows: any[] = await this.db_services.sequelizeWriter.query(
+                    `SELECT id, email, phone, whatsapp_number
+                       FROM public.leads
+                      WHERE deleted_at IS NULL
+                        AND id != :id
+                        AND (${orConds.join(" OR ")})
+                      LIMIT 1`,
+                    { replacements: replCheck, type: QueryTypes.SELECT, transaction }
+                );
+
+                if (dupRows.length) {
+                    const r = dupRows[0];
+                    const conflicts: string[] = [];
+                    if (normEmail && (r.email || "").toLowerCase() === normEmail) conflicts.push(`Email (${normEmail})`);
+                    if (normPhone && (r.phone || "").replace(/\D/g, "") === normPhone) conflicts.push(`Mobile (${updateData.phone})`);
+                    if (normWhatsApp && (r.whatsapp_number || "").replace(/\D/g, "") === normWhatsApp) conflicts.push(`WhatsApp (${updateData.whatsapp_number})`);
+
+                    await transaction.rollback();
+                    const conflictMsg = conflicts.length > 0
+                        ? `Another lead already exists with this ${conflicts.join(" and ")}`
+                        : "Another lead with this contact information already exists.";
+                    return this.sendError(res, { conflicts }, conflictMsg, 409);
+                }
             }
 
             const targetCountry = (updateData.country ?? existingLead.country ?? "").toLowerCase();
