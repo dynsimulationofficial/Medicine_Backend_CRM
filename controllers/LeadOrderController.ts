@@ -551,18 +551,20 @@ export default class LeadOrderController extends BaseController {
         try {
             const query = (req.query.q as string || "").trim();
             const repl: Record<string, any> = {};
-            let whereClause = "WHERE medicine_name IS NOT NULL AND TRIM(medicine_name) != '' AND deleted_at IS NULL";
+            let whereClause = "WHERE deleted_at IS NULL AND medicine_name IS NOT NULL AND TRIM(medicine_name) != ''";
             if (query) {
-                whereClause += " AND medicine_name ILIKE :q";
+                whereClause += " AND (medicine_name ILIKE :q OR generic_name ILIKE :q)";
                 repl.q = `%${query}%`;
             }
 
             const dbMeds: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT DISTINCT ON (LOWER(TRIM(medicine_name))) medicine_name, unit, rate
+                `SELECT DISTINCT ON (LOWER(TRIM(medicine_name))) medicine_name, unit, rate, generic_name
                    FROM (
-                       SELECT medicine_name, unit, rate, created_at, deleted_at FROM public.lead_order_items
+                       SELECT name AS medicine_name, generic_name, unit, rate, created_at, deleted_at FROM public.master_medicines
                        UNION ALL
-                       SELECT medicine_name, unit, rate, created_at, deleted_at FROM public.lead_medicines
+                       SELECT medicine_name, NULL AS generic_name, unit, rate, created_at, deleted_at FROM public.lead_order_items
+                       UNION ALL
+                       SELECT medicine_name, NULL AS generic_name, unit, rate, created_at, deleted_at FROM public.lead_medicines
                    ) combined
                   ${whereClause}
                   ORDER BY LOWER(TRIM(medicine_name)) ASC, created_at DESC

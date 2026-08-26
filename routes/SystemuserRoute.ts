@@ -1,3 +1,4 @@
+import * as masterMedicineController from "../controllers/MasterMedicineController";
 import LeadOrderController from "../controllers/LeadOrderController";
 import LeadDocumentController from "../controllers/LeadDocumentController";
 import LeadTaskController from "../controllers/LeadTaskController";
@@ -230,3 +231,10 @@ SystemuserRouter.get("/leads/search/dashboard", requireAuth, leadController.sear
 SystemuserRouter.post("/reports/kpi", requireAuth, reportController.getKpiAnalytics);
 
 export default SystemuserRouter;
+
+/* -------------------- Master Medicine Catalog -------------------- */
+SystemuserRouter.post("/medicines", requireAuth, masterMedicineController.createMedicine);
+SystemuserRouter.get("/medicines", requireAuth, masterMedicineController.getAllMedicines);
+SystemuserRouter.get("/medicines/:id", requireAuth, masterMedicineController.getMedicineById);
+SystemuserRouter.put("/medicines/:id", requireAuth, masterMedicineController.updateMedicine);
+SystemuserRouter.delete("/medicines/:id", requireAuth, masterMedicineController.deleteMedicine);
