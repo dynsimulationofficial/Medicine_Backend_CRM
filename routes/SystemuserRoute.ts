@@ -1,3 +1,4 @@
+import LeadActivityHistoryController from "../controllers/LeadActivityHistoryController";
 import express, { Request, Response } from "express";
 import CompressCrmController from "../controllers/AdvanceLeadCRMController";
 import UserActivityController from "../controllers/UserActivityController";
@@ -23,6 +24,7 @@ export const SystemuserRouter = express.Router();
 const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
 const leadController = new LeadController();
+const leadActivityHistoryController = new LeadActivityHistoryController();
 
 /* -------------------- Authentication & User Management -------------------- */
 SystemuserRouter.post("/register", requireAuth, UserManagementController.createUser);
@@ -166,16 +168,16 @@ SystemuserRouter.post("/leads/filter", requireAuth, leadController.searchLeads);
 SystemuserRouter.post("/unassignedleads/filter", requireAuth, leadController.filterUnassignedLeads);
 SystemuserRouter.post("/leads/unassigned/filter", requireAuth, leadController.filterUnassignedLeads);
 SystemuserRouter.post("/notassignedleads/filter", requireAuth, leadController.filterUnassignedLeads);
-SystemuserRouter.post("/lead/activity/filter", leadController.filterlistActivities);
+SystemuserRouter.post("/lead/activity/filter", leadActivityHistoryController.filterlistActivities);
 
 /* -------------------- Lead Activity -------------------- */
-SystemuserRouter.post("/leads/activities/create", requireAuth, leadController.addActivity);
-SystemuserRouter.post("/leads/activities/list", leadController.listActivities);
-SystemuserRouter.post("/leads/getactivity", leadController.getActivityById);
-SystemuserRouter.post("/leads/update/activity", requireAuth, leadController.updateActivity);
-SystemuserRouter.get("/leads/dispositions/all", leadController.getAllDispositions);
-SystemuserRouter.get("/leads/dispositions/id", leadController.getDispositionById);
-SystemuserRouter.post("/leads/activities/soft-delete", requireAuth, leadController.softDeleteActivity);
+SystemuserRouter.post("/leads/activities/create", requireAuth, leadActivityHistoryController.addActivity);
+SystemuserRouter.post("/leads/activities/list", leadActivityHistoryController.listActivities);
+SystemuserRouter.post("/leads/getactivity", leadActivityHistoryController.getActivityById);
+SystemuserRouter.post("/leads/update/activity", requireAuth, leadActivityHistoryController.updateActivity);
+SystemuserRouter.get("/leads/dispositions/all", leadActivityHistoryController.getAllDispositions);
+SystemuserRouter.get("/leads/dispositions/id", leadActivityHistoryController.getDispositionById);
+SystemuserRouter.post("/leads/activities/soft-delete", requireAuth, leadActivityHistoryController.softDeleteActivity);
 SystemuserRouter.post("/leads/soft-delete", requireAuth, leadController.softDeleteLeads);
 SystemuserRouter.get("/leadsources", leadController.getLeadSources);
 SystemuserRouter.get("/getconsolidation", leadController.getConsolidatedCreditStatuses);
