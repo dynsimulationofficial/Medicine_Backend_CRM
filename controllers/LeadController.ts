@@ -1916,7 +1916,7 @@ export default class LeadController extends BaseController {
               ${selectLeadSource},
               
               
-              l.whatsapp_number, l.lead_source_id, l.lead_status, l.currency, l.courier_name, l.tracking_number,
+              l.whatsapp_number, l.lead_source_id, l.lead_status, l.currency,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
             FROM public.leads l
             LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -1939,8 +1939,8 @@ export default class LeadController extends BaseController {
                 payment_status: "Pending",
                 delivery_status: "Pending",
                 currency: r.currency ?? null,
-                courier_name: r.courier_name ?? null,
-                tracking_number: r.tracking_number ?? null,
+                courier_name: null,
+                tracking_number: null,
                 
                 
                 whatsapp_number: r.whatsapp_number ?? null,

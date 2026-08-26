@@ -156,12 +156,15 @@ SystemuserRouter.post("/leads", requireAuth, leadController.createLead);
 SystemuserRouter.post("/leads/get", requireAuth, leadController.getLead);
 SystemuserRouter.get("/leads/assigned", requireAuth, leadController.getAssignedLeads);
 SystemuserRouter.post("/leads/assigned/bulk", requireAuth, leadController.bulkAssignLeads);
+SystemuserRouter.get("/leads/unassigned", requireAuth, leadController.getUnassignedLeads);
 SystemuserRouter.get("/leads/notassigned", requireAuth, leadController.getUnassignedLeads);
 SystemuserRouter.get("/leads/random", leadController.getNextUnassignedLead);
 SystemuserRouter.get("/allagents", requireAuth, leadController.getAllAgents);
 SystemuserRouter.post("/leads/update", leadController.updateLead);
 SystemuserRouter.post("/assignlead", requireAuth, leadController.assignLeadToAgent);
 SystemuserRouter.post("/leads/filter", requireAuth, leadController.searchLeads);
+SystemuserRouter.post("/unassignedleads/filter", requireAuth, leadController.filterUnassignedLeads);
+SystemuserRouter.post("/leads/unassigned/filter", requireAuth, leadController.filterUnassignedLeads);
 SystemuserRouter.post("/notassignedleads/filter", requireAuth, leadController.filterUnassignedLeads);
 SystemuserRouter.post("/lead/activity/filter", leadController.filterlistActivities);
 

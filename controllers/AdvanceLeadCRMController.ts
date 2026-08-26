@@ -8,7 +8,32 @@ import "../config/production/env_config";
 import jwt from "jsonwebtoken";
 import { v4 as uuidv4 } from "uuid";
 import * as Yup from "yup";
-import { createUserSchema, loginRequestOtpSchema } from "./Validations";
+
+const E164_PHONE = /^\+\d{1,3}\d{10}$/;
+
+const createUserSchema = Yup.object().shape({
+  name: Yup.string().required("Name is required"),
+  mobile_number: Yup.string()
+    .matches(
+      E164_PHONE,
+      "Mobile number must include country code and be in the format +<country_code><number>"
+    )
+    .required("Mobile number is required"),
+  email: Yup.string().email("Invalid email format").required("Email is required"),
+  password: Yup.string()
+    .min(6, "Password must be at least 6 characters")
+    .required("Password is required"),
+  roleLevel: Yup.number()
+    .typeError("Role level must be a number")
+    .required("Role level is required"),
+}).noUnknown(true);
+
+const loginRequestOtpSchema = Yup.object().shape({
+  email: Yup.string().email("Invalid email format").optional(),
+  mobile_number: Yup.string().optional(),
+  password: Yup.string().required("Password is required"),
+}).noUnknown(true);
+
 import { tokenBlacklist } from "../utils/tokenBlacklisted";
 import emailService from "../service/EmailService";
 import { DateTime } from "luxon";
