@@ -765,16 +765,47 @@ export default class CompressCrmController extends BaseController {
         console.error("Error saving login activity:", error);
       });
 
-    // Send success response
-return this.sendSuccess(
-  res,
-  { 
-    token, 
-    system_user_id,
-    name: userName   // added here
-  },
-  "Login successful"
-);
+      // 🔎 Check if user is an agent and send alert email to Admin
+      try {
+        const [roleRow] = (await this.db_services.sequelizeWriter.query(
+          `SELECT r.name AS role_name
+             FROM public.user_role ur
+             JOIN public.roles r ON r.id = ur.role_id
+            WHERE ur.system_user_id = :system_user_id
+            ORDER BY COALESCE(ur.updated_at, ur.created_at) DESC
+            LIMIT 1`,
+          { replacements: { system_user_id }, type: QueryTypes.SELECT }
+        )) as any[];
+
+        const userRoleName = roleRow?.role_name || "Agent";
+        const isAgent = String(userRoleName).trim().toLowerCase() === "agent" || (await this.isActiveAgent(system_user_id));
+
+        if (isAgent) {
+          const loginTimeLabel = new Date().toLocaleString("en-IN", { timeZone: "Asia/Kolkata" }) + " (IST)";
+          emailService.sendAdminLoginNotification({
+            adminTo: "wasiquekhan90@gmail.com",
+            userName,
+            userEmail: email,
+            roleName: userRoleName,
+            loginTimeLocalLabel: loginTimeLabel,
+          }).catch((mailErr) => {
+            console.error("⚠️ [mailer] Failed to send admin login notification email:", mailErr);
+          });
+        }
+      } catch (checkErr) {
+        console.error("⚠️ Error checking agent status for login email:", checkErr);
+      }
+
+      // Send success response
+      return this.sendSuccess(
+        res,
+        { 
+          token, 
+          system_user_id,
+          name: userName
+        },
+        "Login successful"
+      );
 
     } catch (err) {
       if (err instanceof Yup.ValidationError) {
