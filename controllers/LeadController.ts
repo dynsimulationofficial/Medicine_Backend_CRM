@@ -302,11 +302,7 @@ export default class LeadController extends BaseController {
                 agent_id: s().uuid().optional(), // <- may be provided
                 lead_source_id: s().uuid().optional(),
                 currency: s().optional(),
-                courier_name: s().optional(),
-                tracking_number: s().optional(),
                 lead_status: s().optional(),
-                payment_status: s().optional(),
-                delivery_status: s().optional(),
             });
 
             const input = await schema.validate(req.body, { abortEarly: false });
@@ -367,8 +363,8 @@ export default class LeadController extends BaseController {
                 "lead_score", "lead_quality", "best_time_to_call",
                 "agent_id", "whatsapp_number", "created_at", "updated_at",
                 "lead_source_id", 
-                "currency", "courier_name", "tracking_number",
-                "lead_status", "payment_status", "delivery_status"
+                "currency",
+                "lead_status"
             ];
             const vals = [
                 ":id", ":full_name", ":email", ":phone",
@@ -376,8 +372,8 @@ export default class LeadController extends BaseController {
                 "COALESCE(:lead_score,0)", ":lead_quality", ":best_time_to_call",
                 ":agent_id", ":whatsapp_number", "NOW()", "NOW()",
                 ":lead_source_id", 
-                ":currency", ":courier_name", ":tracking_number",
-                ":lead_status", ":payment_status", ":delivery_status"
+                ":currency",
+                ":lead_status"
             ];
 
             let resolvedLeadCurrency = "INR";
@@ -409,11 +405,7 @@ export default class LeadController extends BaseController {
                 whatsapp_number: whatsappNorm,
                 lead_source_id: toNull(input.lead_source_id),
                 currency: resolvedLeadCurrency,
-                courier_name: toNull(input.courier_name),
-                tracking_number: toNull(input.tracking_number),
                 lead_status: toNull(input.lead_status) ?? "New",
-                payment_status: toNull(input.payment_status) ?? "Pending",
-                delivery_status: toNull(input.delivery_status) ?? "Pending",
             };
 
             const insertSql = `
@@ -591,7 +583,7 @@ export default class LeadController extends BaseController {
                 `
                 SELECT
                   l.id, l.lead_number,
-                  l.first_name, l.last_name, l.full_name,
+                  l.full_name,
                   l.email, l.phone,
                   l.address_line1, l.address_line2, l.city, l.state, l.postal_code, l.country,
                   l.lead_score, l.lead_quality, l.best_time_to_call,
@@ -600,7 +592,7 @@ export default class LeadController extends BaseController {
                   ls.name AS lead_source_name,
                   
                   
-                  l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
+                  l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.currency,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -622,16 +614,14 @@ export default class LeadController extends BaseController {
                 lead_source: r.lead_source_name ?? null,
                 lead_source_id: r.lead_source_id ?? null,
                 lead_status: r.lead_status ?? null,
-                payment_status: r.payment_status ?? null,
-                delivery_status: r.delivery_status ?? null,
+                payment_status: "Pending",
+                delivery_status: "Pending",
                 currency: r.currency ?? null,
-                courier_name: r.courier_name ?? null,
-                tracking_number: r.tracking_number ?? null,
+                courier_name: null,
+                tracking_number: null,
                 
                 
                 whatsapp_number: r.whatsapp_number ?? null,
-                first_name: r.first_name ?? null,
-                last_name: r.last_name ?? null,
                 full_name: r.full_name,
                 email: r.email,
                 phone: r.phone,
@@ -719,7 +709,7 @@ export default class LeadController extends BaseController {
                 `
                 SELECT
                   l.id, l.lead_number,
-                  l.first_name, l.last_name, l.full_name,
+                  l.full_name,
                   l.email, l.phone,
                   l.address_line1, l.address_line2, l.city, l.state, l.postal_code, l.country,
                   l.lead_score, l.lead_quality, l.best_time_to_call,
@@ -728,14 +718,16 @@ export default class LeadController extends BaseController {
                   ls.name AS lead_source_name,
                   l.whatsapp_number, l.note, l.lead_source_id,
                   CASE WHEN COALESCE(ord_agg.order_count, 0) > 0 THEN 'Converted' ELSE l.lead_status END AS lead_status,
-                  COALESCE(ord_agg.latest_payment_status, l.payment_status) AS payment_status,
-                  COALESCE(ord_agg.latest_order_status, l.delivery_status) AS delivery_status,
-                  l.currency, l.courier_name, l.tracking_number,
+                  COALESCE(ord_agg.latest_payment_status, 'Pending') AS payment_status,
+                  COALESCE(ord_agg.latest_order_status, 'Pending') AS delivery_status,
+                  l.currency,
                   COALESCE(ord_agg.order_count, 0) AS order_count,
                   COALESCE(ord_agg.total_order_amount, 0) AS total_order_amount,
                   ord_agg.latest_order_number,
                   ord_agg.latest_order_status,
                   ord_agg.latest_payment_status,
+                  ord_agg.latest_courier_name,
+                  ord_agg.latest_tracking_number,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -747,7 +739,9 @@ export default class LeadController extends BaseController {
                         COALESCE(SUM(CASE WHEN order_status != 'Cancelled' THEN grand_total ELSE 0 END), 0)::numeric AS total_order_amount,
                         (ARRAY_AGG(order_number ORDER BY created_at DESC))[1] AS latest_order_number,
                         (ARRAY_AGG(order_status ORDER BY created_at DESC))[1] AS latest_order_status,
-                        (ARRAY_AGG(payment_status ORDER BY created_at DESC))[1] AS latest_payment_status
+                        (ARRAY_AGG(payment_status ORDER BY created_at DESC))[1] AS latest_payment_status,
+                        (ARRAY_AGG(courier_name ORDER BY created_at DESC))[1] AS latest_courier_name,
+                        (ARRAY_AGG(tracking_number ORDER BY created_at DESC))[1] AS latest_tracking_number
                     FROM public.lead_orders
                     WHERE deleted_at IS NULL
                     GROUP BY lead_id
@@ -770,16 +764,14 @@ export default class LeadController extends BaseController {
                 payment_status: r.payment_status ?? null,
                 delivery_status: r.delivery_status ?? null,
                 currency: r.currency ?? null,
-                courier_name: r.courier_name ?? null,
-                tracking_number: r.tracking_number ?? null,
+                courier_name: r.latest_courier_name ?? null,
+                tracking_number: r.latest_tracking_number ?? null,
                 order_count: Number(r.order_count || 0),
                 total_order_amount: Number(r.total_order_amount || 0),
                 latest_order_number: r.latest_order_number ?? null,
                 latest_order_status: r.latest_order_status ?? null,
                 latest_payment_status: r.latest_payment_status ?? null,
                 whatsapp_number: r.whatsapp_number ?? null,
-                first_name: r.first_name ?? null,
-                last_name: r.last_name ?? null,
                 full_name: r.full_name,
                 email: r.email,
                 phone: r.phone,
@@ -963,7 +955,7 @@ export default class LeadController extends BaseController {
                   ${selectLeadSource},
                   
                   
-                  l.whatsapp_number, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
+                  l.whatsapp_number, l.lead_source_id, l.lead_status, l.currency,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -983,11 +975,11 @@ export default class LeadController extends BaseController {
                 lead_source: r.lead_source_name ?? null,
                 lead_source_id: r.lead_source_id ?? null,
                 lead_status: r.lead_status ?? null,
-                payment_status: r.payment_status ?? null,
-                delivery_status: r.delivery_status ?? null,
+                payment_status: "Pending",
+                delivery_status: "Pending",
                 currency: r.currency ?? null,
-                courier_name: r.courier_name ?? null,
-                tracking_number: r.tracking_number ?? null,
+                courier_name: null,
+                tracking_number: null,
                 
                 
                 whatsapp_number: r.whatsapp_number ?? null,
@@ -1562,8 +1554,7 @@ export default class LeadController extends BaseController {
             "agent_id", "lead_source_id",
             "whatsapp_number", "note",
             "currency",
-            "courier_name", "tracking_number",
-            "lead_status", "payment_status", "delivery_status",
+            "lead_status",
         ]);
 
         const schema = Yup.object({
@@ -1585,11 +1576,7 @@ export default class LeadController extends BaseController {
             whatsapp_number: Yup.string().optional(),
             note: Yup.string().optional(),
             currency: Yup.string().optional(),
-            courier_name: Yup.string().optional(),
-            tracking_number: Yup.string().optional(),
             lead_status: Yup.string().optional(),
-            payment_status: Yup.string().optional(),
-            delivery_status: Yup.string().optional(),
         });
 
         const toNull = (v: any) => (v === "" || v === undefined ? null : v);
@@ -1929,7 +1916,7 @@ export default class LeadController extends BaseController {
               ${selectLeadSource},
               
               
-              l.whatsapp_number, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
+              l.whatsapp_number, l.lead_source_id, l.lead_status, l.currency, l.courier_name, l.tracking_number,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
             FROM public.leads l
             LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -1949,8 +1936,8 @@ export default class LeadController extends BaseController {
                 lead_source: r.lead_source_name ?? null,
                 lead_source_id: r.lead_source_id ?? null,
                 lead_status: r.lead_status ?? null,
-                payment_status: r.payment_status ?? null,
-                delivery_status: r.delivery_status ?? null,
+                payment_status: "Pending",
+                delivery_status: "Pending",
                 currency: r.currency ?? null,
                 courier_name: r.courier_name ?? null,
                 tracking_number: r.tracking_number ?? null,
@@ -2133,8 +2120,6 @@ export default class LeadController extends BaseController {
                 SELECT
                     l.id,
                     l.lead_number,
-                    l.first_name,
-                    l.last_name,
                     l.full_name,
                     l.email,
                     l.phone,
@@ -2148,7 +2133,7 @@ export default class LeadController extends BaseController {
                     
                     
                     l.note,
-                    l.whatsapp_number, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
+                    l.whatsapp_number, l.lead_source_id, l.lead_status, l.currency,
                   GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days,
                     last_disp.latest_disposition
                 FROM public.leads l
@@ -2184,16 +2169,14 @@ export default class LeadController extends BaseController {
                 lead_source: raw.lead_source_name ?? null,
                 lead_source_id: raw.lead_source_id ?? null,
                 lead_status: raw.lead_status ?? null,
-                payment_status: raw.payment_status ?? null,
-                delivery_status: raw.delivery_status ?? null,
+                payment_status: "Pending",
+                delivery_status: "Pending",
                 currency: raw.currency ?? null,
-                courier_name: raw.courier_name ?? null,
-                tracking_number: raw.tracking_number ?? null,
+                courier_name: null,
+                tracking_number: null,
                 debt_consolidation_status: raw.debt_consolidation_status_name ?? null,
                 consolidated_credit_status: raw.consolidated_credit_status_name ?? null,
                 whatsapp_number: raw.whatsapp_number ?? null,
-                first_name: raw.first_name ?? null,
-                last_name: raw.last_name ?? null,
                 full_name: raw.full_name,
                 email: raw.email,
                 phone: raw.phone,
@@ -2232,7 +2215,7 @@ export default class LeadController extends BaseController {
                 `
                 SELECT
                     l.id, l.lead_number,
-                    l.first_name, l.last_name, l.full_name,
+                    l.full_name,
                     l.email, l.phone,
                     l.address_line1, l.address_line2, l.city, l.state, l.postal_code, l.country,
                     l.lead_score, l.lead_quality, l.best_time_to_call,
@@ -2241,7 +2224,7 @@ export default class LeadController extends BaseController {
                     ls.name AS lead_source_name,
                     
                     
-                    l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.payment_status, l.delivery_status, l.currency, l.courier_name, l.tracking_number,
+                    l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.currency,
                     GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
@@ -2270,16 +2253,14 @@ export default class LeadController extends BaseController {
                 lead_source: r.lead_source_name ?? null,
                 lead_source_id: r.lead_source_id ?? null,
                 lead_status: r.lead_status ?? null,
-                payment_status: r.payment_status ?? null,
-                delivery_status: r.delivery_status ?? null,
+                payment_status: "Pending",
+                delivery_status: "Pending",
                 currency: r.currency ?? null,
-                courier_name: r.courier_name ?? null,
-                tracking_number: r.tracking_number ?? null,
+                courier_name: null,
+                tracking_number: null,
                 
                 
                 whatsapp_number: r.whatsapp_number ?? null,
-                first_name: r.first_name ?? null,
-                last_name: r.last_name ?? null,
                 full_name: r.full_name,
                 email: r.email,
                 phone: r.phone,
@@ -5679,26 +5660,21 @@ export default class LeadController extends BaseController {
                 if (itemRow) insertedItems.push(itemRow);
             }
 
-            // Sync lead_status, payment_status, delivery_status to public.leads
+            // Sync lead_status to public.leads
             const isConverted = ["Confirmed", "Shipped", "Delivered"].includes(order_status) || payment_status === "Paid";
-            await this.db_services.sequelizeWriter.query(
-                `UPDATE public.leads
-                 SET lead_status = CASE WHEN :isConverted THEN 'Converted' ELSE lead_status END,
-                     payment_status = :payment_status,
-                     delivery_status = :order_status,
-                     updated_at = NOW()
-                 WHERE id = :lead_id AND deleted_at IS NULL`,
-                {
-                    replacements: {
-                        isConverted,
-                        payment_status: payment_status || "Pending",
-                        order_status: order_status || "Pending",
-                        lead_id,
-                    },
-                    type: QueryTypes.UPDATE,
-                    transaction,
-                }
-            );
+            if (isConverted) {
+                await this.db_services.sequelizeWriter.query(
+                    `UPDATE public.leads
+                     SET lead_status = 'Converted',
+                         updated_at = NOW()
+                     WHERE id = :lead_id AND deleted_at IS NULL`,
+                    {
+                        replacements: { lead_id },
+                        type: QueryTypes.UPDATE,
+                        transaction,
+                    }
+                );
+            }
 
             await transaction.commit();
 
@@ -5894,25 +5870,20 @@ export default class LeadController extends BaseController {
                 return this.sendError(res, {}, "Order not found", 404);
             }
 
-            // Sync lead_status, payment_status, delivery_status to public.leads
+            // Sync lead_status to public.leads
             const isConverted = ["Confirmed", "Shipped", "Delivered"].includes(updatedOrder.order_status) || updatedOrder.payment_status === "Paid";
-            await this.db_services.sequelizeWriter.query(
-                `UPDATE public.leads
-                 SET lead_status = CASE WHEN :isConverted THEN 'Converted' ELSE lead_status END,
-                     payment_status = COALESCE(:payment_status, payment_status),
-                     delivery_status = COALESCE(:order_status, delivery_status),
-                     updated_at = NOW()
-                 WHERE id = :lead_id AND deleted_at IS NULL`,
-                {
-                    replacements: {
-                        isConverted,
-                        payment_status: updatedOrder.payment_status,
-                        order_status: updatedOrder.order_status,
-                        lead_id,
-                    },
-                    type: QueryTypes.UPDATE,
-                }
-            );
+            if (isConverted) {
+                await this.db_services.sequelizeWriter.query(
+                    `UPDATE public.leads
+                     SET lead_status = 'Converted',
+                         updated_at = NOW()
+                     WHERE id = :lead_id AND deleted_at IS NULL`,
+                    {
+                        replacements: { lead_id },
+                        type: QueryTypes.UPDATE,
+                    }
+                );
+            }
 
             if (authUserId) {
                 await SystemUserActivity.create({

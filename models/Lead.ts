@@ -4,8 +4,6 @@ export interface LeadAttributes {
   id: string;
   lead_number: string;
   full_name: string;
-  first_name?: string | null;
-  last_name?: string | null;
   email: string;
   phone: string;
   address_line1?: string | null;
@@ -21,15 +19,8 @@ export interface LeadAttributes {
   whatsapp_number?: string | null;
   lead_source_id?: string | null;
   note?: string | null;
-  status?: string | null;
   lead_status?: string | null;
-  payment_status?: string | null;
-  delivery_status?: string | null;
-  company?: string | null;
-  activity_summary?: string | null;
   currency?: string | null;
-  courier_name?: string | null;
-  tracking_number?: string | null;
   created_at?: Date;
   updated_at?: Date;
   deleted_at?: Date | null;
@@ -39,8 +30,6 @@ export type LeadCreationAttributes = Optional<
   LeadAttributes,
   | "id"
   | "lead_number"
-  | "first_name"
-  | "last_name"
   | "address_line1"
   | "address_line2"
   | "city"
@@ -54,15 +43,8 @@ export type LeadCreationAttributes = Optional<
   | "whatsapp_number"
   | "lead_source_id"
   | "note"
-  | "status"
   | "lead_status"
-  | "payment_status"
-  | "delivery_status"
-  | "company"
-  | "activity_summary"
   | "currency"
-  | "courier_name"
-  | "tracking_number"
   | "created_at"
   | "updated_at"
   | "deleted_at"
@@ -76,8 +58,6 @@ export const initLeadModel = (sequelize: Sequelize) => {
     public id!: string;
     public lead_number!: string;
     public full_name!: string;
-    public first_name!: string | null;
-    public last_name!: string | null;
     public email!: string;
     public phone!: string;
     public address_line1!: string | null;
@@ -93,15 +73,8 @@ export const initLeadModel = (sequelize: Sequelize) => {
     public whatsapp_number!: string | null;
     public lead_source_id!: string | null;
     public note!: string | null;
-    public status!: string | null;
     public lead_status!: string | null;
-    public payment_status!: string | null;
-    public delivery_status!: string | null;
-    public company!: string | null;
-    public activity_summary!: string | null;
     public currency!: string | null;
-    public courier_name!: string | null;
-    public tracking_number!: string | null;
     public created_at!: Date;
     public updated_at!: Date;
     public deleted_at!: Date | null;
@@ -123,8 +96,6 @@ export const initLeadModel = (sequelize: Sequelize) => {
         ),
       },
       full_name: { type: DataTypes.STRING, allowNull: false },
-      first_name: { type: DataTypes.STRING(255), allowNull: true },
-      last_name: { type: DataTypes.STRING(255), allowNull: true },
       email: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -144,31 +115,16 @@ export const initLeadModel = (sequelize: Sequelize) => {
       whatsapp_number: { type: DataTypes.STRING(30), allowNull: true },
       lead_source_id: { type: DataTypes.UUID, allowNull: true },
       note: { type: DataTypes.TEXT, allowNull: true },
-      status: { type: DataTypes.STRING(100), allowNull: true },
       lead_status: {
         type: DataTypes.STRING(50),
         allowNull: true,
         defaultValue: "New",
       },
-      payment_status: {
-        type: DataTypes.STRING(50),
-        allowNull: true,
-        defaultValue: "Pending",
-      },
-      delivery_status: {
-        type: DataTypes.STRING(50),
-        allowNull: true,
-        defaultValue: "Pending",
-      },
-      company: { type: DataTypes.STRING(255), allowNull: true },
-      activity_summary: { type: DataTypes.TEXT, allowNull: true },
       currency: {
         type: DataTypes.STRING(10),
         allowNull: true,
         defaultValue: "USD",
       },
-      courier_name: { type: DataTypes.STRING(100), allowNull: true },
-      tracking_number: { type: DataTypes.STRING(100), allowNull: true },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,

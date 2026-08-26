@@ -1,2 +1,26 @@
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T09:14:50.480Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T10:03:51.742Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T10:04:15.719Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6ImQ2YmYxZGQ1LTU3NzUtNDk2Yi04ZTFhLWQ0ZDY4MzQyOTY4MyIsImVtYWlsIjoid2FzaXF1ZWtoYW45MEBnbWFpbC5jb20iLCJpYXQiOjE3ODc3MzEzMTcsImV4cCI6MTc4Nzc3NDUxN30.cFHUUUuPA6y0DSFqmO30bmJln5lUNeQ_Q-eCLdShXOU","timestamp":"2026-08-26T10:47:26.922Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6IjRlYmNkYzQ1LTQ3NDQtNGQ5MC05MGNkLWM3N2YyNDFhMTNkYiIsImVtYWlsIjoid2FzaXF1ZWtoYW44MEBnbWFpbC5jb20iLCJpYXQiOjE3ODc3Mzg4NDcsImV4cCI6MTc4Nzc4MjA0N30.t44BIv4aGTzay8VRe4g_QT4G7_IyLrdJIDO83PclM3g","timestamp":"2026-08-26T10:48:29.294Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:17:51.342Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:18:01.489Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:18:28.558Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:18:36.086Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:18:45.847Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:18:54.262Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:19:02.374Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:19:10.325Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:19:20.621Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:19:46.299Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:27:01.721Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:27:22.204Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:27:31.739Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:27:40.833Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:28:03.154Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:31:15.036Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:31:31.912Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:31:47.359Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:32:01.810Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:32:33.012Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-08-26T11:45:11.848Z"}
