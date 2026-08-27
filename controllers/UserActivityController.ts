@@ -56,8 +56,7 @@ export default class UserActivityController extends BaseController {
     try {
       const schema = Yup.object({
         page: Yup.number().integer().min(1).default(1),
-        // ✅ fix per-page limit to 10 always
-        pageSize: Yup.number().integer().min(1).max(2000).default(10),
+        pageSize: Yup.number().integer().min(1).max(2000).default(50),
         userId: Yup.string().uuid().optional(),
         activityType: Yup.string().optional(),
         startDate: Yup.date().optional(),
@@ -67,7 +66,7 @@ export default class UserActivityController extends BaseController {
       const qp = await schema.validate(req.query, { abortEarly: false });
 
       const page = Number(qp.page);
-      const pageSize = 10; // ✅ enforce 10 records per page
+      const pageSize = Number(qp.pageSize) || 50;
       const offset = (page - 1) * pageSize;
 
       // Build dynamic filter
@@ -137,7 +136,7 @@ export default class UserActivityController extends BaseController {
 
       // Pagination setup
       const page = parseInt(req.query.page as string, 10) || 1;
-      const limit = parseInt(req.query.limit as string, 10) || 10;
+      const limit = parseInt((req.query.pageSize || req.query.limit) as string, 10) || 50;
       const offset = (page - 1) * limit;
 
       // Prepare `where` condition based on provided filters
