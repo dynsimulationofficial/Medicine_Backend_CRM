@@ -301,6 +301,7 @@ export default class LeadController extends BaseController {
                 best_time_to_call: s().optional(),
                 agent_id: s().uuid().optional(), // <- may be provided
                 lead_source_id: s().uuid().optional(),
+                campaign_id: s().uuid().optional(),
                 currency: s().optional(),
                 lead_status: s().optional(),
             });
@@ -363,6 +364,7 @@ export default class LeadController extends BaseController {
                 "lead_score", "lead_quality", "best_time_to_call",
                 "agent_id", "whatsapp_number", "created_at", "updated_at",
                 "lead_source_id", 
+                "campaign_id", 
                 "currency",
                 "lead_status"
             ];
@@ -372,6 +374,7 @@ export default class LeadController extends BaseController {
                 "COALESCE(:lead_score,0)", ":lead_quality", ":best_time_to_call",
                 ":agent_id", ":whatsapp_number", "NOW()", "NOW()",
                 ":lead_source_id", 
+                ":campaign_id", 
                 ":currency",
                 ":lead_status"
             ];
@@ -404,6 +407,7 @@ export default class LeadController extends BaseController {
                 agent_id: toNull(input.agent_id),        // <-- if provided, it will be set now
                 whatsapp_number: whatsappNorm,
                 lead_source_id: toNull(input.lead_source_id),
+                campaign_id: toNull(input.campaign_id),
                 currency: resolvedLeadCurrency,
                 lead_status: toNull(input.lead_status) ?? "New",
             };
@@ -589,7 +593,7 @@ export default class LeadController extends BaseController {
                   l.lead_score, l.lead_quality, l.best_time_to_call,
                   l.agent_id, su.name AS agent_name,
                   l.created_at, l.updated_at,
-                  ls.name AS lead_source_name,
+                  ls.name AS lead_source_name, camp.name AS campaign_name, l.campaign_id,
                   
                   
                   l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.currency,
@@ -597,6 +601,7 @@ export default class LeadController extends BaseController {
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
                 LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
+                LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
                 
                 
                 ${whereSql}
@@ -613,6 +618,9 @@ export default class LeadController extends BaseController {
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
                 lead_source_id: r.lead_source_id ?? null,
+                campaign_id: r.campaign_id ?? null,
+                campaign_name: r.campaign_name ?? null,
+                campaign: { id: r.campaign_id, name: r.campaign_name },
                 lead_status: r.lead_status ?? null,
                 payment_status: "Pending",
                 delivery_status: "Pending",
@@ -715,7 +723,7 @@ export default class LeadController extends BaseController {
                   l.lead_score, l.lead_quality, l.best_time_to_call,
                   l.agent_id, su.name AS agent_name,
                   l.created_at, l.updated_at,
-                  ls.name AS lead_source_name,
+                  ls.name AS lead_source_name, camp.name AS campaign_name, l.campaign_id,
                   l.whatsapp_number, l.note, l.lead_source_id,
                   CASE WHEN COALESCE(ord_agg.order_count, 0) > 0 THEN 'Converted' ELSE l.lead_status END AS lead_status,
                   COALESCE(ord_agg.latest_payment_status, 'Pending') AS payment_status,
@@ -732,6 +740,7 @@ export default class LeadController extends BaseController {
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
                 LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
+                LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
                 LEFT JOIN (
                     SELECT 
                         lead_id, 
@@ -760,6 +769,9 @@ export default class LeadController extends BaseController {
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
                 lead_source_id: r.lead_source_id ?? null,
+                campaign_id: r.campaign_id ?? null,
+                campaign_name: r.campaign_name ?? null,
+                campaign: { id: r.campaign_id, name: r.campaign_name },
                 lead_status: r.lead_status ?? null,
                 payment_status: r.payment_status ?? null,
                 delivery_status: r.delivery_status ?? null,
@@ -880,7 +892,8 @@ export default class LeadController extends BaseController {
 
             if (hasLeadSourceId) {
                 selectLeadSource = `ls.name AS lead_source_name`;
-                joinExtras.push(`LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id`);
+                joinExtras.push(`LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
+                LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id`);
             } else if (hasLeadSourceText) {
                 selectLeadSource = `l.lead_source AS lead_source_name`;
             }
@@ -974,6 +987,9 @@ export default class LeadController extends BaseController {
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
                 lead_source_id: r.lead_source_id ?? null,
+                campaign_id: r.campaign_id ?? null,
+                campaign_name: r.campaign_name ?? null,
+                campaign: { id: r.campaign_id, name: r.campaign_name },
                 lead_status: r.lead_status ?? null,
                 payment_status: "Pending",
                 delivery_status: "Pending",
@@ -1028,7 +1044,7 @@ export default class LeadController extends BaseController {
           }
       
           // --- Body-level controls ---
-          const { agent_id, lead_source_id } = req.body;
+          const { agent_id, lead_source_id, campaign_id } = req.body;
           const UUID36 = /^[0-9a-fA-F-]{36}$/;
       
           if (agent_id && !UUID36.test(String(agent_id))) {
@@ -1048,7 +1064,16 @@ export default class LeadController extends BaseController {
           for (const s of allLeadSources) {
             if (s.name) leadSourceMap.set(String(s.name).trim().toLowerCase(), String(s.id));
           }
-      
+
+          const allCampaigns: any[] = await this.db_services.sequelizeWriter.query(
+            `SELECT id, name FROM public.campaigns WHERE deleted_at IS NULL`,
+            { type: QueryTypes.SELECT }
+          );
+          const campaignMap = new Map<string, string>();
+          for (const c of allCampaigns) {
+            if (c.name) campaignMap.set(String(c.name).trim().toLowerCase(), String(c.id));
+          }
+
           // --- Header normalization map ---
           const HEADER_MAP: Record<string, string> = {
             "full name": "full_name", "fullname": "full_name", "full_name": "full_name", "name": "full_name",
@@ -1065,9 +1090,10 @@ export default class LeadController extends BaseController {
             "agent id": "agent_id", "agent_id": "agent_id",
             "lead source": "lead_source", "lead_source": "lead_source", "source": "lead_source",
             "lead source id": "lead_source_id", "lead_source_id": "lead_source_id",
+            "campaign": "campaign", "campaign name": "campaign", "campaign_name": "campaign", "campaign id": "campaign_id", "campaign_id": "campaign_id",
             "note": "note", "notes": "note"
           };
-      
+
           // --- Row schema (empty strings transformed to null) ---
           const toEmptyNull = (v: any) => (v === "" || v === undefined ? null : v);
           const rowSchema = Yup.object({
@@ -1088,6 +1114,8 @@ export default class LeadController extends BaseController {
             agent_id: Yup.string().nullable().transform(toEmptyNull).optional(),
             lead_source: Yup.string().nullable().transform(toEmptyNull).optional(),
             lead_source_id: Yup.string().nullable().transform(toEmptyNull).optional(),
+            campaign: Yup.string().nullable().transform(toEmptyNull).optional(),
+            campaign_id: Yup.string().nullable().transform(toEmptyNull).optional(),
           });
       
           // --- Read sheet (Excel/CSV) ---
@@ -1236,6 +1264,15 @@ export default class LeadController extends BaseController {
               } else if (lead_source_id && UUID36.test(String(lead_source_id))) {
                 resolvedSourceId = lead_source_id;
               }
+
+              let resolvedCampaignId = null;
+              if (c.data.campaign && campaignMap.has(String(c.data.campaign).trim().toLowerCase())) {
+                resolvedCampaignId = campaignMap.get(String(c.data.campaign).trim().toLowerCase());
+              } else if (c.data.campaign_id && UUID36.test(String(c.data.campaign_id))) {
+                resolvedCampaignId = c.data.campaign_id;
+              } else if (campaign_id && UUID36.test(String(campaign_id))) {
+                resolvedCampaignId = campaign_id;
+              }
       
               // Auto-resolve currency from country or phone code
               let resolvedCurrency = "INR";
@@ -1256,14 +1293,14 @@ export default class LeadController extends BaseController {
                    agent_id,
                    address_line1, address_line2, city, state, postal_code, country,
                    lead_score, lead_quality, best_time_to_call, note,
-                   lead_source_id, lead_status, currency,
+                   lead_source_id, campaign_id, lead_status, currency,
                    created_at, updated_at)
                 VALUES
                   (:id, :full_name, :email, :phone, :whatsapp_number,
                    :agent_id,
                    :address_line1, :address_line2, :city, :state, :postal_code, :country,
                    COALESCE(:lead_score,0), :lead_quality, :best_time_to_call, :note,
-                   :lead_source_id, 'New', :currency,
+                   :lead_source_id, :campaign_id, 'New', :currency,
                    NOW(), NOW())
                 RETURNING id, lead_number
                 `,
@@ -1286,6 +1323,7 @@ export default class LeadController extends BaseController {
                     best_time_to_call: toNull(c.data.best_time_to_call),
                     note: toNull(c.data.note),
                     lead_source_id: resolvedSourceId,
+                    campaign_id: resolvedCampaignId,
                     currency: resolvedCurrency,
                   },
                   type: QueryTypes.SELECT,
@@ -1465,7 +1503,7 @@ export default class LeadController extends BaseController {
             "full_name", "email", "phone",
             "address_line1", "address_line2", "city", "state", "postal_code", "country",
             "lead_score", "lead_quality", "best_time_to_call",
-            "agent_id", "lead_source_id",
+            "agent_id", "lead_source_id", "campaign_id",
             "whatsapp_number", "note",
             "currency",
             "lead_status",
@@ -1487,6 +1525,7 @@ export default class LeadController extends BaseController {
             best_time_to_call: Yup.string().optional(),
             agent_id: Yup.string().optional(),
             lead_source_id: Yup.string().optional(),
+            campaign_id: Yup.string().optional(),
             whatsapp_number: Yup.string().optional(),
             note: Yup.string().optional(),
             currency: Yup.string().optional(),
@@ -1760,7 +1799,8 @@ export default class LeadController extends BaseController {
 
             if (hasLeadSourceId) {
                 selectLeadSource = `ls.name AS lead_source_name`;
-                joinExtras.push(`LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id`);
+                joinExtras.push(`LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
+                LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id`);
             } else if (hasLeadSourceText) {
                 selectLeadSource = `l.lead_source AS lead_source_name`;
             }
@@ -1849,6 +1889,9 @@ export default class LeadController extends BaseController {
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
                 lead_source_id: r.lead_source_id ?? null,
+                campaign_id: r.campaign_id ?? null,
+                campaign_name: r.campaign_name ?? null,
+                campaign: { id: r.campaign_id, name: r.campaign_name },
                 lead_status: r.lead_status ?? null,
                 payment_status: "Pending",
                 delivery_status: "Pending",
@@ -1928,7 +1971,7 @@ export default class LeadController extends BaseController {
                     su.name AS agent_name,
                     l.created_at,
                     l.updated_at,
-                    ls.name AS lead_source_name,
+                    ls.name AS lead_source_name, camp.name AS campaign_name, l.campaign_id,
                     
                     
                     l.note,
@@ -1938,6 +1981,7 @@ export default class LeadController extends BaseController {
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
                 LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
+                LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
                 
                 
                 LEFT JOIN LATERAL (
@@ -1967,6 +2011,9 @@ export default class LeadController extends BaseController {
                 best_time_to_call: raw.best_time_to_call ?? null,
                 lead_source: raw.lead_source_name ?? null,
                 lead_source_id: raw.lead_source_id ?? null,
+                campaign_id: raw.campaign_id ?? null,
+                campaign_name: raw.campaign_name ?? null,
+                campaign: { id: raw.campaign_id, name: raw.campaign_name },
                 lead_status: raw.lead_status ?? null,
                 payment_status: "Pending",
                 delivery_status: "Pending",
@@ -2020,7 +2067,7 @@ export default class LeadController extends BaseController {
                     l.lead_score, l.lead_quality, l.best_time_to_call,
                     l.agent_id, su.name AS agent_name,
                     l.created_at, l.updated_at,
-                    ls.name AS lead_source_name,
+                    ls.name AS lead_source_name, camp.name AS campaign_name, l.campaign_id,
                     
                     
                     l.whatsapp_number, l.note, l.lead_source_id, l.lead_status, l.currency,
@@ -2028,6 +2075,7 @@ export default class LeadController extends BaseController {
                 FROM public.leads l
                 LEFT JOIN public.system_users su ON su.id = l.agent_id
                 LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
+                LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
                 
                 
                 WHERE l.deleted_at IS NULL AND l.agent_id IS NULL
@@ -2051,6 +2099,9 @@ export default class LeadController extends BaseController {
                 best_time_to_call: r.best_time_to_call ?? null,
                 lead_source: r.lead_source_name ?? null,
                 lead_source_id: r.lead_source_id ?? null,
+                campaign_id: r.campaign_id ?? null,
+                campaign_name: r.campaign_name ?? null,
+                campaign: { id: r.campaign_id, name: r.campaign_name },
                 lead_status: r.lead_status ?? null,
                 payment_status: "Pending",
                 delivery_status: "Pending",

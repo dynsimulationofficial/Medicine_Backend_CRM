@@ -245,6 +245,9 @@ SystemuserRouter.post("/leads/admin/dashboard", requireAuth, adminDashboardContr
 SystemuserRouter.get("/leads/search/dashboard", requireAuth, agentDashboardController.searchLeadsForDashboard);
 
 /* -------------------- Reports & Analytics -------------------- */
+SystemuserRouter.post("/reports/kpi", requireAuth, reportController.getKpiAnalytics);
+SystemuserRouter.get("/reports/kpi", requireAuth, reportController.getKpiAnalytics);
+
 /* -------------------- Master Medicine Catalog -------------------- */
 SystemuserRouter.post("/medicines", requireAuth, masterMedicineController.createMedicine);
 SystemuserRouter.get("/medicines", requireAuth, masterMedicineController.getAllMedicines);
