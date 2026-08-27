@@ -524,11 +524,11 @@ export default class LeadTaskController extends BaseController {
     public softDeleteTask = async (req: Request, res: Response): Promise<void> => {
         const tx = await this.db_services.sequelizeWriter.transaction();
         try {
-            const schema = Yup.object({
-                id: Yup.string().uuid().required("id is required"),
-            });
-
-            const { id } = await schema.validate(req.body, { abortEarly: false });
+            const rawId = req.body?.id || req.body?.task_id;
+            if (!rawId) {
+                await tx.rollback();
+                return this.sendError(res, {}, "Task id is required", 400);
+            }
 
             const rows: any[] = await this.db_services.sequelizeWriter.query(
                 `UPDATE public.lead_tasks AS t
@@ -536,7 +536,7 @@ export default class LeadTaskController extends BaseController {
                      updated_at = NOW()
                  WHERE t.id = :id AND t.deleted_at IS NULL
                  RETURNING t.id, t.lead_id, t.deleted_at`,
-                { replacements: { id }, type: QueryTypes.SELECT, transaction: tx }
+                { replacements: { id: rawId }, type: QueryTypes.SELECT, transaction: tx }
             );
 
             if (!rows.length) {
@@ -544,18 +544,15 @@ export default class LeadTaskController extends BaseController {
                 return this.sendError(res, {}, "Task not found or already deleted.", 404);
             }
 
-            const adminUserId = (req as any)?.user?.system_user_id;
+            const adminUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id;
             if (adminUserId) {
-                /* User activity logged safely */
+                await this.logUserActivity(adminUserId, `Deleted task: ${rawId}`, "DELETE_TASK", tx);
             }
 
             await tx.commit();
             return this.sendSuccess(res, { count: 1, item: rows[0] }, "Task deleted successfully");
         } catch (err: any) {
             try { await tx.rollback(); } catch { }
-            if (err.name === "ValidationError") {
-                return this.sendError(res, {}, err.errors.join(", "), 400);
-            }
             console.error("Error in softDeleteTask:", err);
             return this.sendError(res, err, "Internal server error", 500);
         }
