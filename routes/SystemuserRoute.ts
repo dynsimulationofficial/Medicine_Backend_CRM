@@ -1,6 +1,8 @@
 import adminDashboardController from "../controllers/AdminDashboardController";
 import agentDashboardController from "../controllers/AgentDashboardController";
 import * as masterMedicineController from "../controllers/MasterMedicineController";
+import * as leadSourceController from "../controllers/LeadSourceController";
+import * as campaignController from "../controllers/CampaignController";
 import LeadOrderController from "../controllers/LeadOrderController";
 import LeadDocumentController from "../controllers/LeadDocumentController";
 import LeadTaskController from "../controllers/LeadTaskController";
@@ -243,13 +245,35 @@ SystemuserRouter.post("/leads/admin/dashboard", requireAuth, adminDashboardContr
 SystemuserRouter.get("/leads/search/dashboard", requireAuth, agentDashboardController.searchLeadsForDashboard);
 
 /* -------------------- Reports & Analytics -------------------- */
-SystemuserRouter.post("/reports/kpi", requireAuth, reportController.getKpiAnalytics);
-
-export default SystemuserRouter;
-
 /* -------------------- Master Medicine Catalog -------------------- */
 SystemuserRouter.post("/medicines", requireAuth, masterMedicineController.createMedicine);
 SystemuserRouter.get("/medicines", requireAuth, masterMedicineController.getAllMedicines);
 SystemuserRouter.get("/medicines/:id", requireAuth, masterMedicineController.getMedicineById);
 SystemuserRouter.put("/medicines/:id", requireAuth, masterMedicineController.updateMedicine);
 SystemuserRouter.delete("/medicines/:id", requireAuth, masterMedicineController.deleteMedicine);
+
+/* -------------------- Lead Sources -------------------- */
+SystemuserRouter.post("/lead-sources", requireAuth, leadSourceController.createLeadSource);
+SystemuserRouter.post("/lead-sources/create", requireAuth, leadSourceController.createLeadSource);
+SystemuserRouter.get("/lead-sources", requireAuth, leadSourceController.getAllLeadSources);
+SystemuserRouter.get("/lead-sources/search", requireAuth, leadSourceController.searchLeadSources);
+SystemuserRouter.get("/lead-sources/:id", requireAuth, leadSourceController.getLeadSourceById);
+SystemuserRouter.put("/lead-sources/:id", requireAuth, leadSourceController.updateLeadSource);
+SystemuserRouter.post("/lead-sources/edit", requireAuth, leadSourceController.updateLeadSource);
+SystemuserRouter.delete("/lead-sources/:id", requireAuth, leadSourceController.deleteLeadSource);
+SystemuserRouter.post("/lead-sources/delete", requireAuth, leadSourceController.deleteLeadSource);
+
+/* -------------------- Campaigns -------------------- */
+SystemuserRouter.post("/campaigns", requireAuth, campaignController.createCampaign);
+SystemuserRouter.post("/campaigns/create", requireAuth, campaignController.createCampaign);
+SystemuserRouter.get("/campaigns", requireAuth, campaignController.getAllCampaigns);
+SystemuserRouter.get("/campaigns/search", requireAuth, campaignController.searchCampaigns);
+SystemuserRouter.get("/campaigns/by-source", requireAuth, campaignController.getCampaignsBySource);
+SystemuserRouter.get("/campaigns/:id", requireAuth, campaignController.getCampaignById);
+SystemuserRouter.put("/campaigns/:id", requireAuth, campaignController.updateCampaign);
+SystemuserRouter.post("/campaigns/edit", requireAuth, campaignController.updateCampaign);
+SystemuserRouter.delete("/campaigns/:id", requireAuth, campaignController.deleteCampaign);
+SystemuserRouter.post("/campaigns/delete", requireAuth, campaignController.deleteCampaign);
+
+export default SystemuserRouter;
+
