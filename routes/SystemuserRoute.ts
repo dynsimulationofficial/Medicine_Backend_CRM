@@ -13,6 +13,7 @@ import UserActivityController from "../controllers/UserActivityController";
 import LeadController from "../controllers/LeadController";
 import UserManagementController from "../controllers/UserManagementController";
 import reportController from "../controllers/ReportController";
+import trackingController from "../controllers/TrackingController";
 import { uploadFile } from "../multerconfig";
 import { requireAuth } from "../middleware/auth";
 import { randomUUID } from 'crypto';
@@ -277,6 +278,11 @@ SystemuserRouter.put("/campaigns/:id", requireAuth, campaignController.updateCam
 SystemuserRouter.post("/campaigns/edit", requireAuth, campaignController.updateCampaign);
 SystemuserRouter.delete("/campaigns/:id", requireAuth, campaignController.deleteCampaign);
 SystemuserRouter.post("/campaigns/delete", requireAuth, campaignController.deleteCampaign);
+
+/* -------------------- Courier / Parcel Tracking (On-Demand) -------------------- */
+SystemuserRouter.post("/tracking/sync", requireAuth, trackingController.syncTracking);
+SystemuserRouter.post("/tracking/history", requireAuth, trackingController.getTrackingHistory);
+SystemuserRouter.get("/tracking/history/:order_id", requireAuth, trackingController.getTrackingHistory);
 
 export default SystemuserRouter;
 

@@ -262,6 +262,27 @@ async function ensureMedicineColumns(sequelize: Sequelize) {
   `);
 }
 
+async function ensureTrackingLogsTable(sequelize: Sequelize) {
+  await sequelize.query(`
+    CREATE TABLE IF NOT EXISTS public.order_tracking_logs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      order_id UUID NOT NULL REFERENCES public.lead_orders(id) ON DELETE CASCADE,
+      tracking_number VARCHAR(100) NOT NULL,
+      courier_name VARCHAR(100) NULL,
+      status VARCHAR(50) NOT NULL DEFAULT 'In_Transit',
+      sub_status VARCHAR(100) NULL,
+      location VARCHAR(255) NULL,
+      details TEXT NULL,
+      checkpoint_time TIMESTAMP WITH TIME ZONE NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tracking_order_id ON public.order_tracking_logs(order_id);
+    CREATE INDEX IF NOT EXISTS idx_tracking_number ON public.order_tracking_logs(tracking_number);
+  `);
+}
+
 export async function syncDatabase(sequelize: Sequelize) {
   try {
     console.log("🔄 Syncing database...");
@@ -275,6 +296,7 @@ export async function syncDatabase(sequelize: Sequelize) {
     // 3) Ensure new columns/index/FK exist for system_users and leads
     await ensureSystemUsersBlockColumns(sequelize);
     await ensureMedicineColumns(sequelize);
+    await ensureTrackingLogsTable(sequelize);
 
     console.log("✅ Tables are in sync");
 

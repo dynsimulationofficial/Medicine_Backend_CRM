@@ -30,6 +30,7 @@ import { initLeadBulkDocumentModel } from "./LeadBulkDocument";
 import { initLeadMedicineModel } from "./LeadMedicine";
 import { initLeadOrderModel } from "./LeadOrder";
 import { initLeadOrderItemModel } from "./LeadOrderItem";
+import { initOrderTrackingLogModel } from "./OrderTrackingLog";
 
 const dbService = new DBServices();
 const sequelize: Sequelize = dbService.sequelizeWriter;
@@ -53,6 +54,7 @@ const LeadDocument = initLeadDocumentModel(sequelize);
 const LeadMedicine = initLeadMedicineModel(sequelize);
 const LeadOrder = initLeadOrderModel(sequelize);
 const LeadOrderItem = initLeadOrderItemModel(sequelize);
+const OrderTrackingLog = initOrderTrackingLogModel(sequelize);
 
 const WebPushToken = initWebPushTokenModel(sequelize);
 const WebPushNotification = initWebPushNotificationModel(sequelize);
@@ -319,6 +321,7 @@ const db = {
   LeadMedicine,
   LeadOrder,
   LeadOrderItem,
+  OrderTrackingLog,
 };
 
 export default db;
@@ -341,6 +344,7 @@ export {
   LeadMedicine,
   LeadOrder,
   LeadOrderItem,
+  OrderTrackingLog,
   LeadSource,
   LeadDebtStatus,
   UserLogin,
