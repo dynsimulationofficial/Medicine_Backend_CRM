@@ -33,7 +33,8 @@ export default class LeadOrderController extends BaseController {
         const transaction = await this.db_services.sequelizeWriter.transaction();
         try {
             const schema = Yup.object({
-                id: Yup.string().uuid().optional(),
+                id: Yup.string().uuid().nullable().optional(),
+                order_id: Yup.string().uuid().nullable().optional(),
                 lead_id: Yup.string().uuid().required("lead_id is required"),
                 payment_status: Yup.string().default("Pending"),
                 payment_mode: Yup.string().default("COD"),
@@ -53,7 +54,8 @@ export default class LeadOrderController extends BaseController {
             });
 
             const body = await schema.validate(req.body, { abortEarly: false });
-            const { id: existingOrderId, lead_id, payment_status, payment_mode, order_status, order_notes, courier_name, tracking_number, items } = body;
+            const existingOrderId = body.id || body.order_id || null;
+            const { lead_id, payment_status, payment_mode, order_status, order_notes, courier_name, tracking_number, items } = body;
 
             // Verify lead exists
             const [leadRow]: any[] = await this.db_services.sequelizeWriter.query(
@@ -312,17 +314,23 @@ export default class LeadOrderController extends BaseController {
         const transaction = await this.db_services.sequelizeWriter.transaction();
         try {
             const schema = Yup.object({
-                id: Yup.string().uuid().required("id is required"),
-                lead_id: Yup.string().uuid().required("lead_id is required"),
+                id: Yup.string().uuid().nullable().optional(),
+                order_id: Yup.string().uuid().nullable().optional(),
+                lead_id: Yup.string().uuid().nullable().optional(),
             });
-            const { id, lead_id } = await schema.validate(req.body, { abortEarly: false });
+            const body = await schema.validate(req.body, { abortEarly: false });
+            const targetId = body.id || body.order_id;
+            if (!targetId) {
+                await transaction.rollback();
+                return this.sendError(res, {}, "Order id is required", 400);
+            }
 
             const [orderRow]: any[] = await this.db_services.sequelizeWriter.query(
                 `UPDATE public.lead_orders
                      SET deleted_at = NOW(), updated_at = NOW()
-                   WHERE id = :id AND lead_id = :lead_id AND deleted_at IS NULL
-                   RETURNING id, order_number`,
-                { replacements: { id, lead_id }, type: QueryTypes.SELECT, transaction }
+                   WHERE id = :targetId AND deleted_at IS NULL
+                   RETURNING id, order_number, lead_id`,
+                { replacements: { targetId }, type: QueryTypes.SELECT, transaction }
             );
 
             if (!orderRow) {
@@ -333,8 +341,8 @@ export default class LeadOrderController extends BaseController {
             await this.db_services.sequelizeWriter.query(
                 `UPDATE public.lead_order_items
                      SET deleted_at = NOW(), updated_at = NOW()
-                   WHERE order_id = :id`,
-                { replacements: { id }, type: QueryTypes.UPDATE, transaction }
+                   WHERE order_id = :targetId AND deleted_at IS NULL`,
+                { replacements: { targetId }, type: QueryTypes.UPDATE, transaction }
             );
 
             await transaction.commit();
@@ -358,8 +366,9 @@ export default class LeadOrderController extends BaseController {
     public updateLeadOrderStatus = async (req: Request, res: Response): Promise<void> => {
         try {
             const schema = Yup.object({
-                id: Yup.string().uuid().required("id is required"),
-                lead_id: Yup.string().uuid().required("lead_id is required"),
+                id: Yup.string().uuid().nullable().optional(),
+                order_id: Yup.string().uuid().nullable().optional(),
+                lead_id: Yup.string().uuid().nullable().optional(),
                 order_status: Yup.string().optional(),
                 payment_status: Yup.string().optional(),
                 payment_mode: Yup.string().optional(),
@@ -368,7 +377,12 @@ export default class LeadOrderController extends BaseController {
                 tracking_number: Yup.string().nullable().optional(),
             });
             const body = await schema.validate(req.body, { abortEarly: false });
-            const { id, lead_id, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number } = body;
+            const targetId = body.id || body.order_id;
+            if (!targetId) {
+                return this.sendError(res, {}, "Order id is required", 400);
+            }
+
+            const { lead_id, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number } = body;
 
             const [updatedOrder]: any[] = await this.db_services.sequelizeWriter.query(
                 `UPDATE public.lead_orders
@@ -379,12 +393,11 @@ export default class LeadOrderController extends BaseController {
                          courier_name = COALESCE(:courier_name, courier_name),
                          tracking_number = COALESCE(:tracking_number, tracking_number),
                          updated_at = NOW()
-                   WHERE id = :id AND lead_id = :lead_id AND deleted_at IS NULL
-                   RETURNING id, order_number, order_status, payment_status, payment_mode, grand_total`,
+                   WHERE id = :targetId AND deleted_at IS NULL
+                   RETURNING id, lead_id, order_number, order_status, payment_status, payment_mode, grand_total`,
                 {
                     replacements: {
-                        id,
-                        lead_id,
+                        targetId,
                         order_status: order_status || null,
                         payment_status: payment_status || null,
                         payment_mode: payment_mode || null,
@@ -400,15 +413,16 @@ export default class LeadOrderController extends BaseController {
                 return this.sendError(res, {}, "Order not found", 404);
             }
 
+            const resolvedLeadId = lead_id || updatedOrder.lead_id;
             const isConverted = ["Confirmed", "Shipped", "Delivered"].includes(updatedOrder.order_status) || updatedOrder.payment_status === "Paid";
-            if (isConverted) {
+            if (isConverted && resolvedLeadId) {
                 await this.db_services.sequelizeWriter.query(
                     `UPDATE public.leads
                      SET lead_status = 'Converted',
                          updated_at = NOW()
-                     WHERE id = :lead_id AND deleted_at IS NULL`,
+                     WHERE id = :resolvedLeadId AND deleted_at IS NULL`,
                     {
-                        replacements: { lead_id },
+                        replacements: { resolvedLeadId },
                         type: QueryTypes.UPDATE,
                     }
                 );
@@ -528,16 +542,16 @@ export default class LeadOrderController extends BaseController {
         try {
             const schema = Yup.object({
                 id: Yup.string().uuid().required("id is required"),
-                lead_id: Yup.string().uuid().required("lead_id is required"),
+                lead_id: Yup.string().uuid().nullable().optional(),
             });
-            const { id, lead_id } = await schema.validate(req.body, { abortEarly: false });
+            const { id } = await schema.validate(req.body, { abortEarly: false });
 
             const rows: any[] = await this.db_services.sequelizeWriter.query(
                 `UPDATE public.lead_medicines
                      SET deleted_at = NOW(), updated_at = NOW()
-                   WHERE id = :id AND lead_id = :lead_id AND deleted_at IS NULL
+                   WHERE id = :id AND deleted_at IS NULL
                    RETURNING id, lead_id, medicine_name`,
-                { replacements: { id, lead_id }, type: QueryTypes.SELECT }
+                { replacements: { id }, type: QueryTypes.SELECT }
             );
 
             if (!rows.length) return this.sendError(res, {}, "Medicine item not found", 404);
