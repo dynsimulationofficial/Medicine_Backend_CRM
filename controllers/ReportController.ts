@@ -167,12 +167,10 @@ export class ReportController extends BaseController {
         percentage: totalOrders > 0 ? Number(((Number(item.count) / totalOrders) * 100).toFixed(1)) : 0,
       }));
 
-      // 5. Lead Source & Campaign Percentage Distribution Breakdown
-      const sourceCampaignRows: any[] = await this.db_services.sequelizeWriter.query(
+      // 5. Campaign & Lead Source Ranking Breakdown (Simple & Direct)
+      const campaignRankingRows: any[] = await this.db_services.sequelizeWriter.query(
         `SELECT
-            COALESCE(ls.id::text, 'unspecified') AS source_id,
             COALESCE(ls.name, 'Direct / Unknown') AS source_name,
-            COALESCE(c.id::text, 'no_campaign') AS campaign_id,
             COALESCE(c.name, 'No Campaign / Direct') AS campaign_name,
             COUNT(l.id) AS leads_count,
             COUNT(CASE WHEN l.lead_status = 'Converted' OR ord_conv.has_order = 1 THEN 1 END) AS converted_count
@@ -188,119 +186,23 @@ export class ReportController extends BaseController {
          WHERE l.deleted_at IS NULL
            AND l.created_at >= :fromDate AND l.created_at <= :toDate
            ${agentFilterLeads}
-         GROUP BY ls.id, ls.name, c.id, c.name
-         ORDER BY ls.name ASC, leads_count DESC`,
+         GROUP BY ls.name, c.name
+         ORDER BY leads_count DESC`,
         { replacements, type: QueryTypes.SELECT }
       );
 
-      // Group rows by Lead Source
-      const sourceMap: Record<string, {
-        source_id: string;
-        source_name: string;
-        leads_count: number;
-        converted_count: number;
-        campaigns: Array<{
-          campaign_id: string;
-          campaign_name: string;
-          leads_count: number;
-          converted_count: number;
-        }>;
-      }> = {};
-
-      for (const row of sourceCampaignRows) {
-        const sKey = row.source_name;
-        if (!sourceMap[sKey]) {
-          sourceMap[sKey] = {
-            source_id: row.source_id,
-            source_name: row.source_name,
-            leads_count: 0,
-            converted_count: 0,
-            campaigns: [],
-          };
-        }
-        const lCount = Number(row.leads_count || 0);
-        const cCount = Number(row.converted_count || 0);
-        sourceMap[sKey].leads_count += lCount;
-        sourceMap[sKey].converted_count += cCount;
-        sourceMap[sKey].campaigns.push({
-          campaign_id: row.campaign_id,
+      const campaignRanking = campaignRankingRows.map((row) => {
+        const leads = Number(row.leads_count || 0);
+        const converted = Number(row.converted_count || 0);
+        return {
+          source_name: row.source_name,
           campaign_name: row.campaign_name,
-          leads_count: lCount,
-          converted_count: cCount,
-        });
-      }
-
-      // Format Source & Campaign Distribution with Percentages
-      const formattedSourceBreakdown = Object.values(sourceMap)
-        .map((src) => {
-          const sLeads = src.leads_count;
-          const sConverted = src.converted_count;
-          const sourcePercentage = totalLeads > 0 ? Number(((sLeads / totalLeads) * 100).toFixed(1)) : 0;
-          const sourceConvRate = sLeads > 0 ? Number(((sConverted / sLeads) * 100).toFixed(1)) : 0;
-
-          const formattedCampaigns = src.campaigns
-            .map((cmp) => {
-              const cmpLeads = cmp.leads_count;
-              const cmpConverted = cmp.converted_count;
-              const cmpSourcePct = sLeads > 0 ? Number(((cmpLeads / sLeads) * 100).toFixed(1)) : 0;
-              const cmpTotalPct = totalLeads > 0 ? Number(((cmpLeads / totalLeads) * 100).toFixed(1)) : 0;
-              const cmpConvRate = cmpLeads > 0 ? Number(((cmpConverted / cmpLeads) * 100).toFixed(1)) : 0;
-
-              return {
-                campaign_id: cmp.campaign_id,
-                campaign_name: cmp.campaign_name,
-                leads_count: cmpLeads,
-                converted_count: cmpConverted,
-                source_percentage: cmpSourcePct, // % within this source
-                total_percentage: cmpTotalPct,   // % of all CRM leads
-                conversion_rate: cmpConvRate,
-              };
-            })
-            .sort((a, b) => b.leads_count - a.leads_count);
-
-          return {
-            source_id: src.source_id,
-            source_name: src.source_name,
-            leads_count: sLeads,
-            converted_count: sConverted,
-            percentage: sourcePercentage, // % of all CRM leads
-            conversion_rate: sourceConvRate,
-            campaigns: formattedCampaigns,
-          };
-        })
-        .sort((a, b) => b.leads_count - a.leads_count);
-
-      // Generate Direct Campaign Ranking List sorted by highest Leads Count & %
-      const allCampaignsFlat: Array<{
-        campaign_id: string;
-        campaign_name: string;
-        source_name: string;
-        leads_count: number;
-        converted_count: number;
-        percentage: number;
-        conversion_rate: number;
-      }> = [];
-
-      for (const src of formattedSourceBreakdown) {
-        for (const cmp of src.campaigns) {
-          allCampaignsFlat.push({
-            campaign_id: cmp.campaign_id,
-            campaign_name: cmp.campaign_name,
-            source_name: src.source_name,
-            leads_count: cmp.leads_count,
-            converted_count: cmp.converted_count,
-            percentage: cmp.total_percentage, // % of all CRM leads
-            conversion_rate: cmp.conversion_rate,
-          });
-        }
-      }
-
-      const campaignRanking = allCampaignsFlat
-        .sort((a, b) => b.leads_count - a.leads_count)
-        .map((item, idx) => ({
-          rank: idx + 1,
-          ...item,
-        }));
+          leads_count: leads,
+          converted_count: converted,
+          percentage: totalLeads > 0 ? Number(((leads / totalLeads) * 100).toFixed(1)) : 0,
+          conversion_rate: leads > 0 ? Number(((converted / leads) * 100).toFixed(1)) : 0,
+        };
+      });
 
       // 6. Agent Performance Leaderboard
       const agentLeaderboard: any[] = await this.db_services.sequelizeWriter.query(
@@ -437,7 +339,6 @@ export class ReportController extends BaseController {
         },
         status_breakdown: formattedStatusBreakdown,
         payment_breakdown: formattedPaymentBreakdown,
-        source_breakdown: formattedSourceBreakdown,
         campaign_ranking: campaignRanking,
         agent_leaderboard: formattedLeaderboard,
         recent_orders: recentOrders,
