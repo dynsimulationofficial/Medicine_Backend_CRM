@@ -77,7 +77,10 @@ const LeadDebtStatus = initLeadDebtStatusModel(sequelize);
    2. Define Associations
 ========================================================================= */
 
-// Role ↔ Permission (Many-to-Many)
+/* -------------------------------------------------------------------------
+   A. ROLES & PERMISSIONS ASSOCIATIONS (START)
+------------------------------------------------------------------------- */
+// Role ↔ Permission (Many-to-Many via role_permissions)
 Role.belongsToMany(Permission, {
   through: RolePermission,
   foreignKey: { name: "role_id", allowNull: false },
@@ -95,7 +98,7 @@ Permission.belongsToMany(Role, {
   onUpdate: "CASCADE",
 });
 
-// SystemUser ↔ Role (Many-to-Many via user_role)
+// SystemUser ↔ Role (Many-to-Many via user_roles)
 SystemUser.belongsToMany(Role, {
   through: UserRole,
   foreignKey: { name: "system_user_id", allowNull: false },
@@ -112,7 +115,12 @@ Role.belongsToMany(SystemUser, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+/* -------------------- END ROLES & PERMISSIONS ----------------------------- */
 
+
+/* -------------------------------------------------------------------------
+   B. SYSTEM USER & AUTH ASSOCIATIONS (START)
+------------------------------------------------------------------------- */
 // SystemUser ↔ UserOtp
 SystemUser.hasMany(UserOtp, {
   foreignKey: { name: "system_user_id", allowNull: false },
@@ -141,7 +149,26 @@ SystemUserActivity.belongsTo(SystemUser, {
   onUpdate: "CASCADE",
 });
 
-// Lead ↔ Agent (SystemUser)
+// SystemUser ↔ UserLogin
+SystemUser.hasMany(UserLogin, {
+  foreignKey: { name: "system_user_id", allowNull: false },
+  as: "loginOtps",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+UserLogin.belongsTo(SystemUser, {
+  foreignKey: { name: "system_user_id", allowNull: false },
+  as: "user",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+/* -------------------- END SYSTEM USER & AUTH ------------------------------ */
+
+
+/* -------------------------------------------------------------------------
+   C. LEADS ASSOCIATIONS (START)
+------------------------------------------------------------------------- */
+// 1. Lead ↔ Agent (SystemUser)
 Lead.belongsTo(SystemUser, {
   foreignKey: { name: "agent_id", allowNull: true },
   as: "agent",
@@ -155,7 +182,7 @@ SystemUser.hasMany(Lead, {
   onUpdate: "CASCADE",
 });
 
-// Lead ↔ LeadSource
+// 2. Lead ↔ Marketing Source (LeadSource)
 Lead.belongsTo(LeadSource, {
   foreignKey: { name: "lead_source_id", allowNull: true },
   as: "leadSource",
@@ -169,7 +196,7 @@ LeadSource.hasMany(Lead, {
   onUpdate: "CASCADE",
 });
 
-// Lead ↔ LeadOrders
+// 3. Lead ↔ Orders (LeadOrder)
 Lead.hasMany(LeadOrder, {
   foreignKey: { name: "lead_id", allowNull: false },
   as: "orders",
@@ -183,6 +210,53 @@ LeadOrder.belongsTo(Lead, {
   onUpdate: "CASCADE",
 });
 
+// 4. Lead ↔ Call & Activity Logs (LeadActivityHistory)
+Lead.hasMany(LeadActivityHistory, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "activities",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+LeadActivityHistory.belongsTo(Lead, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "lead",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+// 5. Lead ↔ Follow-up Tasks (LeadTask)
+Lead.hasMany(LeadTask, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "tasks",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+LeadTask.belongsTo(Lead, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "lead",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+// 6. Lead ↔ Prescription & Documents (LeadDocument)
+Lead.hasMany(LeadDocument, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "documents",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+LeadDocument.belongsTo(Lead, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "lead",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+/* -------------------- END LEADS ASSOCIATIONS ------------------------------ */
+
+
+/* -------------------------------------------------------------------------
+   D. MEDICINE ORDERS & ITEMS ASSOCIATIONS (START)
+------------------------------------------------------------------------- */
 // LeadOrder ↔ LeadOrderItem
 LeadOrder.hasMany(LeadOrderItem, {
   foreignKey: { name: "order_id", allowNull: false },
@@ -196,20 +270,13 @@ LeadOrderItem.belongsTo(LeadOrder, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+/* -------------------- END MEDICINE ORDERS & ITEMS ------------------------- */
 
-// Lead Activity History
-LeadActivityHistory.belongsTo(Lead, {
-  foreignKey: { name: "lead_id", allowNull: false },
-  as: "lead",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
-Lead.hasMany(LeadActivityHistory, {
-  foreignKey: { name: "lead_id", allowNull: false },
-  as: "activities",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
+
+/* -------------------------------------------------------------------------
+   E. TASKS, ACTIVITIES & AGENT ASSIGNMENTS (START)
+------------------------------------------------------------------------- */
+// Activity Agent
 LeadActivityHistory.belongsTo(SystemUser, {
   foreignKey: { name: "agent_id", allowNull: true },
   as: "agent",
@@ -222,6 +289,8 @@ SystemUser.hasMany(LeadActivityHistory, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
+
+// Activity Disposition
 LeadActivityHistory.belongsTo(LeadDisposition, {
   foreignKey: { name: "disposition_id", allowNull: false },
   as: "disposition",
@@ -235,19 +304,7 @@ LeadDisposition.hasMany(LeadActivityHistory, {
   onUpdate: "CASCADE",
 });
 
-// Lead Tasks
-LeadTask.belongsTo(Lead, {
-  foreignKey: { name: "lead_id", allowNull: false },
-  as: "lead",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
-Lead.hasMany(LeadTask, {
-  foreignKey: { name: "lead_id", allowNull: false },
-  as: "tasks",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
+// Task Agent
 LeadTask.belongsTo(SystemUser, {
   foreignKey: { name: "assigned_agent_id", allowNull: false },
   as: "assignedAgent",
@@ -261,19 +318,7 @@ SystemUser.hasMany(LeadTask, {
   onUpdate: "CASCADE",
 });
 
-// Lead Documents
-LeadDocument.belongsTo(Lead, {
-  foreignKey: { name: "lead_id", allowNull: false },
-  as: "lead",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
-Lead.hasMany(LeadDocument, {
-  foreignKey: { name: "lead_id", allowNull: false },
-  as: "documents",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
+// Document Uploader
 LeadDocument.belongsTo(SystemUser, {
   foreignKey: { name: "uploaded_by", allowNull: true },
   as: "uploader",
@@ -286,20 +331,7 @@ SystemUser.hasMany(LeadDocument, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
-
-// OTP / Logins
-SystemUser.hasMany(UserLogin, {
-  foreignKey: { name: "system_user_id", allowNull: false },
-  as: "loginOtps",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
-UserLogin.belongsTo(SystemUser, {
-  foreignKey: { name: "system_user_id", allowNull: false },
-  as: "user",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
+/* -------------------- END TASKS, ACTIVITIES & UPLOADS --------------------- */
 
 /* =========================================================================
    3. Centralized Exports
