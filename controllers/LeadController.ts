@@ -464,6 +464,24 @@ export const assignLeadToAgent = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "Lead not found" });
     }
 
+    // In-App Notification to Agent (Bell Icon)
+    try {
+      await db.sequelize.query(
+        `INSERT INTO public.assigned_lead_notifications (id, user_id, lead_id, title, body, is_read, created_at, updated_at)
+         VALUES (:id, :userId, :leadId, :title, :body, false, NOW(), NOW())`,
+        {
+          replacements: {
+            id: uuidv4(),
+            userId: agent_id,
+            leadId: lead_id,
+            title: "New Lead Assigned",
+            body: `Lead ${result[0].full_name || result[0].lead_number || ""} has been assigned to you.`,
+          },
+          type: QueryTypes.INSERT,
+        }
+      );
+    } catch {}
+
     return res.status(200).json({ success: true, data: result[0], message: "Lead assigned successfully" });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -482,6 +500,24 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
       `UPDATE public.leads SET agent_id = :agent_id, updated_at = NOW() WHERE id = ANY(ARRAY[:lead_ids]::uuid[]) AND deleted_at IS NULL`,
       { replacements: { lead_ids, agent_id }, type: QueryTypes.UPDATE }
     );
+
+    // In-App Notification to Agent (Bell Icon)
+    try {
+      await db.sequelize.query(
+        `INSERT INTO public.assigned_lead_notifications (id, user_id, lead_id, title, body, is_read, created_at, updated_at)
+         VALUES (:id, :userId, :leadId, :title, :body, false, NOW(), NOW())`,
+        {
+          replacements: {
+            id: uuidv4(),
+            userId: agent_id,
+            leadId: lead_ids[0],
+            title: "Bulk Leads Assigned",
+            body: `${lead_ids.length} new leads have been assigned to you.`,
+          },
+          type: QueryTypes.INSERT,
+        }
+      );
+    } catch {}
 
     return res.status(200).json({ success: true, message: `${lead_ids.length} leads assigned successfully` });
   } catch (error: any) {

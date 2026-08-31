@@ -7,8 +7,6 @@ import {
   RolePermission,
   LeadDisposition,
   LeadSource,
-  LeadDebtStatus,
-  ConsolidatedCreditStatus,
 } from "../models";
 
 /**
@@ -139,83 +137,6 @@ export async function seedInitialData() {
 
     await LeadSource.bulkCreate(leadSources, { ignoreDuplicates: true });
     console.log("✅ Lead Sources seeded");
-
-    // --- LEAD DEBT STATUSES ---
-    const LEAD_DEBT_STATUS_IDS = {
-      FRESH_LEAD: "8c0fa0d5-7df6-47fe-a35b-341d3338e43d",
-      LIVE_LEAD: "3f1a9c2d-4b7e-45a1-b2c3-9d8f0a1b2c3d",
-      NO_CONNECT: "bfbac94b-2495-458b-8979-909f5ee67b07",
-      TASK_LEAD: "e87034f1-020b-4444-baf6-b953561d8452",
-      NURTURE: "00beda01-d273-4a5d-97fc-99a7aa8d5bdf",
-      CNQ_LOW_DEBTS: "2171d768-6de3-4a6b-9587-b517d8f054d6",
-      CNQ_NO_DEBTS: "ed4fd108-e1de-4877-ae9f-df373b4cb6a2",
-      NOT_INTERESTED: "d592c368-e2f6-4aff-8449-8b4a61d75800",
-      AGREEMENT_SENT: "632485d5-2143-4386-8608-5102803b5284",
-      SIGNED_AGREEMENT_RECEIVED: "dd8fa82a-837a-48ce-8751-a338f8676189",
-      DOCUMENTS_PENDING: "f3eb2efc-c379-4039-982e-3c974d138cf2",
-      DOCUMENTS_RECEIVED: "c021cd9c-96a9-4ccd-8931-dfa3409b34a6",
-      PARTIAL_FEE_PAID: "6f556004-6a98-4168-a891-faf754210144",
-      FULL_FEE_PAID: "f0618d10-6b66-49c8-8b19-2cbac5c4371d",
-      PAD_SET: "5740a9a1-1cbb-40fc-bbf2-5d06e6202a2e",
-      ADMIN_FEE_PENDING: "87b4d1ec-1930-454a-8a7a-cf7fd98ec4bb",
-      NSF: "5f59b754-4fbc-4889-9401-3bb1903fb3cc",
-      REFUND: "0839dbe6-587b-43b1-befb-b7a01a178b1c",
-      WRONG_NUMBER: "ba365dbb-78b8-4c6a-a4b1-5f995514b3aa",
-      CANCELLED_BTM: "ba365dbb-78b8-4c6a-a4b1-5f995514b3cd",
-      CANCELLED_ATM: "ba365dbb-78b8-4c6a-a4b1-5f995514b3cb",
-      CNQ_BK_CP: "e21f6f49-3b2d-4d9f-91c4-7a0e2a6b9e5f",
-      DNC: "44aa658d-c384-4ca3-bd2c-667892ada66a",
-      COMPLAINT_SENSITIVE: "f418aa6b-3dbb-42ee-81ad-86549331b711",
-      AWAITING_DOCS: "22fd1078-7631-42cb-a0f6-4a60f53b662a",
-      FINALIZATION_PENDING: "0662e0e2-a9ac-43ab-840d-11b075c87e8e",
-      FINALIZED_AND_SENT: "786c1dad-bf3d-49fd-a7b5-8d4c374084b0",
-      TRANSFERRED_TO_C3: "5de4a732-9419-49c2-8731-5f4f56cd7e94",
-    } as const;
-
-    const leadDebtStatuses = [
-      { id: LEAD_DEBT_STATUS_IDS.FRESH_LEAD, name: "1. New Lead", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.LIVE_LEAD, name: "2. Contacted / In Discussion", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.AGREEMENT_SENT, name: "3. Prescription / Quote Shared", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.ADMIN_FEE_PENDING, name: "4. Payment Pending", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.FULL_FEE_PAID, name: "5. Order Placed / Paid", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.FINALIZED_AND_SENT, name: "6. Dispatched / In Transit", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.DOCUMENTS_RECEIVED, name: "7. Delivered / Deal Closed", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.TASK_LEAD, name: "8. Refill / Repeat Order Due", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.NOT_INTERESTED, name: "Not Interested", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.WRONG_NUMBER, name: "Wrong Number", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.CANCELLED_BTM, name: "Cancelled Order", is_active: true },
-      { id: LEAD_DEBT_STATUS_IDS.DNC, name: "DNC (Do Not Call)", is_active: true },
-    ];
-
-    for (const status of leadDebtStatuses) {
-      await LeadDebtStatus.upsert(status);
-    }
-    console.log("✅ Medicine Order Pipeline Statuses seeded");
-
-    // --- CONSOLIDATED CREDIT STATUSES (Medicine Order Categories) ---
-    const CONSOLIDATED_STATUS_IDS = {
-      CONVERTED_DMP: "9aa5f29b-b689-4e76-9e2d-63b0e5fa8d0f",
-      CONVERTED_HEW: "af8c13e5-0c4e-47d8-a6ef-7cf6db87c5c1",
-      DUPLICATE_DMP: "fd3b2e13-03a4-41ab-b231-6b3a8d8b49e3",
-      DUPLICATE_HEW: "38a0e13d-09e2-48bb-a6f4-849a31b0d457",
-      CBO_DMP: "f24b8b38-17e3-4d6d-8fa7-9a48f2e9e7f2",
-      CBO_HEW: "5e0a8d91-72c5-45aa-94d2-3f540e62f19e",
-      IN_PROCESS_DMP: "b08bdf7a-f3de-4d63-a351-f4dbcb487c8a",
-      IN_PROCESS_HEW: "28a1fdb3-5861-4d5d-bb84-0c4c2fa3a511",
-    } as const;
-
-    const consolidatedStatuses = [
-      { id: CONSOLIDATED_STATUS_IDS.CONVERTED_DMP, name: "Domestic Order (India 🇮🇳)" },
-      { id: CONSOLIDATED_STATUS_IDS.CONVERTED_HEW, name: "Export Order (USA 🇺🇸)" },
-      { id: CONSOLIDATED_STATUS_IDS.IN_PROCESS_DMP, name: "Export Order (UK 🇬🇧)" },
-      { id: CONSOLIDATED_STATUS_IDS.IN_PROCESS_HEW, name: "Repeat / Refill Order" },
-      { id: CONSOLIDATED_STATUS_IDS.DUPLICATE_DMP, name: "Duplicate Lead" },
-      { id: CONSOLIDATED_STATUS_IDS.CBO_DMP, name: "Cancelled by Operations" },
-    ];
-    for (const status of consolidatedStatuses) {
-      await ConsolidatedCreditStatus.upsert(status);
-    }
-    console.log("✅ Medicine Order Categories seeded");
 
     // --- ROLE PERMISSIONS ---
     const rolePermissions: { role_id: string; permission_id: string }[] = [];
