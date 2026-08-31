@@ -130,7 +130,6 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
     const dataResult: any[] = await db.sequelize.query(
       `SELECT
          l.*,
-         ls.name AS lead_source,
          ls.name AS lead_source_name,
          camp.name AS campaign_name
        FROM public.leads l
@@ -177,9 +176,7 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
     const dataResult: any[] = await db.sequelize.query(
       `SELECT
          l.*,
-         su.name AS owner_name,
          su.name AS agent_name,
-         ls.name AS lead_source,
          ls.name AS lead_source_name,
          camp.name AS campaign_name
        FROM public.leads l
@@ -213,9 +210,7 @@ export const getLead = async (req: Request, res: Response) => {
     const result: any[] = await db.sequelize.query(
       `SELECT
          l.*,
-         su.name AS owner_name,
          su.name AS agent_name,
-         ls.name AS lead_source,
          ls.name AS lead_source_name,
          camp.name AS campaign_name
        FROM public.leads l
@@ -469,9 +464,7 @@ export const searchLeads = async (req: Request, res: Response) => {
     const dataResult: any[] = await db.sequelize.query(
       `SELECT
          l.*,
-         su.name AS owner_name,
          su.name AS agent_name,
-         ls.name AS lead_source,
          ls.name AS lead_source_name,
          camp.name AS campaign_name
        FROM public.leads l
