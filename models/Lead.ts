@@ -18,6 +18,7 @@ export interface LeadAttributes {
   agent_id?: string | null;
   whatsapp_number?: string | null;
   lead_source_id?: string | null;
+  campaign_id?: string | null;
   note?: string | null;
   lead_status?: string | null;
   currency?: string | null;
@@ -42,6 +43,7 @@ export type LeadCreationAttributes = Optional<
   | "agent_id"
   | "whatsapp_number"
   | "lead_source_id"
+  | "campaign_id"
   | "note"
   | "lead_status"
   | "currency"
@@ -72,6 +74,7 @@ export const initLeadModel = (sequelize: Sequelize) => {
     public agent_id!: string | null;
     public whatsapp_number!: string | null;
     public lead_source_id!: string | null;
+    public campaign_id!: string | null;
     public note!: string | null;
     public lead_status!: string | null;
     public currency!: string | null;
@@ -114,6 +117,7 @@ export const initLeadModel = (sequelize: Sequelize) => {
       agent_id: { type: DataTypes.UUID, allowNull: true },
       whatsapp_number: { type: DataTypes.STRING(30), allowNull: true },
       lead_source_id: { type: DataTypes.UUID, allowNull: true },
+      campaign_id: { type: DataTypes.UUID, allowNull: true },
       note: { type: DataTypes.TEXT, allowNull: true },
       lead_status: {
         type: DataTypes.STRING(50),
