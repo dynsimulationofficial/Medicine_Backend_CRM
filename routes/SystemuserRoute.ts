@@ -53,21 +53,21 @@ SystemuserRouter.get("/users/deleted", userActivityController.getAllDeletedUsers
 
 /* -------------------- Leads (Core) -------------------- */
 SystemuserRouter.post("/leads", leadController.createLead);
-SystemuserRouter.post("/leads/get", leadController.getLead);
-SystemuserRouter.get("/leads/assigned", leadController.getAssignedLeads);
-SystemuserRouter.post("/leads/assigned/bulk", leadController.bulkAssignLeads);
 SystemuserRouter.get("/leads/unassigned", leadController.getUnassignedLeads);
 SystemuserRouter.get("/leads/notassigned", leadController.getUnassignedLeads);
-SystemuserRouter.get("/leads/random", leadController.getNextUnassignedLead);
-SystemuserRouter.get("/allagents", leadController.getAllAgents);
+SystemuserRouter.get("/leads/assigned", leadController.getAssignedLeads);
+SystemuserRouter.post("/leads/get", leadController.getLead);
 SystemuserRouter.post("/leads/update", leadController.updateLead);
+SystemuserRouter.post("/leads/soft-delete", leadController.softDeleteLeads);
 SystemuserRouter.post("/assignlead", leadController.assignLeadToAgent);
+SystemuserRouter.post("/leads/assigned/bulk", leadController.bulkAssignLeads);
 SystemuserRouter.post("/leads/filter", leadController.searchLeads);
 SystemuserRouter.post("/unassignedleads/filter", leadController.filterUnassignedLeads);
 SystemuserRouter.post("/leads/unassigned/filter", leadController.filterUnassignedLeads);
 SystemuserRouter.post("/notassignedleads/filter", leadController.filterUnassignedLeads);
-SystemuserRouter.post("/leads/soft-delete", leadController.softDeleteLeads);
+SystemuserRouter.get("/allagents", leadController.getAllAgents);
 SystemuserRouter.get("/leadsources", leadController.getLeadSources);
+SystemuserRouter.get("/leads/random", leadController.getNextUnassignedLead);
 
 /* -------------------- Lead Activity -------------------- */
 SystemuserRouter.post("/lead/activity/filter", leadActivityHistoryController.filterlistActivities);
