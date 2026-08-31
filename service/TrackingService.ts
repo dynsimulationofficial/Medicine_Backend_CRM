@@ -44,7 +44,7 @@ export class TrackingService {
     if (courierName) {
       const lower = courierName.toLowerCase();
       if (lower.includes("india post") || lower.includes("speed post")) return 100084;
-      if (lower.includes("uae") || lower.includes("emirates")) return 100184;
+      if (lower.includes("uae") || lower.includes("emirates") || lower.includes("dubai")) return 100184;
       if (lower.includes("dhl")) return 100001;
       if (lower.includes("fedex")) return 100003;
       if (lower.includes("aramex")) return 100014;
