@@ -10,7 +10,7 @@ import LeadActivityHistoryController from "../controllers/LeadActivityHistoryCon
 import express, { Request, Response } from "express";
 import CompressCrmController from "../controllers/AdvanceLeadCRMController";
 import UserActivityController from "../controllers/UserActivityController";
-import LeadController from "../controllers/LeadController";
+import leadController from "../controllers/LeadController";
 import UserManagementController from "../controllers/UserManagementController";
 import reportController from "../controllers/ReportController";
 import trackingController from "../controllers/TrackingController";
@@ -32,7 +32,6 @@ export const SystemuserRouter = express.Router();
 
 const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
-const leadController = new LeadController();
 const leadActivityHistoryController = new LeadActivityHistoryController();
 const leadTaskController = new LeadTaskController();
 const leadDocumentController = new LeadDocumentController();
