@@ -2,55 +2,65 @@
 import { Sequelize } from "sequelize";
 import DBServices from "../database/DBService";
 
+// Auth & User Models
 import RoleModel from "./Role";
 import PermissionModel from "./Permission";
 import RolePermissionModel from "./RolePermission";
 import SystemUserModel from "./SystemUser";
-import initUserOtpModel from "./UserOtp";
-
-import initWebPushNotificationModel from "./WebPushNotification";
-import initWebPushTokenModel from "./WebPushToken";
-
-import initSystemUserActivityModel from "./UserActivity";
 import initUserRoleModel from "./UserRole";
+import initUserOtpModel from "./UserOtp";
+import initUserLoginModel from "./UserLogin";
+import initSystemUserActivityModel from "./UserActivity";
+import { initSystemUserSecretModel } from "./SystemUserSecret";
 
+// Lead & Core Business Models
 import { initLeadModel } from "./Lead";
+import { initLeadSourceModel } from "./LeadSource";
 import { initLeadDispositionModel } from "./LeadDisposition";
 import { initLeadActivityHistoryModel } from "./LeadActivityHistory";
 import { initLeadTaskModel } from "./LeadTask";
 import { initLeadDocumentModel } from "./LeadDocument";
-import { initConsolidatedCreditStatusModel } from "./ConsolidatedCreditStatus";
-import { initLeadSourceModel } from "./LeadSource";
-import { initLeadDebtStatusModel } from "./LeadDebtStatus";
-import initUserLoginModel from "./UserLogin";
-import { initAssignedLeadNotificationModel } from "./AssignedLeadNotification";
-import { initExpenseModel } from "./Expense";
-import { initSystemUserSecretModel } from "./SystemUserSecret";
 import { initLeadBulkDocumentModel } from "./LeadBulkDocument";
+
+// Medicine & Order Management Models
 import { initLeadMedicineModel } from "./LeadMedicine";
 import { initLeadOrderModel } from "./LeadOrder";
 import { initLeadOrderItemModel } from "./LeadOrderItem";
 import { initOrderTrackingLogModel } from "./OrderTrackingLog";
 
+// Notifications & Utilities
+import initWebPushNotificationModel from "./WebPushNotification";
+import initWebPushTokenModel from "./WebPushToken";
+import { initAssignedLeadNotificationModel } from "./AssignedLeadNotification";
+import { initExpenseModel } from "./Expense";
+import { initConsolidatedCreditStatusModel } from "./ConsolidatedCreditStatus";
+import { initLeadDebtStatusModel } from "./LeadDebtStatus";
+
+// DB Connection
 const dbService = new DBServices();
 const sequelize: Sequelize = dbService.sequelizeWriter;
 
-/* ------------- Init models ------------- */
+/* =========================================================================
+   1. Initialize Models
+========================================================================= */
 const Role = RoleModel(sequelize);
 const Permission = PermissionModel(sequelize);
 const RolePermission = RolePermissionModel(sequelize);
-const UserOtp = initUserOtpModel(sequelize);
 const SystemUser = SystemUserModel(sequelize);
-
-const SystemUserActivity = initSystemUserActivityModel(sequelize);
 const UserRole = initUserRoleModel(sequelize);
+const UserOtp = initUserOtpModel(sequelize);
+const UserLogin = initUserLoginModel(sequelize);
+const SystemUserActivity = initSystemUserActivityModel(sequelize);
+const SystemUserSecret = initSystemUserSecretModel(sequelize);
 
 const Lead = initLeadModel(sequelize);
-const ConsolidatedCreditStatus = initConsolidatedCreditStatusModel(sequelize);
+const LeadSource = initLeadSourceModel(sequelize);
 const LeadDisposition = initLeadDispositionModel(sequelize);
 const LeadActivityHistory = initLeadActivityHistoryModel(sequelize);
 const LeadTask = initLeadTaskModel(sequelize);
 const LeadDocument = initLeadDocumentModel(sequelize);
+const LeadBulkDocument = initLeadBulkDocumentModel(sequelize);
+
 const LeadMedicine = initLeadMedicineModel(sequelize);
 const LeadOrder = initLeadOrderModel(sequelize);
 const LeadOrderItem = initLeadOrderItemModel(sequelize);
@@ -58,20 +68,16 @@ const OrderTrackingLog = initOrderTrackingLogModel(sequelize);
 
 const WebPushToken = initWebPushTokenModel(sequelize);
 const WebPushNotification = initWebPushNotificationModel(sequelize);
-
-const LeadSource = initLeadSourceModel(sequelize);
-const LeadDebtStatus = initLeadDebtStatusModel(sequelize);
-
-const UserLogin = initUserLoginModel(sequelize);
-
 const AssignedLeadNotification = initAssignedLeadNotificationModel(sequelize);
 const Expense = initExpenseModel(sequelize);
-const SystemUserSecret = initSystemUserSecretModel(sequelize);
-const LeadBulkDocument = initLeadBulkDocumentModel(sequelize);
+const ConsolidatedCreditStatus = initConsolidatedCreditStatusModel(sequelize);
+const LeadDebtStatus = initLeadDebtStatusModel(sequelize);
 
-/* ------------- Associations ------------- */
+/* =========================================================================
+   2. Define Associations
+========================================================================= */
 
-// Role ↔ Permission
+// Role ↔ Permission (Many-to-Many)
 Role.belongsToMany(Permission, {
   through: RolePermission,
   foreignKey: { name: "role_id", allowNull: false },
@@ -79,8 +85,6 @@ Role.belongsToMany(Permission, {
   as: "permissions",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
-  hooks: true,
-  constraints: true,
 });
 Permission.belongsToMany(Role, {
   through: RolePermission,
@@ -89,11 +93,9 @@ Permission.belongsToMany(Role, {
   as: "roles",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
-  hooks: true,
-  constraints: true,
 });
 
-// SystemUser ↔ Role (via user_role)
+// SystemUser ↔ Role (Many-to-Many via user_role)
 SystemUser.belongsToMany(Role, {
   through: UserRole,
   foreignKey: { name: "system_user_id", allowNull: false },
@@ -101,8 +103,6 @@ SystemUser.belongsToMany(Role, {
   as: "roles",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
-  hooks: true,
-  constraints: true,
 });
 Role.belongsToMany(SystemUser, {
   through: UserRole,
@@ -111,10 +111,9 @@ Role.belongsToMany(SystemUser, {
   as: "users",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
-  hooks: true,
-  constraints: true,
 });
 
+// SystemUser ↔ UserOtp
 SystemUser.hasMany(UserOtp, {
   foreignKey: { name: "system_user_id", allowNull: false },
   as: "otps",
@@ -142,7 +141,7 @@ SystemUserActivity.belongsTo(SystemUser, {
   onUpdate: "CASCADE",
 });
 
-// Lead ↔ Agent
+// Lead ↔ Agent (SystemUser)
 Lead.belongsTo(SystemUser, {
   foreignKey: { name: "agent_id", allowNull: true },
   as: "agent",
@@ -170,25 +169,35 @@ LeadSource.hasMany(Lead, {
   onUpdate: "CASCADE",
 });
 
-// Lead ↔ LeadDebtStatus
-
-
-
-// Lead ↔ ConsolidatedCreditStatus
-Lead.belongsTo(ConsolidatedCreditStatus, {
-  foreignKey: { name: "consolidated_credit_status_id", allowNull: true },
-  as: "consolidatedCreditStatus",
-  onDelete: "SET NULL",
+// Lead ↔ LeadOrders
+Lead.hasMany(LeadOrder, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "orders",
+  onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
-ConsolidatedCreditStatus.hasMany(Lead, {
-  foreignKey: { name: "consolidated_credit_status_id", allowNull: true },
-  as: "leads",
-  onDelete: "SET NULL",
+LeadOrder.belongsTo(Lead, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "lead",
+  onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
 
-// Lead activity history
+// LeadOrder ↔ LeadOrderItem
+LeadOrder.hasMany(LeadOrderItem, {
+  foreignKey: { name: "order_id", allowNull: false },
+  as: "items",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+LeadOrderItem.belongsTo(LeadOrder, {
+  foreignKey: { name: "order_id", allowNull: false },
+  as: "order",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
+// Lead Activity History
 LeadActivityHistory.belongsTo(Lead, {
   foreignKey: { name: "lead_id", allowNull: false },
   as: "lead",
@@ -226,7 +235,7 @@ LeadDisposition.hasMany(LeadActivityHistory, {
   onUpdate: "CASCADE",
 });
 
-// Lead tasks
+// Lead Tasks
 LeadTask.belongsTo(Lead, {
   foreignKey: { name: "lead_id", allowNull: false },
   as: "lead",
@@ -252,7 +261,7 @@ SystemUser.hasMany(LeadTask, {
   onUpdate: "CASCADE",
 });
 
-// Lead documents
+// Lead Documents
 LeadDocument.belongsTo(Lead, {
   foreignKey: { name: "lead_id", allowNull: false },
   as: "lead",
@@ -292,7 +301,9 @@ UserLogin.belongsTo(SystemUser, {
   onUpdate: "CASCADE",
 });
 
-/* ------------- Exports ------------- */
+/* =========================================================================
+   3. Centralized Exports
+========================================================================= */
 const db = {
   sequelize,
   Sequelize,
@@ -304,12 +315,14 @@ const db = {
   UserRole,
   Lead,
   LeadDisposition,
-  ConsolidatedCreditStatus,
   LeadActivityHistory,
   LeadTask,
   LeadDocument,
   LeadSource,
-  LeadDebtStatus,
+  LeadMedicine,
+  LeadOrder,
+  LeadOrderItem,
+  OrderTrackingLog,
   UserLogin,
   UserOtp,
   WebPushNotification,
@@ -318,10 +331,8 @@ const db = {
   Expense,
   SystemUserSecret,
   LeadBulkDocument,
-  LeadMedicine,
-  LeadOrder,
-  LeadOrderItem,
-  OrderTrackingLog,
+  ConsolidatedCreditStatus,
+  LeadDebtStatus,
 };
 
 export default db;
@@ -335,8 +346,6 @@ export {
   SystemUserActivity,
   UserRole,
   Lead,
-  ConsolidatedCreditStatus,
-  WebPushNotification,
   LeadDisposition,
   LeadActivityHistory,
   LeadTask,
@@ -346,12 +355,14 @@ export {
   LeadOrderItem,
   OrderTrackingLog,
   LeadSource,
-  LeadDebtStatus,
   UserLogin,
   UserOtp,
+  WebPushNotification,
   WebPushToken,
   AssignedLeadNotification,
   Expense,
   SystemUserSecret,
   LeadBulkDocument,
+  ConsolidatedCreditStatus,
+  LeadDebtStatus,
 };
