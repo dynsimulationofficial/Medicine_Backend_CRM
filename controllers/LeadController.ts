@@ -121,21 +121,13 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Number(req.query.pageSize || req.query.limit) || 50;
     const offset = (page - 1) * limit;
-    const search = (req.query.search || req.query.q || "").toString().trim();
 
-    const where: string[] = ["l.deleted_at IS NULL", "l.agent_id IS NULL"];
-    const replacements: any = { limit, offset };
-
-    if (search) {
-      where.push("(l.full_name ILIKE :search OR l.email ILIKE :search OR l.phone ILIKE :search OR l.lead_number::text ILIKE :search)");
-      replacements.search = `%${search}%`;
-    }
-
-    const whereSql = `WHERE ${where.join(" AND ")}`;
+    const replacements = { limit, offset };
+    const whereSql = "WHERE l.deleted_at IS NULL AND l.agent_id IS NULL";
 
     const countResult: any[] = await db.sequelize.query(
       `SELECT COUNT(*)::int AS total FROM public.leads l ${whereSql}`,
-      { replacements, type: QueryTypes.SELECT }
+      { type: QueryTypes.SELECT }
     );
     const total = countResult[0]?.total || 0;
 
@@ -201,7 +193,6 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Number(req.query.pageSize || req.query.limit) || 50;
     const offset = (page - 1) * limit;
-    const search = (req.query.search || req.query.q || "").toString().trim();
     const filterAgentId = (req.query.agent_id || (req as any)?.user?.system_user_id) as string | undefined;
 
     const where: string[] = ["l.deleted_at IS NULL", "l.agent_id IS NOT NULL"];
@@ -210,11 +201,6 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
     if (filterAgentId) {
       where.push("l.agent_id = :filterAgentId");
       replacements.filterAgentId = filterAgentId;
-    }
-
-    if (search) {
-      where.push("(l.full_name ILIKE :search OR l.email ILIKE :search OR l.phone ILIKE :search OR l.lead_number::text ILIKE :search)");
-      replacements.search = `%${search}%`;
     }
 
     const whereSql = `WHERE ${where.join(" AND ")}`;
