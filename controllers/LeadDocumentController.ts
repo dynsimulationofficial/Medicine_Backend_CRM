@@ -379,7 +379,10 @@ export default class LeadDocumentController extends BaseController {
                 const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
                 return this.sendSuccess(res, { file_name: doc.file_name, mime_type: doc.mime_type, url: signedUrl }, "URL fetched", 200);
             } else {
-                return this.sendSuccess(res, { file_name: doc.file_name, mime_type: doc.mime_type, url: `/uploads/${doc.storage_path}` }, "URL fetched", 200);
+                const protocol = req.protocol || "http";
+                const host = req.get("host") || "localhost:8016";
+                const absoluteUrl = `${protocol}://${host}/uploads/${doc.storage_path}`;
+                return this.sendSuccess(res, { file_name: doc.file_name, mime_type: doc.mime_type, url: absoluteUrl }, "URL fetched", 200);
             }
         } catch (err: any) {
             console.error("getDocumentUrl error:", err);
