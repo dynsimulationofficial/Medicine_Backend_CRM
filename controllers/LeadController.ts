@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import * as yup from "yup";
-import db, { SystemUserActivity } from "../models";
+import db from "../models";
 import { v4 as uuidv4 } from "uuid";
 import { QueryTypes } from "sequelize";
 import * as XLSX from "xlsx";
@@ -18,7 +18,7 @@ const parseDate = (text?: string | null): DateTime | null => {
   return null;
 };
 
-// ==================== VALIDATION SCHEMAS ====================
+// ==================== VALIDATION SCHEMA ====================
 const leadSchema = yup.object({
   full_name: yup.string().required("Full name is required").trim(),
   phone: yup.string().required("Phone is required").trim(),
@@ -62,7 +62,6 @@ export const createLead = async (req: Request, res: Response) => {
     const id = uuidv4();
     const now = new Date();
 
-    // Insert new lead
     const query = `
       INSERT INTO public.leads (
         id, full_name, email, phone, whatsapp_number,
@@ -119,68 +118,34 @@ export const createLead = async (req: Request, res: Response) => {
 export const getUnassignedLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Number(req.query.pageSize || req.query.limit) || 50;
+    const limit = Number(req.query.limit || req.query.pageSize) || 20;
     const offset = (page - 1) * limit;
 
-    const replacements = { limit, offset };
-    const whereSql = "WHERE l.deleted_at IS NULL AND l.agent_id IS NULL";
-
     const countResult: any[] = await db.sequelize.query(
-      `SELECT COUNT(*)::int AS total FROM public.leads l ${whereSql}`,
+      `SELECT COUNT(*) as total FROM public.leads WHERE deleted_at IS NULL AND agent_id IS NULL`,
       { type: QueryTypes.SELECT }
     );
-    const total = countResult[0]?.total || 0;
+    const total = parseInt(countResult[0]?.total || "0");
 
-    const rows: any[] = await db.sequelize.query(
+    const dataResult: any[] = await db.sequelize.query(
       `SELECT
          l.*,
+         ls.name AS lead_source,
          ls.name AS lead_source_name,
-         camp.name AS campaign_name,
-         GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
+         camp.name AS campaign_name
        FROM public.leads l
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
-       ${whereSql}
+       WHERE l.deleted_at IS NULL AND l.agent_id IS NULL
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
-      { replacements, type: QueryTypes.SELECT }
+      { replacements: { limit, offset }, type: QueryTypes.SELECT }
     );
-
-    const data = rows.map((r) => ({
-      id: r.id,
-      lead_number: r.lead_number,
-      full_name: r.full_name,
-      email: r.email,
-      phone: r.phone,
-      whatsapp_number: r.whatsapp_number,
-      lead_source: r.lead_source_name,
-      lead_source_id: r.lead_source_id,
-      campaign_name: r.campaign_name,
-      campaign_id: r.campaign_id,
-      lead_status: r.lead_status,
-      currency: r.currency,
-      note: r.note,
-      address: {
-        line1: r.address_line1,
-        line2: r.address_line2,
-        city: r.city,
-        state: r.state,
-        postal_code: r.postal_code,
-        country: r.country,
-      },
-      lead_score: r.lead_score,
-      lead_quality: r.lead_quality,
-      best_time_to_call: r.best_time_to_call,
-      lead_age_days: r.lead_age_days,
-      lead_age_label: `${r.lead_age_days} Days`,
-      created_at: r.created_at,
-      updated_at: r.updated_at,
-    }));
 
     return res.status(200).json({
       success: true,
-      data,
-      pagination: { total, page, pageSize: limit, totalPages: Math.ceil(total / limit) },
+      data: dataResult,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -191,80 +156,46 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
 export const getAssignedLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Number(req.query.pageSize || req.query.limit) || 50;
+    const limit = Number(req.query.limit || req.query.pageSize) || 20;
     const offset = (page - 1) * limit;
     const filterAgentId = (req.query.agent_id || (req as any)?.user?.system_user_id) as string | undefined;
 
-    const where: string[] = ["l.deleted_at IS NULL", "l.agent_id IS NOT NULL"];
+    let whereClause = "WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL";
     const replacements: any = { limit, offset };
 
     if (filterAgentId) {
-      where.push("l.agent_id = :filterAgentId");
+      whereClause += " AND l.agent_id = :filterAgentId";
       replacements.filterAgentId = filterAgentId;
     }
 
-    const whereSql = `WHERE ${where.join(" AND ")}`;
-
     const countResult: any[] = await db.sequelize.query(
-      `SELECT COUNT(*)::int AS total FROM public.leads l ${whereSql}`,
+      `SELECT COUNT(*) as total FROM public.leads l ${whereClause}`,
       { replacements, type: QueryTypes.SELECT }
     );
-    const total = countResult[0]?.total || 0;
+    const total = parseInt(countResult[0]?.total || "0");
 
-    const rows: any[] = await db.sequelize.query(
+    const dataResult: any[] = await db.sequelize.query(
       `SELECT
          l.*,
+         su.name AS owner_name,
          su.name AS agent_name,
+         ls.name AS lead_source,
          ls.name AS lead_source_name,
-         camp.name AS campaign_name,
-         GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
+         camp.name AS campaign_name
        FROM public.leads l
        LEFT JOIN public.system_users su ON su.id = l.agent_id
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
-       ${whereSql}
+       ${whereClause}
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
       { replacements, type: QueryTypes.SELECT }
     );
 
-    const data = rows.map((r) => ({
-      id: r.id,
-      lead_number: r.lead_number,
-      full_name: r.full_name,
-      email: r.email,
-      phone: r.phone,
-      whatsapp_number: r.whatsapp_number,
-      owner_name: r.agent_name,
-      agent: { id: r.agent_id, name: r.agent_name },
-      lead_source: r.lead_source_name,
-      lead_source_id: r.lead_source_id,
-      campaign_name: r.campaign_name,
-      campaign_id: r.campaign_id,
-      lead_status: r.lead_status,
-      currency: r.currency,
-      note: r.note,
-      address: {
-        line1: r.address_line1,
-        line2: r.address_line2,
-        city: r.city,
-        state: r.state,
-        postal_code: r.postal_code,
-        country: r.country,
-      },
-      lead_score: r.lead_score,
-      lead_quality: r.lead_quality,
-      best_time_to_call: r.best_time_to_call,
-      lead_age_days: r.lead_age_days,
-      lead_age_label: `${r.lead_age_days} Days`,
-      created_at: r.created_at,
-      updated_at: r.updated_at,
-    }));
-
     return res.status(200).json({
       success: true,
-      data,
-      pagination: { total, page, pageSize: limit, totalPages: Math.ceil(total / limit) },
+      data: dataResult,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -279,13 +210,14 @@ export const getLead = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Lead ID is required" });
     }
 
-    const rows: any[] = await db.sequelize.query(
+    const result: any[] = await db.sequelize.query(
       `SELECT
          l.*,
+         su.name AS owner_name,
          su.name AS agent_name,
+         ls.name AS lead_source,
          ls.name AS lead_source_name,
-         camp.name AS campaign_name,
-         GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
+         camp.name AS campaign_name
        FROM public.leads l
        LEFT JOIN public.system_users su ON su.id = l.agent_id
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
@@ -294,44 +226,11 @@ export const getLead = async (req: Request, res: Response) => {
       { replacements: { id }, type: QueryTypes.SELECT }
     );
 
-    if (rows.length === 0) {
+    if (result.length === 0) {
       return res.status(404).json({ success: false, message: "Lead not found" });
     }
 
-    const r = rows[0];
-    const data = {
-      id: r.id,
-      lead_number: r.lead_number,
-      full_name: r.full_name,
-      email: r.email,
-      phone: r.phone,
-      whatsapp_number: r.whatsapp_number,
-      owner_name: r.agent_name,
-      agent: { id: r.agent_id, name: r.agent_name },
-      lead_source: r.lead_source_name,
-      lead_source_id: r.lead_source_id,
-      campaign_name: r.campaign_name,
-      campaign_id: r.campaign_id,
-      lead_status: r.lead_status,
-      currency: r.currency,
-      note: r.note,
-      address: {
-        line1: r.address_line1,
-        line2: r.address_line2,
-        city: r.city,
-        state: r.state,
-        postal_code: r.postal_code,
-        country: r.country,
-      },
-      lead_score: r.lead_score,
-      lead_quality: r.lead_quality,
-      best_time_to_call: r.best_time_to_call,
-      lead_age_days: r.lead_age_days,
-      created_at: r.created_at,
-      updated_at: r.updated_at,
-    };
-
-    return res.status(200).json({ success: true, data });
+    return res.status(200).json({ success: true, data: result[0] });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -450,7 +349,7 @@ export const assignLeadToAgent = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "Lead not found" });
     }
 
-    // In-App Notification to Agent (Bell Icon)
+    // In-App Notification
     try {
       await db.sequelize.query(
         `INSERT INTO public.assigned_lead_notifications (id, user_id, lead_id, title, body, is_read, created_at, updated_at)
@@ -487,7 +386,7 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
       { replacements: { lead_ids, agent_id }, type: QueryTypes.UPDATE }
     );
 
-    // In-App Notification to Agent (Bell Icon)
+    // In-App Notification
     try {
       await db.sequelize.query(
         `INSERT INTO public.assigned_lead_notifications (id, user_id, lead_id, title, body, is_read, created_at, updated_at)
@@ -515,7 +414,7 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
 export const searchLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.body.page || req.query.page) || 1);
-    const limit = Number(req.body.pageSize || req.query.pageSize) || 50;
+    const limit = Number(req.body.pageSize || req.body.limit || req.query.pageSize || req.query.limit) || 20;
     const offset = (page - 1) * limit;
 
     const { full_name, email, phone, city, state, lead_status, lead_source_id, agent_ids, created_from, created_to, search, q } = {
@@ -562,18 +461,19 @@ export const searchLeads = async (req: Request, res: Response) => {
     const whereSql = `WHERE ${where.join(" AND ")}`;
 
     const countResult: any[] = await db.sequelize.query(
-      `SELECT COUNT(*)::int AS total FROM public.leads l ${whereSql}`,
+      `SELECT COUNT(*) as total FROM public.leads l ${whereSql}`,
       { replacements, type: QueryTypes.SELECT }
     );
-    const total = countResult[0]?.total || 0;
+    const total = parseInt(countResult[0]?.total || "0");
 
-    const rows: any[] = await db.sequelize.query(
+    const dataResult: any[] = await db.sequelize.query(
       `SELECT
          l.*,
+         su.name AS owner_name,
          su.name AS agent_name,
+         ls.name AS lead_source,
          ls.name AS lead_source_name,
-         camp.name AS campaign_name,
-         GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - l.created_at)) / 86400))::int AS lead_age_days
+         camp.name AS campaign_name
        FROM public.leads l
        LEFT JOIN public.system_users su ON su.id = l.agent_id
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
@@ -584,43 +484,10 @@ export const searchLeads = async (req: Request, res: Response) => {
       { replacements, type: QueryTypes.SELECT }
     );
 
-    const data = rows.map((r) => ({
-      id: r.id,
-      lead_number: r.lead_number,
-      full_name: r.full_name,
-      email: r.email,
-      phone: r.phone,
-      whatsapp_number: r.whatsapp_number,
-      owner_name: r.agent_name,
-      agent: { id: r.agent_id, name: r.agent_name },
-      lead_source: r.lead_source_name,
-      lead_source_id: r.lead_source_id,
-      campaign_name: r.campaign_name,
-      campaign_id: r.campaign_id,
-      lead_status: r.lead_status,
-      currency: r.currency,
-      note: r.note,
-      address: {
-        line1: r.address_line1,
-        line2: r.address_line2,
-        city: r.city,
-        state: r.state,
-        postal_code: r.postal_code,
-        country: r.country,
-      },
-      lead_score: r.lead_score,
-      lead_quality: r.lead_quality,
-      best_time_to_call: r.best_time_to_call,
-      lead_age_days: r.lead_age_days,
-      lead_age_label: `${r.lead_age_days} Days`,
-      created_at: r.created_at,
-      updated_at: r.updated_at,
-    }));
-
     return res.status(200).json({
       success: true,
-      data,
-      pagination: { total, page, pageSize: limit, totalPages: Math.ceil(total / limit) },
+      data: dataResult,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
