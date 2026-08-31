@@ -19,26 +19,11 @@ const parseDate = (text?: string | null): DateTime | null => {
   return null;
 };
 
-const isAdmin = async (userId: string): Promise<boolean> => {
-  if (!userId) return false;
-  const rows: any[] = await db.sequelize.query(
-    `SELECT 1 FROM public.user_role ur
-     JOIN public.roles r ON r.id = ur.role_id
-     WHERE ur.system_user_id = :uid AND LOWER(r.name) = 'admin' LIMIT 1`,
-    { replacements: { uid: userId }, type: QueryTypes.SELECT },
-  );
-  return rows.length > 0;
-};
-
 // ==================== VALIDATION SCHEMAS ====================
 const leadSchema = yup.object({
   full_name: yup.string().required("Full name is required").trim(),
   phone: yup.string().required("Phone is required").trim(),
-  email: yup
-    .string()
-    .email("Invalid email")
-    .required("Email is required")
-    .trim(),
+  email: yup.string().email("Invalid email").required("Email is required").trim(),
   whatsapp_number: yup.string().nullable().optional(),
   address_line1: yup.string().nullable().optional(),
   address_line2: yup.string().nullable().optional(),
@@ -60,10 +45,7 @@ const leadSchema = yup.object({
 // ==================== 1. CREATE LEAD ====================
 export const createLead = async (req: Request, res: Response) => {
   try {
-    const authUser = (req as any)?.user;
-    const validatedData = await leadSchema.validate(req.body, {
-      abortEarly: false,
-    });
+    const validatedData = await leadSchema.validate(req.body, { abortEarly: false });
     const emailNorm = validatedData.email.toLowerCase().trim();
     const phoneNorm = validatedData.phone.replace(/(?!^\+)[^0-9]/g, "");
 
@@ -71,19 +53,11 @@ export const createLead = async (req: Request, res: Response) => {
     const dupRows: any[] = await db.sequelize.query(
       `SELECT id, email, phone FROM public.leads
        WHERE deleted_at IS NULL AND (LOWER(email) = :email OR REGEXP_REPLACE(phone, '\\D', '', 'g') = :phone) LIMIT 1`,
-      {
-        replacements: { email: emailNorm, phone: phoneNorm },
-        type: QueryTypes.SELECT,
-      },
+      { replacements: { email: emailNorm, phone: phoneNorm }, type: QueryTypes.SELECT }
     );
 
     if (dupRows.length > 0) {
-      return res
-        .status(409)
-        .json({
-          success: false,
-          message: "A lead with this email or phone already exists",
-        });
+      return res.status(409).json({ success: false, message: "A lead with this email or phone already exists" });
     }
 
     const id = uuidv4();
@@ -133,18 +107,6 @@ export const createLead = async (req: Request, res: Response) => {
       type: QueryTypes.SELECT,
     });
 
-    // Log Activity
-    if (authUser?.system_user_id) {
-      await SystemUserActivity.create({
-        id: uuidv4(),
-        system_user_id: authUser.system_user_id,
-        activity_type: "Lead Created",
-        entity_name: "leads",
-        entity_id: id,
-        description: `Created lead ${validatedData.full_name} (${validatedData.phone})`,
-      });
-    }
-
     return res.status(201).json({ success: true, data: result[0] });
   } catch (error: any) {
     if (error.name === "ValidationError") {
@@ -166,9 +128,7 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
     const replacements: any = { limit, offset };
 
     if (search) {
-      where.push(
-        "(l.full_name ILIKE :search OR l.email ILIKE :search OR l.phone ILIKE :search OR l.lead_number::text ILIKE :search)",
-      );
+      where.push("(l.full_name ILIKE :search OR l.email ILIKE :search OR l.phone ILIKE :search OR l.lead_number::text ILIKE :search)");
       replacements.search = `%${search}%`;
     }
 
@@ -176,7 +136,7 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
 
     const countResult: any[] = await db.sequelize.query(
       `SELECT COUNT(*)::int AS total FROM public.leads l ${whereSql}`,
-      { replacements, type: QueryTypes.SELECT },
+      { replacements, type: QueryTypes.SELECT }
     );
     const total = countResult[0]?.total || 0;
 
@@ -192,7 +152,7 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
        ${whereSql}
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
-      { replacements, type: QueryTypes.SELECT },
+      { replacements, type: QueryTypes.SELECT }
     );
 
     const data = rows.map((r) => ({
@@ -229,12 +189,7 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       data,
-      pagination: {
-        total,
-        page,
-        pageSize: limit,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: { total, page, pageSize: limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -244,31 +199,22 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
 // ==================== 3. GET ASSIGNED LEADS ====================
 export const getAssignedLeads = async (req: Request, res: Response) => {
   try {
-    const authUser = (req as any)?.user;
-    const authUserId = authUser?.system_user_id;
-    const adminUser = await isAdmin(authUserId);
-
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Number(req.query.pageSize || req.query.limit) || 50;
     const offset = (page - 1) * limit;
     const search = (req.query.search || req.query.q || "").toString().trim();
-    const filterAgentId = req.query.agent_id as string | undefined;
+    const filterAgentId = (req.query.agent_id || (req as any)?.user?.system_user_id) as string | undefined;
 
     const where: string[] = ["l.deleted_at IS NULL", "l.agent_id IS NOT NULL"];
     const replacements: any = { limit, offset };
 
-    if (!adminUser && authUserId) {
-      where.push("l.agent_id = :authUserId");
-      replacements.authUserId = authUserId;
-    } else if (filterAgentId) {
+    if (filterAgentId) {
       where.push("l.agent_id = :filterAgentId");
       replacements.filterAgentId = filterAgentId;
     }
 
     if (search) {
-      where.push(
-        "(l.full_name ILIKE :search OR l.email ILIKE :search OR l.phone ILIKE :search OR l.lead_number::text ILIKE :search)",
-      );
+      where.push("(l.full_name ILIKE :search OR l.email ILIKE :search OR l.phone ILIKE :search OR l.lead_number::text ILIKE :search)");
       replacements.search = `%${search}%`;
     }
 
@@ -276,7 +222,7 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
 
     const countResult: any[] = await db.sequelize.query(
       `SELECT COUNT(*)::int AS total FROM public.leads l ${whereSql}`,
-      { replacements, type: QueryTypes.SELECT },
+      { replacements, type: QueryTypes.SELECT }
     );
     const total = countResult[0]?.total || 0;
 
@@ -294,7 +240,7 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
        ${whereSql}
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
-      { replacements, type: QueryTypes.SELECT },
+      { replacements, type: QueryTypes.SELECT }
     );
 
     const data = rows.map((r) => ({
@@ -333,12 +279,7 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       data,
-      pagination: {
-        total,
-        page,
-        pageSize: limit,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: { total, page, pageSize: limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -350,9 +291,7 @@ export const getLead = async (req: Request, res: Response) => {
   try {
     const id = req.body?.id || req.query?.id || req.params?.id;
     if (!id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Lead ID is required" });
+      return res.status(400).json({ success: false, message: "Lead ID is required" });
     }
 
     const rows: any[] = await db.sequelize.query(
@@ -367,13 +306,11 @@ export const getLead = async (req: Request, res: Response) => {
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
        WHERE l.id = :id AND l.deleted_at IS NULL LIMIT 1`,
-      { replacements: { id }, type: QueryTypes.SELECT },
+      { replacements: { id }, type: QueryTypes.SELECT }
     );
 
     if (rows.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Lead not found" });
+      return res.status(404).json({ success: false, message: "Lead not found" });
     }
 
     const r = rows[0];
@@ -420,9 +357,7 @@ export const updateLead = async (req: Request, res: Response) => {
   try {
     const id = req.body?.id || req.query?.id;
     if (!id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Lead ID is required" });
+      return res.status(400).json({ success: false, message: "Lead ID is required" });
     }
 
     const now = new Date();
@@ -480,9 +415,7 @@ export const updateLead = async (req: Request, res: Response) => {
     });
 
     if (result.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Lead not found" });
+      return res.status(404).json({ success: false, message: "Lead not found" });
     }
 
     return res.status(200).json({ success: true, data: result[0] });
@@ -501,19 +434,15 @@ export const softDeleteLeads = async (req: Request, res: Response) => {
     const ids: string[] = lead_ids || (id ? [id] : []);
 
     if (!ids.length) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Lead ID(s) required" });
+      return res.status(400).json({ success: false, message: "Lead ID(s) required" });
     }
 
     await db.sequelize.query(
       `UPDATE public.leads SET deleted_at = NOW(), updated_at = NOW() WHERE id = ANY(ARRAY[:ids]::uuid[])`,
-      { replacements: { ids }, type: QueryTypes.UPDATE },
+      { replacements: { ids }, type: QueryTypes.UPDATE }
     );
 
-    return res
-      .status(200)
-      .json({ success: true, message: "Lead(s) deleted successfully" });
+    return res.status(200).json({ success: true, message: "Lead(s) deleted successfully" });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -524,20 +453,16 @@ export const assignLeadToAgent = async (req: Request, res: Response) => {
   try {
     const { lead_id, agent_id } = req.body;
     if (!lead_id || !agent_id) {
-      return res
-        .status(400)
-        .json({ success: false, message: "lead_id and agent_id are required" });
+      return res.status(400).json({ success: false, message: "lead_id and agent_id are required" });
     }
 
     const result: any[] = await db.sequelize.query(
       `UPDATE public.leads SET agent_id = :agent_id, updated_at = NOW() WHERE id = :lead_id AND deleted_at IS NULL RETURNING *`,
-      { replacements: { lead_id, agent_id }, type: QueryTypes.SELECT },
+      { replacements: { lead_id, agent_id }, type: QueryTypes.SELECT }
     );
 
     if (!result.length) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Lead not found" });
+      return res.status(404).json({ success: false, message: "Lead not found" });
     }
 
     // FCM Notification to Agent
@@ -549,13 +474,7 @@ export const assignLeadToAgent = async (req: Request, res: Response) => {
       });
     } catch {}
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        data: result[0],
-        message: "Lead assigned successfully",
-      });
+    return res.status(200).json({ success: true, data: result[0], message: "Lead assigned successfully" });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -566,33 +485,23 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
   try {
     const { lead_ids, agent_id } = req.body;
     if (!Array.isArray(lead_ids) || !lead_ids.length || !agent_id) {
-      return res
-        .status(400)
-        .json({
-          success: false,
-          message: "lead_ids array and agent_id are required",
-        });
+      return res.status(400).json({ success: false, message: "lead_ids array and agent_id are required" });
     }
 
     await db.sequelize.query(
       `UPDATE public.leads SET agent_id = :agent_id, updated_at = NOW() WHERE id = ANY(ARRAY[:lead_ids]::uuid[]) AND deleted_at IS NULL`,
-      { replacements: { lead_ids, agent_id }, type: QueryTypes.UPDATE },
+      { replacements: { lead_ids, agent_id }, type: QueryTypes.UPDATE }
     );
 
     // FCM Notification
     try {
       await FCMService.notifyBulkLeadsAssigned(
         agent_id,
-        lead_ids.map((id) => ({ id, lead_number: "", full_name: "" })),
+        lead_ids.map((id) => ({ id, lead_number: "", full_name: "" }))
       );
     } catch {}
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: `${lead_ids.length} leads assigned successfully`,
-      });
+    return res.status(200).json({ success: true, message: `${lead_ids.length} leads assigned successfully` });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -605,20 +514,7 @@ export const searchLeads = async (req: Request, res: Response) => {
     const limit = Number(req.body.pageSize || req.query.pageSize) || 50;
     const offset = (page - 1) * limit;
 
-    const {
-      full_name,
-      email,
-      phone,
-      city,
-      state,
-      lead_status,
-      lead_source_id,
-      agent_ids,
-      created_from,
-      created_to,
-      search,
-      q,
-    } = {
+    const { full_name, email, phone, city, state, lead_status, lead_source_id, agent_ids, created_from, created_to, search, q } = {
       ...req.query,
       ...req.body,
     };
@@ -628,40 +524,17 @@ export const searchLeads = async (req: Request, res: Response) => {
 
     const querySearch = (search || q || "").toString().trim();
     if (querySearch) {
-      where.push(
-        "(l.full_name ILIKE :q OR l.email ILIKE :q OR l.phone ILIKE :q OR l.lead_number::text ILIKE :q)",
-      );
+      where.push("(l.full_name ILIKE :q OR l.email ILIKE :q OR l.phone ILIKE :q OR l.lead_number::text ILIKE :q)");
       replacements.q = `%${querySearch}%`;
     }
 
-    if (full_name) {
-      where.push("l.full_name ILIKE :full_name");
-      replacements.full_name = `%${full_name}%`;
-    }
-    if (email) {
-      where.push("l.email ILIKE :email");
-      replacements.email = `%${email}%`;
-    }
-    if (phone) {
-      where.push("l.phone ILIKE :phone");
-      replacements.phone = `%${phone}%`;
-    }
-    if (city) {
-      where.push("l.city ILIKE :city");
-      replacements.city = `%${city}%`;
-    }
-    if (state) {
-      where.push("l.state ILIKE :state");
-      replacements.state = `%${state}%`;
-    }
-    if (lead_status) {
-      where.push("l.lead_status = :lead_status");
-      replacements.lead_status = lead_status;
-    }
-    if (lead_source_id) {
-      where.push("l.lead_source_id = :lead_source_id");
-      replacements.lead_source_id = lead_source_id;
-    }
+    if (full_name) { where.push("l.full_name ILIKE :full_name"); replacements.full_name = `%${full_name}%`; }
+    if (email) { where.push("l.email ILIKE :email"); replacements.email = `%${email}%`; }
+    if (phone) { where.push("l.phone ILIKE :phone"); replacements.phone = `%${phone}%`; }
+    if (city) { where.push("l.city ILIKE :city"); replacements.city = `%${city}%`; }
+    if (state) { where.push("l.state ILIKE :state"); replacements.state = `%${state}%`; }
+    if (lead_status) { where.push("l.lead_status = :lead_status"); replacements.lead_status = lead_status; }
+    if (lead_source_id) { where.push("l.lead_source_id = :lead_source_id"); replacements.lead_source_id = lead_source_id; }
     if (Array.isArray(agent_ids) && agent_ids.length) {
       where.push("l.agent_id = ANY(ARRAY[:agent_ids]::uuid[])");
       replacements.agent_ids = agent_ids;
@@ -686,7 +559,7 @@ export const searchLeads = async (req: Request, res: Response) => {
 
     const countResult: any[] = await db.sequelize.query(
       `SELECT COUNT(*)::int AS total FROM public.leads l ${whereSql}`,
-      { replacements, type: QueryTypes.SELECT },
+      { replacements, type: QueryTypes.SELECT }
     );
     const total = countResult[0]?.total || 0;
 
@@ -704,7 +577,7 @@ export const searchLeads = async (req: Request, res: Response) => {
        ${whereSql}
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
-      { replacements, type: QueryTypes.SELECT },
+      { replacements, type: QueryTypes.SELECT }
     );
 
     const data = rows.map((r) => ({
@@ -743,12 +616,7 @@ export const searchLeads = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       data,
-      pagination: {
-        total,
-        page,
-        pageSize: limit,
-        totalPages: Math.ceil(total / limit),
-      },
+      pagination: { total, page, pageSize: limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -767,7 +635,7 @@ export const getAllAgents = async (req: Request, res: Response) => {
        JOIN public.roles r ON r.id = ur.role_id
        WHERE su.deleted_at IS NULL AND LOWER(r.name) = 'agent'
        ORDER BY su.name ASC`,
-      { type: QueryTypes.SELECT },
+      { type: QueryTypes.SELECT }
     );
     return res.status(200).json({ success: true, data: rows });
   } catch (error: any) {
@@ -780,7 +648,7 @@ export const getLeadSources = async (req: Request, res: Response) => {
   try {
     const rows: any[] = await db.sequelize.query(
       `SELECT id, name FROM public.lead_sources WHERE deleted_at IS NULL ORDER BY name ASC`,
-      { type: QueryTypes.SELECT },
+      { type: QueryTypes.SELECT }
     );
     return res.status(200).json({ success: true, data: rows });
   } catch (error: any) {
@@ -793,13 +661,11 @@ export const getNextUnassignedLead = async (req: Request, res: Response) => {
   try {
     const rows: any[] = await db.sequelize.query(
       `SELECT * FROM public.leads WHERE agent_id IS NULL AND deleted_at IS NULL ORDER BY created_at ASC LIMIT 1`,
-      { type: QueryTypes.SELECT },
+      { type: QueryTypes.SELECT }
     );
 
     if (rows.length === 0) {
-      return res
-        .status(404)
-        .json({ success: false, message: "No unassigned leads found" });
+      return res.status(404).json({ success: false, message: "No unassigned leads found" });
     }
 
     return res.status(200).json({ success: true, data: rows[0] });
@@ -813,9 +679,7 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
   try {
     const file = req.file;
     if (!file) {
-      return res
-        .status(400)
-        .json({ success: false, message: "No Excel file uploaded" });
+      return res.status(400).json({ success: false, message: "No Excel file uploaded" });
     }
 
     const workbook = XLSX.read(file.buffer, { type: "buffer" });
@@ -823,9 +687,7 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
     const rawRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
 
     if (!rawRows.length) {
-      return res
-        .status(400)
-        .json({ success: false, message: "Excel sheet is empty" });
+      return res.status(400).json({ success: false, message: "Excel sheet is empty" });
     }
 
     let inserted = 0;
@@ -833,12 +695,8 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
 
     for (const row of rawRows) {
       const full_name = row["Full Name"] || row["name"] || row["Name"] || "";
-      const phone = String(
-        row["Phone"] || row["phone"] || row["Mobile"] || "",
-      ).trim();
-      const email = String(row["Email"] || row["email"] || "")
-        .trim()
-        .toLowerCase();
+      const phone = String(row["Phone"] || row["phone"] || row["Mobile"] || "").trim();
+      const email = String(row["Email"] || row["email"] || "").trim().toLowerCase();
 
       if (!full_name || !phone) continue;
 
@@ -865,36 +723,23 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
             updated_at: now,
           },
           type: QueryTypes.INSERT,
-        },
+        }
       );
       inserted++;
     }
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: `Successfully imported ${inserted} leads`,
-      });
+    return res.status(200).json({ success: true, message: `Successfully imported ${inserted} leads` });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
 
 // ==================== 14. GET ASSIGNED NOTIFICATIONS ====================
-export const getAssignedLeadNotifications = async (
-  req: Request,
-  res: Response,
-) => {
+export const getAssignedLeadNotifications = async (req: Request, res: Response) => {
   try {
-    const authUser = (req as any)?.user;
     const rows: any[] = await db.sequelize.query(
-      `SELECT * FROM public.assigned_lead_notifications
-       WHERE user_id = :userId ORDER BY created_at DESC LIMIT 50`,
-      {
-        replacements: { userId: authUser?.system_user_id || "" },
-        type: QueryTypes.SELECT,
-      },
+      `SELECT * FROM public.assigned_lead_notifications ORDER BY created_at DESC LIMIT 50`,
+      { type: QueryTypes.SELECT }
     );
 
     return res.status(200).json({ success: true, data: rows });
