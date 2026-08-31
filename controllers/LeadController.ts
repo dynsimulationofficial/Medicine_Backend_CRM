@@ -4,7 +4,6 @@ import db, { SystemUserActivity } from "../models";
 import { v4 as uuidv4 } from "uuid";
 import { QueryTypes } from "sequelize";
 import * as XLSX from "xlsx";
-import FCMService from "../service/FCMService";
 import { DateTime } from "luxon";
 
 // ==================== HELPERS ====================
@@ -465,15 +464,6 @@ export const assignLeadToAgent = async (req: Request, res: Response) => {
       return res.status(404).json({ success: false, message: "Lead not found" });
     }
 
-    // FCM Notification to Agent
-    try {
-      await FCMService.notifyLeadAssigned(agent_id, {
-        id: lead_id,
-        lead_number: String(result[0].lead_number || ""),
-        full_name: result[0].full_name || "",
-      });
-    } catch {}
-
     return res.status(200).json({ success: true, data: result[0], message: "Lead assigned successfully" });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -492,14 +482,6 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
       `UPDATE public.leads SET agent_id = :agent_id, updated_at = NOW() WHERE id = ANY(ARRAY[:lead_ids]::uuid[]) AND deleted_at IS NULL`,
       { replacements: { lead_ids, agent_id }, type: QueryTypes.UPDATE }
     );
-
-    // FCM Notification
-    try {
-      await FCMService.notifyBulkLeadsAssigned(
-        agent_id,
-        lead_ids.map((id) => ({ id, lead_number: "", full_name: "" }))
-      );
-    } catch {}
 
     return res.status(200).json({ success: true, message: `${lead_ids.length} leads assigned successfully` });
   } catch (error: any) {
