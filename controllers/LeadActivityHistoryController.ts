@@ -1,498 +1,492 @@
 import { Request, Response } from "express";
-import * as Yup from "yup";
+import * as yup from "yup";
 import { QueryTypes } from "sequelize";
 import { v4 as uuidv4 } from "uuid";
-import BaseController from "./BaseController";
-import DBServices from "../database/DBService";
+import db from "../models";
 
-export default class LeadActivityHistoryController extends BaseController {
-    db_services: DBServices = new DBServices();
+// ==================== HELPER RESPONSE HANDLERS ====================
+const sendSuccess = (res: Response, data: any, message: string = "Success", code = 200) => {
+  return res.status(code).json({ success: true, msg: message, data });
+};
 
-    private async logUserActivity(userId: string, activity: string, type: string, transaction?: any): Promise<void> {
-        try {
-            await this.db_services.sequelizeWriter.query(
-                `INSERT INTO public.system_user_activity
-                   ("uuid", user_activity, module, type, activity_timestamp)
-                 VALUES
-                   (:userId, :activity, 'activity_management', :type, NOW())`,
-                {
-                    replacements: { userId, activity, type },
-                    type: QueryTypes.INSERT,
-                    ...(transaction ? { transaction } : {}),
-                }
-            );
-        } catch (err) {
-            console.warn("Could not log user activity:", err);
-        }
+const sendError = (res: Response, data: any = {}, message: string = "Error", code = 400) => {
+  return res.status(code).json({ success: false, msg: message, data });
+};
+
+// Safe Activity Logger
+const logUserActivity = async (userId: string, activity: string, type: string, transaction?: any) => {
+  try {
+    await db.sequelize.query(
+      `INSERT INTO public.system_user_activity
+         ("uuid", user_activity, module, type, activity_timestamp)
+       VALUES
+         (:userId, :activity, 'activity_management', :type, NOW())`,
+      {
+        replacements: { userId, activity, type },
+        type: QueryTypes.INSERT,
+        ...(transaction ? { transaction } : {}),
+      }
+    );
+  } catch (err) {
+    console.warn("Could not log user activity:", err);
+  }
+};
+
+// ==================== 1. GET ALL DISPOSITIONS ====================
+export const getAllDispositions = async (req: Request, res: Response) => {
+  try {
+    const schema = yup.object({
+      page: yup.number().integer().min(1).default(1),
+      pageSize: yup.number().integer().min(1).max(200).default(10),
+      search: yup.string().trim().max(200).optional(),
+      is_active: yup.mixed<boolean>()
+        .transform((v) => (v === "true" ? true : v === "false" ? false : v))
+        .optional(),
+    });
+
+    const qp = await schema.validate(req.query, { abortEarly: false });
+    const page = Number(qp.page);
+    const pageSize = Number(qp.pageSize);
+    const offset = (page - 1) * pageSize;
+    const search = (qp.search as string | undefined)?.trim();
+    const isActiveFilter = qp.is_active as boolean | undefined;
+
+    const where: string[] = [];
+    const repl: Record<string, any> = {};
+
+    if (typeof isActiveFilter === "boolean") {
+      where.push("ld.is_active = :is_active");
+      repl.is_active = isActiveFilter;
     }
 
-    /* ---------------------------------------------------------------------- */
-    /* 1. GET ALL DISPOSITIONS (RAW SQL)                                      */
-    /* ---------------------------------------------------------------------- */
-    public getAllDispositions = async (req: Request, res: Response): Promise<void> => {
-        try {
-            const schema = Yup.object({
-                page: Yup.number().integer().min(1).default(1),
-                pageSize: Yup.number().integer().min(1).max(200).default(10),
-                search: Yup.string().trim().max(200).optional(),
-                is_active: Yup.mixed<boolean>()
-                    .transform((v) => (v === "true" ? true : v === "false" ? false : v))
-                    .optional(),
-            });
-            const qp = await schema.validate(req.query, { abortEarly: false });
-            const page = Number(qp.page);
-            const pageSize = Number(qp.pageSize);
-            const offset = (page - 1) * pageSize;
-            const search = (qp.search as string | undefined)?.trim();
-            const isActiveFilter = qp.is_active as boolean | undefined;
+    if (search) {
+      where.push("(ld.name ILIKE :q OR ld.description ILIKE :q)");
+      repl.q = `%${search}%`;
+    }
 
-            const where: string[] = [];
-            const repl: Record<string, any> = {};
+    const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
 
-            if (typeof isActiveFilter === "boolean") {
-                where.push("ld.is_active = :is_active");
-                repl.is_active = isActiveFilter;
-            }
+    const [{ total }]: any[] = await db.sequelize.query(
+      `SELECT COUNT(*)::int AS total FROM public.lead_dispositions ld ${whereSql}`,
+      { replacements: repl, type: QueryTypes.SELECT }
+    );
 
-            if (search) {
-                where.push("(ld.name ILIKE :q OR ld.description ILIKE :q)");
-                repl.q = `%${search}%`;
-            }
+    const rows: any[] = await db.sequelize.query(
+      `SELECT ld.id, ld.name, ld.description, ld.is_active, ld.created_at
+         FROM public.lead_dispositions ld
+        ${whereSql}
+        ORDER BY ld.name ASC
+        LIMIT :limit OFFSET :offset`,
+      {
+        replacements: { ...repl, limit: pageSize, offset },
+        type: QueryTypes.SELECT,
+      }
+    );
 
-            const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+    const totalPages = Math.ceil(Number(total) / pageSize) || 1;
 
-            const [{ total }]: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT COUNT(*)::int AS total FROM public.lead_dispositions ld ${whereSql}`,
-                { replacements: repl, type: QueryTypes.SELECT }
-            );
+    return sendSuccess(
+      res,
+      {
+        items: rows,
+        pagination: { page, pageSize, total: Number(total), totalPages },
+      },
+      "Dispositions fetched"
+    );
+  } catch (err: any) {
+    if (err.name === "ValidationError") {
+      return sendError(res, {}, err.errors.join(", "), 400);
+    }
+    return sendError(res, err, "Internal server error", 500);
+  }
+};
 
-            const rows: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT ld.id, ld.name, ld.description, ld.is_active, ld.created_at
-                   FROM public.lead_dispositions ld
-                  ${whereSql}
-                  ORDER BY ld.name ASC
-                  LIMIT :limit OFFSET :offset`,
-                {
-                    replacements: { ...repl, limit: pageSize, offset },
-                    type: QueryTypes.SELECT,
-                }
-            );
+// ==================== 2. GET DISPOSITION BY ID ====================
+export const getDispositionById = async (req: Request, res: Response) => {
+  try {
+    const disposition_id = req.query?.id || req.body?.disposition_id || req.body?.id;
+    if (!disposition_id) {
+      return sendError(res, {}, "disposition_id is required", 400);
+    }
 
-            const totalPages = Math.ceil(Number(total) / pageSize) || 1;
+    const rows: any[] = await db.sequelize.query(
+      `SELECT ld.id, ld.name, ld.description, ld.is_active, ld.created_at
+         FROM public.lead_dispositions ld
+        WHERE ld.id = :id
+        LIMIT 1`,
+      {
+        replacements: { id: disposition_id },
+        type: QueryTypes.SELECT,
+      }
+    );
 
-            return this.sendSuccess(
-                res,
-                {
-                    items: rows,
-                    pagination: { page, pageSize, total: Number(total), totalPages },
-                },
-                "Dispositions fetched"
-            );
-        } catch (err: any) {
-            if (err.name === "ValidationError") {
-                return this.sendError(res, {}, err.errors.join(", "), 400);
-            }
-            return this.sendError(res, err, "Internal server error", 500);
-        }
-    };
+    if (!rows.length) return sendError(res, {}, "Disposition not found", 404);
+    return sendSuccess(res, rows[0], "Disposition");
+  } catch (err: any) {
+    return sendError(res, err, "Internal server error", 500);
+  }
+};
 
-    /* ---------------------------------------------------------------------- */
-    /* 2. GET DISPOSITION BY ID (RAW SQL)                                     */
-    /* ---------------------------------------------------------------------- */
-    public getDispositionById = async (req: Request, res: Response): Promise<void> => {
-        try {
-            const schema = Yup.object({
-                disposition_id: Yup.string().uuid().required("disposition_id is required"),
-            });
-            const { disposition_id } = await schema.validate(req.body, { abortEarly: false });
+// ==================== 3. ADD ACTIVITY ====================
+export const addActivity = async (req: Request, res: Response) => {
+  try {
+    const authUser = (req as any)?.user;
+    const schema = yup.object({
+      lead_id: yup.string().uuid().required("lead_id is required"),
+      disposition_id: yup.string().uuid().required("disposition_id is required"),
+      conversation: yup.string().required("conversation is required"),
+      agent_id: yup.string().nullable().optional(),
+      occurred_at: yup.date().nullable().optional(),
+    });
 
-            const rows: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT ld.id, ld.name, ld.description, ld.is_active, ld.created_at
-                   FROM public.lead_dispositions ld
-                  WHERE ld.id = :id
-                  LIMIT 1`,
-                {
-                    replacements: { id: disposition_id },
-                    type: QueryTypes.SELECT,
-                }
-            );
+    const body = await schema.validate(req.body, { abortEarly: false });
+    const { lead_id, disposition_id, conversation } = body;
 
-            if (!rows.length) return this.sendError(res, {}, "Disposition not found", 404);
-            return this.sendSuccess(res, rows[0], "Disposition");
-        } catch (err: any) {
-            if (err.name === "ValidationError") {
-                return this.sendError(res, {}, err.errors.join(", "), 400);
-            }
-            return this.sendError(res, err, "Internal server error", 500);
-        }
-    };
+    let finalAgentId = body.agent_id || authUser?.system_user_id || null;
+    if (!finalAgentId) {
+      const leadRows: any[] = await db.sequelize.query(
+        `SELECT agent_id FROM public.leads WHERE id = :lead_id LIMIT 1`,
+        { replacements: { lead_id }, type: QueryTypes.SELECT }
+      );
+      finalAgentId = leadRows[0]?.agent_id || authUser?.system_user_id || null;
+    }
 
-    /* ---------------------------------------------------------------------- */
-    /* 3. ADD ACTIVITY (RAW SQL)                                              */
-    /* ---------------------------------------------------------------------- */
-    public addActivity = async (req: Request, res: Response): Promise<void> => {
-        try {
-            const authUser = (req as any)?.user;
-            const schema = Yup.object({
-                lead_id: Yup.string().uuid().required("lead_id is required"),
-                disposition_id: Yup.string().uuid().required("disposition_id is required"),
-                conversation: Yup.string().required("conversation is required"),
-                agent_id: Yup.string().nullable().optional(),
-                occurred_at: Yup.date().nullable().optional(),
-            });
+    // Validate disposition via raw SQL
+    const disp: any[] = await db.sequelize.query(
+      `SELECT id FROM public.lead_dispositions WHERE id = :id AND is_active = TRUE`,
+      { replacements: { id: disposition_id }, type: QueryTypes.SELECT }
+    );
+    if (!disp.length) return sendError(res, {}, "Invalid disposition_id", 400);
 
-            const body = await schema.validate(req.body, { abortEarly: false });
-            const { lead_id, disposition_id, conversation } = body;
+    // Raw SQL INSERT for activity
+    const [row]: any[] = await db.sequelize.query(
+      `INSERT INTO public.lead_activity_history
+         (id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at, updated_at)
+       VALUES
+         (:id, :lead_id, :agent_id, :disposition_id, :conversation, COALESCE(:occurred_at, NOW()), NOW(), NOW())
+       RETURNING id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at, updated_at`,
+      {
+        replacements: {
+          id: uuidv4(),
+          lead_id,
+          agent_id: finalAgentId,
+          disposition_id,
+          conversation,
+          occurred_at: body.occurred_at || null,
+        },
+        type: QueryTypes.SELECT,
+      }
+    );
 
-            let finalAgentId = body.agent_id || authUser?.system_user_id || null;
-            if (!finalAgentId) {
-                const leadRows: any[] = await this.db_services.sequelizeWriter.query(
-                    `SELECT agent_id FROM public.leads WHERE id = :lead_id LIMIT 1`,
-                    { replacements: { lead_id }, type: QueryTypes.SELECT }
-                );
-                finalAgentId = leadRows[0]?.agent_id || authUser?.system_user_id || null;
-            }
+    // Safe log in system_user_activity
+    const authUserId = (req as any)?.user?.system_user_id;
+    if (authUserId) {
+      await logUserActivity(authUserId, `Added activity for lead ${lead_id}`, "create");
+    }
 
-            // Validate disposition via raw SQL
-            const disp: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT id FROM public.lead_dispositions WHERE id = :id AND is_active = TRUE`,
-                { replacements: { id: disposition_id }, type: QueryTypes.SELECT }
-            );
-            if (!disp.length) return this.sendError(res, {}, "Invalid disposition_id", 400);
+    return sendSuccess(res, row, "Activity added successfully");
+  } catch (err: any) {
+    if (err.name === "ValidationError") return sendError(res, {}, err.errors.join(", "), 400);
+    console.error("Error in addActivity:", err);
+    return sendError(res, err, "Internal server error", 500);
+  }
+};
 
-            // Raw SQL INSERT for activity
-            const [row]: any[] = await this.db_services.sequelizeWriter.query(
-                `INSERT INTO public.lead_activity_history
-                   (id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at, updated_at)
-                 VALUES
-                   (:id, :lead_id, :agent_id, :disposition_id, :conversation, COALESCE(:occurred_at, NOW()), NOW(), NOW())
-                 RETURNING id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at, updated_at`,
-                {
-                    replacements: {
-                        id: uuidv4(),
-                        lead_id,
-                        agent_id: finalAgentId,
-                        disposition_id,
-                        conversation,
-                        occurred_at: body.occurred_at || null,
-                    },
-                    type: QueryTypes.SELECT,
-                }
-            );
+// ==================== 4. UPDATE ACTIVITY ====================
+export const updateActivity = async (req: Request, res: Response) => {
+  const transaction = await db.sequelize.transaction();
+  try {
+    const schema = yup.object({
+      id: yup.string().uuid().required("activity id is required"),
+      disposition_id: yup.string().uuid().optional(),
+      conversation: yup.string().optional(),
+      agent_id: yup.string().uuid().optional(),
+      occurred_at: yup.date().optional(),
+    });
 
-            // Safe log in system_user_activity
-            const authUserId = (req as any)?.user?.system_user_id;
-            if (authUserId) {
-                await this.logUserActivity(authUserId, `Added activity for lead ${lead_id}`, 'create');
-            }
+    const body = await schema.validate(req.body, { abortEarly: false });
+    const { id, disposition_id, conversation, agent_id, occurred_at } = body;
 
-            return this.sendSuccess(res, row, "Activity added successfully");
-        } catch (err: any) {
-            if (err.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
-            console.error("Error in addActivity:", err);
-            return this.sendError(res, err, "Internal server error", 500);
-        }
-    };
+    // Check existence
+    const exists: any[] = await db.sequelize.query(
+      `SELECT id, lead_id FROM public.lead_activity_history WHERE id = :id AND deleted_at IS NULL`,
+      { replacements: { id }, type: QueryTypes.SELECT, transaction }
+    );
+    if (!exists.length) {
+      await transaction.rollback();
+      return sendError(res, {}, "Activity not found", 404);
+    }
 
-    /* ---------------------------------------------------------------------- */
-    /* 4. UPDATE ACTIVITY (RAW SQL)                                           */
-    /* ---------------------------------------------------------------------- */
-    public updateActivity = async (req: Request, res: Response): Promise<void> => {
-        const transaction = await this.db_services.sequelizeWriter.transaction();
-        try {
-            const schema = Yup.object({
-                id: Yup.string().uuid().required("activity id is required"),
-                disposition_id: Yup.string().uuid().optional(),
-                conversation: Yup.string().optional(),
-                agent_id: Yup.string().uuid().optional(),
-                occurred_at: Yup.date().optional(),
-            });
+    if (disposition_id) {
+      const disp: any[] = await db.sequelize.query(
+        `SELECT id FROM public.lead_dispositions WHERE id = :id AND is_active = TRUE`,
+        { replacements: { id: disposition_id }, type: QueryTypes.SELECT, transaction }
+      );
+      if (!disp.length) {
+        await transaction.rollback();
+        return sendError(res, {}, "Invalid disposition_id", 400);
+      }
+    }
 
-            const body = await schema.validate(req.body, { abortEarly: false });
-            const { id, disposition_id, conversation, agent_id, occurred_at } = body;
+    const updates: string[] = [];
+    const repl: Record<string, any> = { id };
 
-            // Check existence via raw SQL
-            const exists: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT id, lead_id FROM public.lead_activity_history WHERE id = :id AND deleted_at IS NULL`,
-                { replacements: { id }, type: QueryTypes.SELECT, transaction }
-            );
-            if (!exists.length) {
-                await transaction.rollback();
-                return this.sendError(res, {}, "Activity not found", 404);
-            }
+    if (disposition_id) { updates.push("disposition_id = :disposition_id"); repl.disposition_id = disposition_id; }
+    if (conversation !== undefined) { updates.push("conversation = :conversation"); repl.conversation = conversation; }
+    if (agent_id !== undefined) { updates.push("agent_id = :agent_id"); repl.agent_id = agent_id; }
+    if (occurred_at !== undefined) { updates.push("occurred_at = :occurred_at"); repl.occurred_at = occurred_at; }
 
-            if (disposition_id) {
-                const disp: any[] = await this.db_services.sequelizeWriter.query(
-                    `SELECT id FROM public.lead_dispositions WHERE id = :id AND is_active = TRUE`,
-                    { replacements: { id: disposition_id }, type: QueryTypes.SELECT, transaction }
-                );
-                if (!disp.length) {
-                    await transaction.rollback();
-                    return this.sendError(res, {}, "Invalid disposition_id", 400);
-                }
-            }
+    if (!updates.length) {
+      await transaction.rollback();
+      return sendError(res, {}, "No fields to update", 400);
+    }
 
-            const updates: string[] = [];
-            const repl: Record<string, any> = { id };
+    updates.push("updated_at = NOW()");
+    updates.push("is_edited = TRUE");
 
-            if (disposition_id) { updates.push("disposition_id = :disposition_id"); repl.disposition_id = disposition_id; }
-            if (conversation !== undefined) { updates.push("conversation = :conversation"); repl.conversation = conversation; }
-            if (agent_id !== undefined) { updates.push("agent_id = :agent_id"); repl.agent_id = agent_id; }
-            if (occurred_at !== undefined) { updates.push("occurred_at = :occurred_at"); repl.occurred_at = occurred_at; }
+    await db.sequelize.query(
+      `UPDATE public.lead_activity_history
+       SET ${updates.join(", ")}
+       WHERE id = :id`,
+      { replacements: repl, type: QueryTypes.UPDATE, transaction }
+    );
 
-            if (!updates.length) {
-                await transaction.rollback();
-                return this.sendError(res, {}, "No fields to update", 400);
-            }
+    const [result]: any[] = await db.sequelize.query(
+      `SELECT ah.id,
+              d.name AS disposition,
+              ah.disposition_id,
+              ah.conversation,
+              ah.occurred_at,
+              ah.created_at,
+              ah.updated_at,
+              su.name AS agent_name,
+              ah.agent_id
+       FROM public.lead_activity_history ah
+       LEFT JOIN public.lead_dispositions d ON d.id = ah.disposition_id
+       LEFT JOIN public.system_users su ON su.id = ah.agent_id
+       WHERE ah.id = :id`,
+      { replacements: { id }, type: QueryTypes.SELECT, transaction }
+    );
 
-            updates.push("updated_at = NOW()");
-            updates.push("is_edited = TRUE");
+    const authUserId = (req as any)?.user?.system_user_id;
+    if (authUserId) {
+      await logUserActivity(authUserId, `Updated activity ID ${result.id}`, "update", transaction);
+    }
 
-            // Raw SQL UPDATE
-            await this.db_services.sequelizeWriter.query(
-                `UPDATE public.lead_activity_history
-                 SET ${updates.join(", ")}
-                 WHERE id = :id`,
-                { replacements: repl, type: QueryTypes.UPDATE, transaction }
-            );
+    await transaction.commit();
+    return sendSuccess(res, result, "Activity updated successfully");
+  } catch (err: any) {
+    try { await transaction.rollback(); } catch {}
+    console.error("Error in updateActivity:", err);
+    if (err.name === "ValidationError") return sendError(res, {}, err.errors.join(", "), 400);
+    return sendError(res, err, "Internal server error", 500);
+  }
+};
 
-            // Raw SQL SELECT updated row
-            const [result]: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT ah.id,
-                        d.name AS disposition,
-                        ah.disposition_id,
-                        ah.conversation,
-                        ah.occurred_at,
-                        ah.created_at,
-                        ah.updated_at,
-                        su.name AS agent_name,
-                        ah.agent_id
-                 FROM public.lead_activity_history ah
-                 LEFT JOIN public.lead_dispositions d ON d.id = ah.disposition_id
-                 LEFT JOIN public.system_users su ON su.id = ah.agent_id
-                 WHERE ah.id = :id`,
-                { replacements: { id }, type: QueryTypes.SELECT, transaction }
-            );
+// ==================== 5. LIST ACTIVITIES ====================
+export const listActivities = async (req: Request, res: Response) => {
+  try {
+    const src: any = { ...req.query, ...req.body, ...req.params };
+    const schema = yup.object({
+      lead_id: yup.string().uuid().required("lead_id is required"),
+      disposition_id: yup.string().uuid().optional(),
+      agent_id: yup.string().uuid().optional(),
+      conversation: yup.string().trim().max(500).optional(),
+      page: yup.number().integer().min(1).default(1),
+      pageSize: yup.number().integer().min(1).max(200).default(10),
+    });
 
-            // Safe log in system_user_activity
-            const authUserId = (req as any)?.user?.system_user_id;
-            if (authUserId) {
-                await this.logUserActivity(authUserId, `Updated activity ID ${result.id}`, 'update', transaction);
-            }
+    const body = await schema.validate(src, { abortEarly: false });
+    const { lead_id, disposition_id, agent_id, conversation } = body;
+    const page = Number(body.page);
+    const pageSize = Number(body.pageSize);
+    const offset = (page - 1) * pageSize;
 
-            await transaction.commit();
-            return this.sendSuccess(res, result, "Activity updated successfully");
-        } catch (err: any) {
-            try { await transaction.rollback(); } catch { }
-            console.error("Error in updateActivity:", err);
-            if (err.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
-            return this.sendError(res, err, "Internal server error", 500);
-        }
-    };
+    const where: string[] = ["ah.lead_id = :lead_id", "ah.deleted_at IS NULL"];
+    const repl: Record<string, any> = { lead_id, limit: pageSize, offset };
 
-    /* ---------------------------------------------------------------------- */
-    /* 5. LIST ACTIVITIES (RAW SQL)                                           */
-    /* ---------------------------------------------------------------------- */
-    public listActivities = async (req: Request, res: Response): Promise<void> => {
-        try {
-            const src: any = { ...req.query, ...req.body, ...req.params };
-            const schema = Yup.object({
-                lead_id: Yup.string().uuid().required("lead_id is required"),
-                disposition_id: Yup.string().uuid().optional(),
-                agent_id: Yup.string().uuid().optional(),
-                conversation: Yup.string().trim().max(500).optional(),
-                page: Yup.number().integer().min(1).default(1),
-                pageSize: Yup.number().integer().min(1).max(200).default(10),
-            });
+    if (disposition_id) { where.push("ah.disposition_id = :disposition_id"); repl.disposition_id = disposition_id; }
+    if (agent_id) { where.push("ah.agent_id = :agent_id"); repl.agent_id = agent_id; }
+    if (conversation) { where.push("ah.conversation ILIKE :conv"); repl.conv = `%${conversation}%`; }
 
-            const body = await schema.validate(src, { abortEarly: false });
-            const { lead_id, disposition_id, agent_id, conversation } = body;
-            const page = Number(body.page);
-            const pageSize = Number(body.pageSize);
-            const offset = (page - 1) * pageSize;
+    const whereSql = `WHERE ${where.join(" AND ")}`;
 
-            const where: string[] = ["ah.lead_id = :lead_id", "ah.deleted_at IS NULL"];
-            const repl: Record<string, any> = { lead_id, limit: pageSize, offset };
+    const [{ total }]: any[] = await db.sequelize.query(
+      `SELECT COUNT(*)::int AS total
+         FROM public.lead_activity_history ah
+         JOIN public.lead_dispositions d ON d.id = ah.disposition_id
+    LEFT JOIN public.system_users su ON su.id = ah.agent_id
+        ${whereSql}`,
+      { replacements: repl, type: QueryTypes.SELECT }
+    );
 
-            if (disposition_id) { where.push("ah.disposition_id = :disposition_id"); repl.disposition_id = disposition_id; }
-            if (agent_id) { where.push("ah.agent_id = :agent_id"); repl.agent_id = agent_id; }
-            if (conversation) { where.push("ah.conversation ILIKE :conv"); repl.conv = `%${conversation}%`; }
+    const activities: any[] = await db.sequelize.query(
+      `SELECT ah.id,
+              d.name AS disposition,
+              ah.disposition_id,
+              ah.conversation,
+              ah.occurred_at,
+              ah.created_at,
+              ah.updated_at,
+              ah.is_edited,
+              su.name AS agent_name,
+              ah.agent_id
+         FROM public.lead_activity_history ah
+         JOIN public.lead_dispositions d ON d.id = ah.disposition_id
+    LEFT JOIN public.system_users su ON su.id = ah.agent_id
+        ${whereSql}
+       ORDER BY ah.created_at DESC
+       LIMIT :limit OFFSET :offset`,
+      { replacements: repl, type: QueryTypes.SELECT }
+    );
 
-            const whereSql = `WHERE ${where.join(" AND ")}`;
+    return sendSuccess(
+      res,
+      {
+        activities,
+        pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize), total },
+      },
+      "Activity history fetched successfully"
+    );
+  } catch (err: any) {
+    console.error("Error in listActivities:", err);
+    if (err?.name === "ValidationError") return sendError(res, {}, err.errors.join(", "), 400);
+    return sendError(res, err, "Internal server error", 500);
+  }
+};
 
-            const [{ total }]: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT COUNT(*)::int AS total
-                   FROM public.lead_activity_history ah
-                   JOIN public.lead_dispositions d ON d.id = ah.disposition_id
-              LEFT JOIN public.system_users su ON su.id = ah.agent_id
-                  ${whereSql}`,
-                { replacements: repl, type: QueryTypes.SELECT }
-            );
+// ==================== 6. FILTER ACTIVITIES ====================
+export const filterlistActivities = async (req: Request, res: Response) => {
+  try {
+    const src: any = { ...req.query, ...req.body };
 
-            const activities: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT ah.id,
-                        d.name AS disposition,
-                        ah.disposition_id,
-                        ah.conversation,
-                        ah.occurred_at,
-                        ah.created_at,
-                        ah.updated_at,
-                        ah.is_edited,
-                        su.name AS agent_name,
-                        ah.agent_id
-                   FROM public.lead_activity_history ah
-                   JOIN public.lead_dispositions d ON d.id = ah.disposition_id
-              LEFT JOIN public.system_users su ON su.id = ah.agent_id
-                  ${whereSql}
-                 ORDER BY ah.created_at DESC
-                 LIMIT :limit OFFSET :offset`,
-                { replacements: repl, type: QueryTypes.SELECT }
-            );
+    const schema = yup.object({
+      lead_id: yup.string().uuid().required("lead_id is required"),
+      disposition_id: yup.string().optional(),
+      agent_id: yup.string().optional(),
+      conversation: yup.string().trim().max(500).optional(),
+    });
 
-            return this.sendSuccess(res, {
-                activities,
-                pagination: { page, pageSize, totalPages: Math.ceil(total / pageSize), total },
-            }, "Activity history fetched successfully");
-        } catch (err: any) {
-            console.error("Error in listActivities:", err);
-            if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
-            return this.sendError(res, err, "Internal server error", 500);
-        }
-    };
+    const body = await schema.validate(src, { abortEarly: false });
+    const { lead_id, disposition_id, agent_id, conversation } = body;
 
-    /* ---------------------------------------------------------------------- */
-    /* 6. FILTER ACTIVITIES (RAW SQL)                                         */
-    /* ---------------------------------------------------------------------- */
-    public filterlistActivities = async (req: Request, res: Response): Promise<void> => {
-        try {
-            const src: any = { ...req.query, ...req.body };
+    const repl: Record<string, any> = { lead_id };
+    const where: string[] = ["ah.lead_id = :lead_id", "ah.deleted_at IS NULL"];
 
-            const schema = Yup.object({
-                lead_id: Yup.string().uuid().required("lead_id is required"),
-                disposition_id: Yup.string().optional(),
-                agent_id: Yup.string().optional(),
-                conversation: Yup.string().trim().max(500).optional(),
-            });
+    if (disposition_id) { where.push("ah.disposition_id = :disposition_id"); repl.disposition_id = disposition_id; }
+    if (agent_id) { where.push("ah.agent_id = :agent_id"); repl.agent_id = agent_id; }
+    if (conversation) { where.push("ah.conversation ILIKE :conv"); repl.conv = `%${conversation}%`; }
 
-            const body = await schema.validate(src, { abortEarly: false });
-            const { lead_id, disposition_id, agent_id, conversation } = body;
+    const whereSql = `WHERE ${where.join(" AND ")}`;
 
-            const repl: Record<string, any> = { lead_id };
-            const where: string[] = ["ah.lead_id = :lead_id", "ah.deleted_at IS NULL"];
+    const activities: any[] = await db.sequelize.query(
+      `SELECT ah.id,
+              d.name AS disposition,
+              ah.disposition_id,
+              ah.conversation,
+              ah.occurred_at,
+              ah.created_at,
+              ah.updated_at,
+              su.name AS agent_name,
+              ah.agent_id
+         FROM public.lead_activity_history ah
+         JOIN public.lead_dispositions d ON d.id = ah.disposition_id
+    LEFT JOIN public.system_users su ON su.id = ah.agent_id
+        ${whereSql}
+       ORDER BY ah.created_at DESC`,
+      { replacements: repl, type: QueryTypes.SELECT }
+    );
 
-            if (disposition_id) { where.push("ah.disposition_id = :disposition_id"); repl.disposition_id = disposition_id; }
-            if (agent_id) { where.push("ah.agent_id = :agent_id"); repl.agent_id = agent_id; }
-            if (conversation) { where.push("ah.conversation ILIKE :conv"); repl.conv = `%${conversation}%`; }
+    return sendSuccess(res, { activities }, "Activity history fetched successfully");
+  } catch (err: any) {
+    console.error("Error in filterlistActivities:", err);
+    if (err.name === "ValidationError") return sendError(res, {}, err.errors.join(", "), 400);
+    return sendError(res, err, "Internal server error", 500);
+  }
+};
 
-            const whereSql = `WHERE ${where.join(" AND ")}`;
+// ==================== 7. SOFT DELETE ACTIVITY ====================
+export const softDeleteActivity = async (req: Request, res: Response) => {
+  const tx = await db.sequelize.transaction();
+  try {
+    const schema = yup.object({
+      id: yup.string().uuid().required("id is required"),
+    });
 
-            const activities: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT ah.id,
-                        d.name AS disposition,
-                        ah.disposition_id,
-                        ah.conversation,
-                        ah.occurred_at,
-                        ah.created_at,
-                        ah.updated_at,
-                        su.name AS agent_name,
-                        ah.agent_id
-                   FROM public.lead_activity_history ah
-                   JOIN public.lead_dispositions d ON d.id = ah.disposition_id
-              LEFT JOIN public.system_users su ON su.id = ah.agent_id
-                  ${whereSql}
-                 ORDER BY ah.created_at DESC`,
-                { replacements: repl, type: QueryTypes.SELECT }
-            );
+    const { id } = await schema.validate(req.body, { abortEarly: false });
 
-            return this.sendSuccess(res, { activities }, "Activity history fetched successfully");
-        } catch (err: any) {
-            console.error("Error in filterlistActivities:", err);
-            if (err.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
-            return this.sendError(res, err, "Internal server error", 500);
-        }
-    };
+    const rows: any[] = await db.sequelize.query(
+      `UPDATE public.lead_activity_history AS ah
+       SET deleted_at = NOW(),
+           updated_at = NOW()
+       WHERE ah.id = :id AND ah.deleted_at IS NULL
+       RETURNING ah.id, ah.lead_id, ah.disposition_id, ah.deleted_at`,
+      { replacements: { id }, type: QueryTypes.SELECT, transaction: tx }
+    );
 
-    /* ---------------------------------------------------------------------- */
-    /* 7. SOFT DELETE ACTIVITY (RAW SQL)                                      */
-    /* ---------------------------------------------------------------------- */
-    public softDeleteActivity = async (req: Request, res: Response): Promise<void> => {
-        const tx = await this.db_services.sequelizeWriter.transaction();
-        try {
-            const schema = Yup.object({
-                id: Yup.string().uuid().required("id is required"),
-            });
+    if (!rows.length) {
+      await tx.rollback();
+      return sendError(res, {}, "Activity not found or already deleted.", 404);
+    }
 
-            const { id } = await schema.validate(req.body, { abortEarly: false });
+    const adminUserId = (req as any)?.user?.system_user_id;
+    if (adminUserId) {
+      await logUserActivity(adminUserId, `Deleted activity for lead ${rows[0].lead_id}`, "delete", tx);
+    }
 
-            // Raw SQL UPDATE
-            const rows: any[] = await this.db_services.sequelizeWriter.query(
-                `UPDATE public.lead_activity_history AS ah
-                 SET deleted_at = NOW(),
-                     updated_at = NOW()
-                 WHERE ah.id = :id AND ah.deleted_at IS NULL
-                 RETURNING ah.id, ah.lead_id, ah.disposition_id, ah.deleted_at`,
-                { replacements: { id }, type: QueryTypes.SELECT, transaction: tx }
-            );
+    await tx.commit();
+    return sendSuccess(res, { count: 1, item: rows[0] }, "Activity deleted successfully");
+  } catch (err: any) {
+    try { await tx.rollback(); } catch {}
+    if (err.name === "ValidationError") {
+      return sendError(res, {}, err.errors.join(", "), 400);
+    }
+    console.error("Error in softDeleteActivity:", err);
+    return sendError(res, err, "Internal server error", 500);
+  }
+};
 
-            if (!rows.length) {
-                await tx.rollback();
-                return this.sendError(res, {}, "Activity not found or already deleted.", 404);
-            }
+// ==================== 8. GET ACTIVITY BY ID ====================
+export const getActivityById = async (req: Request, res: Response) => {
+  try {
+    const activity_id = req.body?.activity_id || req.query?.id || req.body?.id;
+    if (!activity_id) {
+      return sendError(res, {}, "activity_id is required", 400);
+    }
 
-            // Raw SQL insert for log
-            const adminUserId = (req as any)?.user?.system_user_id;
-            if (adminUserId) {
-                await this.logUserActivity(adminUserId, `Deleted activity for lead ${rows[0].lead_id}`, 'delete', tx);
-            }
+    const rows: any[] = await db.sequelize.query(
+      `SELECT lah.id,
+              lah.lead_id,
+              lah.conversation,
+              lah.occurred_at,
+              lah.created_at,
+              su.name AS agent_name,
+              d.name AS disposition
+         FROM public.lead_activity_history lah
+    LEFT JOIN public.system_users su ON su.id = lah.agent_id
+    LEFT JOIN public.lead_dispositions d ON d.id = lah.disposition_id
+        WHERE lah.id = :activity_id`,
+      { replacements: { activity_id }, type: QueryTypes.SELECT }
+    );
 
-            await tx.commit();
-            return this.sendSuccess(res, { count: 1, item: rows[0] }, "Activity deleted successfully");
-        } catch (err: any) {
-            try { await tx.rollback(); } catch { }
-            if (err.name === "ValidationError") {
-                return this.sendError(res, {}, err.errors.join(", "), 400);
-            }
-            console.error("Error in softDeleteActivity:", err);
-            return this.sendError(res, err, "Internal server error", 500);
-        }
-    };
+    if (!rows.length) {
+      return sendError(res, {}, "Activity not found", 404);
+    }
 
-    /* ---------------------------------------------------------------------- */
-    /* 8. GET ACTIVITY BY ID (RAW SQL)                                        */
-    /* ---------------------------------------------------------------------- */
-    public getActivityById = async (req: Request, res: Response): Promise<void> => {
-        try {
-            const schema = Yup.object({
-                activity_id: Yup.string().uuid().required("activity_id is required"),
-            });
-            await schema.validate(req.body, { abortEarly: false });
-            const { activity_id } = req.body;
+    return sendSuccess(res, rows[0], "Activity fetched successfully");
+  } catch (err: any) {
+    return sendError(res, err, "Internal server error", 500);
+  }
+};
 
-            const rows: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT lah.id,
-                        lah.lead_id,
-                        lah.conversation,
-                        lah.occurred_at,
-                        lah.created_at,
-                        su.name AS agent_name,
-                        d.name AS disposition
-                   FROM public.lead_activity_history lah
-              LEFT JOIN public.system_users su ON su.id = lah.agent_id
-              LEFT JOIN public.lead_dispositions d ON d.id = lah.disposition_id
-                  WHERE lah.id = :activity_id`,
-                { replacements: { activity_id }, type: QueryTypes.SELECT }
-            );
-
-            if (!rows.length) {
-                return this.sendError(res, {}, "Activity not found", 404);
-            }
-
-            return this.sendSuccess(res, rows[0], "Activity fetched successfully");
-        } catch (err: any) {
-            if (err.name === "ValidationError") {
-                return this.sendError(res, {}, err.errors.join(", "), 400);
-            }
-            return this.sendError(res, err, "Internal server error", 500);
-        }
-    };
+// Default export class for full backward compatibility
+export default class LeadActivityHistoryController {
+  public getAllDispositions = getAllDispositions;
+  public getDispositionById = getDispositionById;
+  public addActivity = addActivity;
+  public updateActivity = updateActivity;
+  public listActivities = listActivities;
+  public filterlistActivities = filterlistActivities;
+  public softDeleteActivity = softDeleteActivity;
+  public getActivityById = getActivityById;
 }
