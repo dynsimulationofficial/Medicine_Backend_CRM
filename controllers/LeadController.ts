@@ -5,11 +5,33 @@ import { v4 as uuidv4 } from "uuid";
 import { QueryTypes } from "sequelize";
 import * as XLSX from "xlsx";
 
-// ==================== VALIDATION SCHEMA ====================
+// ==================== VALIDATION SCHEMAS ====================
 const leadSchema = yup.object({
   full_name: yup.string().required("Full name is required").trim(),
   phone: yup.string().required("Phone is required").trim(),
   email: yup.string().email("Invalid email").required("Email is required").trim(),
+  whatsapp_number: yup.string().nullable().optional(),
+  address_line1: yup.string().nullable().optional(),
+  address_line2: yup.string().nullable().optional(),
+  city: yup.string().nullable().optional(),
+  state: yup.string().nullable().optional(),
+  postal_code: yup.string().nullable().optional(),
+  country: yup.string().nullable().optional(),
+  lead_score: yup.number().integer().nullable().optional(),
+  lead_quality: yup.string().nullable().optional(),
+  best_time_to_call: yup.string().nullable().optional(),
+  agent_id: yup.string().uuid().nullable().optional(),
+  lead_source_id: yup.string().uuid().nullable().optional(),
+  campaign_id: yup.string().uuid().nullable().optional(),
+  currency: yup.string().nullable().optional(),
+  lead_status: yup.string().nullable().optional(),
+  note: yup.string().nullable().optional(),
+});
+
+const updateLeadSchema = yup.object({
+  full_name: yup.string().trim().max(120).optional(),
+  phone: yup.string().trim().max(30).optional(),
+  email: yup.string().email("Invalid email format").trim().max(255).optional(),
   whatsapp_number: yup.string().nullable().optional(),
   address_line1: yup.string().nullable().optional(),
   address_line2: yup.string().nullable().optional(),
@@ -217,14 +239,14 @@ export const updateLead = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Lead ID is required" });
     }
 
-    const validatedData = await leadSchema.validate(req.body, { abortEarly: false });
+    const validatedData = await updateLeadSchema.validate(req.body, { abortEarly: false });
     const now = new Date();
 
     const query = `
       UPDATE public.leads SET
-        full_name = :full_name,
-        email = :email,
-        phone = :phone,
+        full_name = COALESCE(:full_name, full_name),
+        email = COALESCE(:email, email),
+        phone = COALESCE(:phone, phone),
         whatsapp_number = COALESCE(:whatsapp_number, whatsapp_number),
         address_line1 = COALESCE(:address_line1, address_line1),
         address_line2 = COALESCE(:address_line2, address_line2),
@@ -249,9 +271,9 @@ export const updateLead = async (req: Request, res: Response) => {
     const result: any[] = await db.sequelize.query(query, {
       replacements: {
         id,
-        full_name: validatedData.full_name,
-        email: validatedData.email.toLowerCase().trim(),
-        phone: validatedData.phone,
+        full_name: validatedData.full_name || null,
+        email: validatedData.email ? validatedData.email.toLowerCase().trim() : null,
+        phone: validatedData.phone || null,
         whatsapp_number: validatedData.whatsapp_number || null,
         address_line1: validatedData.address_line1 || null,
         address_line2: validatedData.address_line2 || null,
