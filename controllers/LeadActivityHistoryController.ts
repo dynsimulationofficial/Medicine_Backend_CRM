@@ -10,14 +10,12 @@ const leadActivitySchema = yup.object({
   disposition_id: yup.string().uuid("Invalid disposition ID").required("Disposition is required"),
   conversation: yup.string().trim().required("Conversation note is required"),
   agent_id: yup.string().uuid("Invalid agent ID").nullable().optional(),
-  occurred_at: yup.date().nullable().optional(),
 });
 
 const updateLeadActivitySchema = yup.object({
-  id: yup.string().uuid("Invalid activity ID").optional(),
+  id: yup.string().uuid("Invalid activity ID").required("Activity ID is required"),
   disposition_id: yup.string().uuid("Invalid disposition ID").optional(),
   conversation: yup.string().trim().optional(),
-  agent_id: yup.string().uuid("Invalid agent ID").nullable().optional(),
 });
 
 // ==================== 1. CREATE ACTIVITY ====================
@@ -25,13 +23,13 @@ export const addActivity = async (req: Request, res: Response) => {
   try {
     const validatedData = await leadActivitySchema.validate(req.body, { abortEarly: false });
 
-    let finalAgentId = validatedData.agent_id || null;
-    if (!finalAgentId) {
+    let agent_id = validatedData.agent_id || null;
+    if (!agent_id) {
       const leadRows: any[] = await db.sequelize.query(
         `SELECT agent_id FROM public.leads WHERE id = :lead_id LIMIT 1`,
         { replacements: { lead_id: validatedData.lead_id }, type: QueryTypes.SELECT }
       );
-      finalAgentId = leadRows[0]?.agent_id || null;
+      agent_id = leadRows[0]?.agent_id || null;
     }
 
     const id = uuidv4();
@@ -42,7 +40,7 @@ export const addActivity = async (req: Request, res: Response) => {
         INSERT INTO public.lead_activity_history (
           id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at, updated_at
         ) VALUES (
-          :id, :lead_id, :agent_id, :disposition_id, :conversation, COALESCE(:occurred_at, :now), :now, :now
+          :id, :lead_id, :agent_id, :disposition_id, :conversation, :now, :now, :now
         )
         RETURNING *
       )
@@ -59,10 +57,9 @@ export const addActivity = async (req: Request, res: Response) => {
       replacements: {
         id,
         lead_id: validatedData.lead_id,
-        agent_id: finalAgentId,
+        agent_id,
         disposition_id: validatedData.disposition_id,
         conversation: validatedData.conversation.trim(),
-        occurred_at: validatedData.occurred_at || null,
         now,
       },
       type: QueryTypes.SELECT,
@@ -145,7 +142,6 @@ export const updateActivity = async (req: Request, res: Response) => {
         UPDATE public.lead_activity_history SET
           disposition_id = COALESCE(:disposition_id, disposition_id),
           conversation = COALESCE(:conversation, conversation),
-          agent_id = COALESCE(:agent_id, agent_id),
           is_edited = TRUE,
           updated_at = :now
         WHERE id = :id AND deleted_at IS NULL
@@ -165,7 +161,6 @@ export const updateActivity = async (req: Request, res: Response) => {
         id,
         disposition_id: validatedData.disposition_id || null,
         conversation: validatedData.conversation ? validatedData.conversation.trim() : null,
-        agent_id: validatedData.agent_id || null,
         now,
       },
       type: QueryTypes.SELECT,
