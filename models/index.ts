@@ -23,6 +23,7 @@ import { initLeadDocumentModel } from "./LeadDocument";
 import { initLeadBulkDocumentModel } from "./LeadBulkDocument";
 
 // Medicine & Order Management Models
+import { initMasterMedicineModel } from "./MasterMedicine";
 import { initLeadMedicineModel } from "./LeadMedicine";
 import { initLeadOrderModel } from "./LeadOrder";
 import { initLeadOrderItemModel } from "./LeadOrderItem";
@@ -56,6 +57,7 @@ const LeadTask = initLeadTaskModel(sequelize);
 const LeadDocument = initLeadDocumentModel(sequelize);
 const LeadBulkDocument = initLeadBulkDocumentModel(sequelize);
 
+const MasterMedicine = initMasterMedicineModel(sequelize);
 const LeadMedicine = initLeadMedicineModel(sequelize);
 const LeadOrder = initLeadOrderModel(sequelize);
 const LeadOrderItem = initLeadOrderItemModel(sequelize);
@@ -412,6 +414,7 @@ const db = {
   LeadTask,
   LeadDocument,
   LeadSource,
+  MasterMedicine,
   LeadMedicine,
   LeadOrder,
   LeadOrderItem,
@@ -438,6 +441,7 @@ export {
   LeadActivityHistory,
   LeadTask,
   LeadDocument,
+  MasterMedicine,
   LeadMedicine,
   LeadOrder,
   LeadOrderItem,
