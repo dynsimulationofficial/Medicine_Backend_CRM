@@ -6,7 +6,7 @@ import * as campaignController from "../controllers/CampaignController";
 import LeadOrderController from "../controllers/LeadOrderController";
 import LeadDocumentController from "../controllers/LeadDocumentController";
 import LeadTaskController from "../controllers/LeadTaskController";
-import LeadActivityHistoryController from "../controllers/LeadActivityHistoryController";
+import leadActivityHistoryController from "../controllers/LeadActivityHistoryController";
 import express from "express";
 import CompressCrmController from "../controllers/AdvanceLeadCRMController";
 import UserActivityController from "../controllers/UserActivityController";
@@ -21,7 +21,6 @@ export const SystemuserRouter = express.Router();
 
 const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
-const leadActivityHistoryController = new LeadActivityHistoryController();
 const leadTaskController = new LeadTaskController();
 const leadDocumentController = new LeadDocumentController();
 const leadOrderController = new LeadOrderController();
@@ -68,17 +67,12 @@ SystemuserRouter.get("/leadsources", leadController.getLeadSources);
 SystemuserRouter.get("/leads/random", leadController.getNextUnassignedLead);
 
 /* -------------------- Lead Activity -------------------- */
-SystemuserRouter.post("/lead/activity/filter", leadActivityHistoryController.filterlistActivities);
-SystemuserRouter.post("/leads/activities/create", leadActivityHistoryController.addActivity);
 SystemuserRouter.post("/leads/activities/list", leadActivityHistoryController.listActivities);
-SystemuserRouter.post("/leads/getactivity", leadActivityHistoryController.getActivityById);
+SystemuserRouter.post("/leads/activities/create", leadActivityHistoryController.addActivity);
 SystemuserRouter.post("/leads/update/activity", leadActivityHistoryController.updateActivity);
-SystemuserRouter.get("/leads/dispositions/all", leadActivityHistoryController.getAllDispositions);
-SystemuserRouter.get("/leads/dispositions/id", leadActivityHistoryController.getDispositionById);
 SystemuserRouter.post("/leads/activities/delete", leadActivityHistoryController.softDeleteActivity);
 SystemuserRouter.post("/leads/activities/soft-delete", leadActivityHistoryController.softDeleteActivity);
-SystemuserRouter.post("/leads/activity/delete", leadActivityHistoryController.softDeleteActivity);
-SystemuserRouter.post("/leads/activity/soft-delete", leadActivityHistoryController.softDeleteActivity);
+SystemuserRouter.get("/leads/dispositions/all", leadActivityHistoryController.getAllDispositions);
 
 /* -------------------- Lead Tasks -------------------- */
 SystemuserRouter.post("/leads/tasks/create", leadTaskController.createTask);
