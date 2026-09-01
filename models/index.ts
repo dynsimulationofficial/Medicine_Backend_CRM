@@ -282,12 +282,16 @@ LeadSource.hasMany(Campaign, {
 /* -------------------- END CAMPAIGN & LEAD SOURCE ------------------------ */
 
 
+/* -------------------- Lead <-> LeadTask Relationship -------------------- */
+// 1. Ek Lead ke paas Multiple Tasks / Reminders ho sakte hain
 Lead.hasMany(LeadTask, {
   foreignKey: { name: "lead_id", allowNull: false },
   as: "tasks",
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+
+// 2. Har Task kisi ek Specific Lead se juda hota hai
 LeadTask.belongsTo(Lead, {
   foreignKey: { name: "lead_id", allowNull: false },
   as: "lead",
@@ -415,12 +419,15 @@ LeadDisposition.hasMany(LeadActivityHistory, {
    F. TASKS, DOCUMENTS & UPLOADS ASSOCIATIONS
 ------------------------------------------------------------------------- */
 
+// 1. Har Task kisi Assigned Agent (SystemUser) se juda hota hai
 LeadTask.belongsTo(SystemUser, {
   foreignKey: { name: "assigned_agent_id", allowNull: false },
   as: "assignedAgent",
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+
+// 2. Ek Agent (SystemUser) ke paas Multiple Assigned Tasks ho sakte hain
 SystemUser.hasMany(LeadTask, {
   foreignKey: { name: "assigned_agent_id", allowNull: false },
   as: "assignedTasks",
