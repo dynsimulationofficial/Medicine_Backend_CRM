@@ -378,8 +378,10 @@ OrderTrackingLog.belongsTo(LeadOrder, {
 /* -------------------- END MEDICINE & ORDER MANAGEMENT ------------------- */
 
 /* -------------------------------------------------------------------------
-   E. TASKS, ACTIVITIES & UPLOADS ASSOCIATIONS (START)
+   E. LEAD ACTIVITY HISTORY & DISPOSITIONS ASSOCIATIONS
 ------------------------------------------------------------------------- */
+
+// 1. Lead Activity History <-> Lead Association (lead_id)
 LeadActivityHistory.belongsTo(Lead, {
   foreignKey: { name: "lead_id", allowNull: false },
   as: "lead",
@@ -393,6 +395,7 @@ Lead.hasMany(LeadActivityHistory, {
   onUpdate: "CASCADE",
 });
 
+// 2. Lead Activity History <-> System User / Agent Association (agent_id)
 LeadActivityHistory.belongsTo(SystemUser, {
   foreignKey: { name: "agent_id", allowNull: true },
   as: "agent",
@@ -406,6 +409,7 @@ SystemUser.hasMany(LeadActivityHistory, {
   onUpdate: "CASCADE",
 });
 
+// 3. Lead Activity History <-> Lead Disposition Association (disposition_id)
 LeadActivityHistory.belongsTo(LeadDisposition, {
   foreignKey: { name: "disposition_id", allowNull: false },
   as: "disposition",
@@ -418,6 +422,10 @@ LeadDisposition.hasMany(LeadActivityHistory, {
   onDelete: "RESTRICT",
   onUpdate: "CASCADE",
 });
+
+/* -------------------------------------------------------------------------
+   F. TASKS, DOCUMENTS & UPLOADS ASSOCIATIONS
+------------------------------------------------------------------------- */
 
 LeadTask.belongsTo(SystemUser, {
   foreignKey: { name: "assigned_agent_id", allowNull: false },
