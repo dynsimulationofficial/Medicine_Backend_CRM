@@ -1,40 +1,30 @@
 import { Request, Response } from "express";
 import * as yup from "yup";
-import { QueryTypes } from "sequelize";
+import db from "../models";
 import { v4 as uuidv4 } from "uuid";
-import DBServices from "../database/DBService";
-
-const dbServices = new DBServices();
-
-// Ensure Table Exists
-const ensureTableExists = async () => {
-  try {
-    await dbServices.sequelizeWriter.query(`
-      CREATE TABLE IF NOT EXISTS public.master_medicines (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
-        deleted_at TIMESTAMP WITH TIME ZONE NULL
-      );
-      CREATE INDEX IF NOT EXISTS idx_master_med_name ON public.master_medicines (name);
-      CREATE INDEX IF NOT EXISTS idx_master_med_deleted ON public.master_medicines (deleted_at);
-    `);
-  } catch (e) {
-    console.error("Error creating master_medicines table:", e);
-  }
-};
-ensureTableExists();
+import { QueryTypes } from "sequelize";
 
 // ==================== VALIDATION SCHEMA ====================
 const medicineSchema = yup.object({
   name: yup.string().trim().required("Medicine name is required").max(255),
 });
 
-// ==================== CREATE ====================
-export const createMedicine = async (req: Request, res: Response): Promise<void> => {
+// ==================== 1. CREATE MEDICINE ====================
+export const createMedicine = async (req: Request, res: Response) => {
   try {
     const validatedData = await medicineSchema.validate(req.body, { abortEarly: false });
+    const name = validatedData.name.trim();
+
+    // Check duplicate
+    const dupRows: any[] = await db.sequelize.query(
+      `SELECT id FROM public.master_medicines WHERE deleted_at IS NULL AND LOWER(name) = LOWER(:name) LIMIT 1`,
+      { replacements: { name }, type: QueryTypes.SELECT }
+    );
+
+    if (dupRows.length > 0) {
+      return res.status(409).json({ success: false, message: "A medicine with this name already exists" });
+    }
+
     const id = uuidv4();
     const now = new Date();
 
@@ -44,86 +34,90 @@ export const createMedicine = async (req: Request, res: Response): Promise<void>
       RETURNING *
     `;
 
-    const result: any[] = await dbServices.sequelizeWriter.query(query, {
-      replacements: {
-        id,
-        name: validatedData.name.trim(),
-        created_at: now,
-        updated_at: now,
-      },
+    const result: any[] = await db.sequelize.query(query, {
+      replacements: { id, name, created_at: now, updated_at: now },
       type: QueryTypes.SELECT,
     });
 
-    res.status(201).json({ success: true, data: result[0] });
+    return res.status(201).json({ success: true, data: result[0] });
   } catch (error: any) {
     if (error.name === "ValidationError") {
-      res.status(400).json({ success: false, errors: error.errors });
-      return;
+      return res.status(400).json({ success: false, errors: error.errors });
     }
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// ==================== GET ALL (PAGINATION) ====================
-export const getAllMedicines = async (req: Request, res: Response): Promise<void> => {
+// ==================== 2. GET ALL MEDICINES ====================
+export const getAllMedicines = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Number(req.query.limit) || 20;
+    const limit = Number(req.query.limit || req.query.pageSize) || 50;
     const offset = (page - 1) * limit;
+    const search = (req.query.search || req.query.q || "").toString().trim();
 
-    const countResult: any[] = await dbServices.sequelizeWriter.query(
-      `SELECT COUNT(*) as total FROM public.master_medicines WHERE deleted_at IS NULL`,
-      { type: QueryTypes.SELECT }
+    let whereClause = "WHERE deleted_at IS NULL";
+    const replacements: any = { limit, offset };
+
+    if (search) {
+      whereClause += " AND name ILIKE :search";
+      replacements.search = `%${search}%`;
+    }
+
+    const countResult: any[] = await db.sequelize.query(
+      `SELECT COUNT(*) as total FROM public.master_medicines ${whereClause}`,
+      { replacements, type: QueryTypes.SELECT }
     );
-    const total = parseInt(countResult[0]?.total || "0", 10);
+    const total = parseInt(countResult[0]?.total || "0");
 
-    const dataResult: any[] = await dbServices.sequelizeWriter.query(
-      `SELECT id, name, created_at, updated_at FROM public.master_medicines WHERE deleted_at IS NULL ORDER BY created_at DESC LIMIT :limit OFFSET :offset`,
-      { replacements: { limit, offset }, type: QueryTypes.SELECT }
+    const dataResult: any[] = await db.sequelize.query(
+      `SELECT id, name, created_at, updated_at
+       FROM public.master_medicines
+       ${whereClause}
+       ORDER BY created_at DESC
+       LIMIT :limit OFFSET :offset`,
+      { replacements, type: QueryTypes.SELECT }
     );
 
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: dataResult,
-      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) || 1 },
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
     });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// ==================== GET ONE ====================
-export const getMedicineById = async (req: Request, res: Response): Promise<void> => {
+// ==================== 3. GET MEDICINE BY ID ====================
+export const getMedicineById = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.body?.id || req.query?.id || req.params?.id;
     if (!id) {
-      res.status(400).json({ success: false, message: "Invalid ID" });
-      return;
+      return res.status(400).json({ success: false, message: "Medicine ID is required" });
     }
 
-    const result: any[] = await dbServices.sequelizeWriter.query(
-      `SELECT id, name, created_at, updated_at FROM public.master_medicines WHERE id = :id AND deleted_at IS NULL`,
+    const result: any[] = await db.sequelize.query(
+      `SELECT id, name, created_at, updated_at FROM public.master_medicines WHERE id = :id AND deleted_at IS NULL LIMIT 1`,
       { replacements: { id }, type: QueryTypes.SELECT }
     );
 
     if (result.length === 0) {
-      res.status(404).json({ success: false, message: "Medicine record not found" });
-      return;
+      return res.status(404).json({ success: false, message: "Medicine record not found" });
     }
 
-    res.status(200).json({ success: true, data: result[0] });
+    return res.status(200).json({ success: true, data: result[0] });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// ==================== UPDATE ====================
-export const updateMedicine = async (req: Request, res: Response): Promise<void> => {
+// ==================== 4. UPDATE MEDICINE ====================
+export const updateMedicine = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.body?.id || req.query?.id || req.params?.id;
     if (!id) {
-      res.status(400).json({ success: false, message: "Invalid ID" });
-      return;
+      return res.status(400).json({ success: false, message: "Medicine ID is required" });
     }
 
     const validatedData = await medicineSchema.validate(req.body, { abortEarly: false });
@@ -137,7 +131,7 @@ export const updateMedicine = async (req: Request, res: Response): Promise<void>
       RETURNING *
     `;
 
-    const result: any[] = await dbServices.sequelizeWriter.query(query, {
+    const result: any[] = await db.sequelize.query(query, {
       replacements: {
         id,
         name: validatedData.name.trim(),
@@ -147,45 +141,42 @@ export const updateMedicine = async (req: Request, res: Response): Promise<void>
     });
 
     if (result.length === 0) {
-      res.status(404).json({ success: false, message: "Medicine record not found" });
-      return;
+      return res.status(404).json({ success: false, message: "Medicine record not found" });
     }
 
-    res.status(200).json({ success: true, data: result[0] });
+    return res.status(200).json({ success: true, data: result[0] });
   } catch (error: any) {
     if (error.name === "ValidationError") {
-      res.status(400).json({ success: false, errors: error.errors });
-      return;
+      return res.status(400).json({ success: false, errors: error.errors });
     }
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
-// ==================== DELETE ====================
-export const deleteMedicine = async (req: Request, res: Response): Promise<void> => {
+// ==================== 5. DELETE MEDICINE ====================
+export const deleteMedicine = async (req: Request, res: Response) => {
   try {
-    const { id } = req.params;
+    const id = req.body?.id || req.query?.id || req.params?.id;
     if (!id) {
-      res.status(400).json({ success: false, message: "Invalid ID" });
-      return;
+      return res.status(400).json({ success: false, message: "Medicine ID is required" });
     }
 
-    const result: any[] = await dbServices.sequelizeWriter.query(
+    const result: any[] = await db.sequelize.query(
       `UPDATE public.master_medicines SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id AND deleted_at IS NULL RETURNING id`,
       { replacements: { id }, type: QueryTypes.SELECT }
     );
 
     if (result.length === 0) {
-      res.status(404).json({ success: false, message: "Medicine record not found" });
-      return;
+      return res.status(404).json({ success: false, message: "Medicine record not found" });
     }
 
-    res.status(200).json({ success: true, message: "Deleted successfully" });
+    return res.status(200).json({ success: true, message: "Medicine deleted successfully" });
   } catch (error: any) {
-    res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
+// ==================== DEFAULT EXPORT ====================
 export default {
   createMedicine,
   getAllMedicines,
