@@ -61,9 +61,11 @@ export const createTask = async (req: Request, res: Response) => {
     const result: any[] = await db.sequelize.query(
       `INSERT INTO public.lead_tasks (
          id, lead_id, assigned_agent_id, task_type, subject, details, location,
+         timer_minutes, timer_hours,
          start_at, end_at, due_at, status, created_at, updated_at
        ) VALUES (
          :id, :lead_id, :assigned_agent_id, :task_type, :subject, :details, :location,
+         0, 0,
          :start_at, :end_at, :start_at, 'pending', :now, :now
        )
        RETURNING *`,
