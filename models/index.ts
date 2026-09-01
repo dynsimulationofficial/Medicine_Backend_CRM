@@ -220,6 +220,7 @@ SystemUserActivity.belongsTo(SystemUser, {
 /* -------------------------------------------------------------------------
    C. LEAD CORE ASSOCIATIONS (START)
 ------------------------------------------------------------------------- */
+// Lead <-> Lead Source
 Lead.belongsTo(LeadSource, {
   foreignKey: { name: "lead_source_id", allowNull: true },
   as: "leadSource",
@@ -233,19 +234,7 @@ LeadSource.hasMany(Lead, {
   onUpdate: "CASCADE",
 });
 
-Campaign.belongsTo(LeadSource, {
-  foreignKey: { name: "lead_source_id", allowNull: true },
-  as: "leadSource",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-LeadSource.hasMany(Campaign, {
-  foreignKey: { name: "lead_source_id", allowNull: true },
-  as: "campaigns",
-  onDelete: "SET NULL",
-  onUpdate: "CASCADE",
-});
-
+// Lead <-> Campaign
 Lead.belongsTo(Campaign, {
   foreignKey: { name: "campaign_id", allowNull: true },
   as: "campaign",
@@ -259,6 +248,7 @@ Campaign.hasMany(Lead, {
   onUpdate: "CASCADE",
 });
 
+// Lead <-> Agent (SystemUser)
 Lead.belongsTo(SystemUser, {
   foreignKey: { name: "agent_id", allowNull: true },
   as: "agent",
@@ -271,6 +261,25 @@ SystemUser.hasMany(Lead, {
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
+/* -------------------- END LEAD CORE ------------------------------------- */
+
+/* -------------------------------------------------------------------------
+   D. CAMPAIGN & LEAD SOURCE ASSOCIATIONS (START)
+------------------------------------------------------------------------- */
+// Campaign <-> Lead Source
+Campaign.belongsTo(LeadSource, {
+  foreignKey: { name: "lead_source_id", allowNull: true },
+  as: "leadSource",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+LeadSource.hasMany(Campaign, {
+  foreignKey: { name: "lead_source_id", allowNull: true },
+  as: "campaigns",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+/* -------------------- END CAMPAIGN & LEAD SOURCE ------------------------ */
 
 Lead.hasMany(LeadActivityHistory, {
   foreignKey: { name: "lead_id", allowNull: false },
