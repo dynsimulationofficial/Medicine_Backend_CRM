@@ -4,22 +4,12 @@ import db from "../models";
 import { v4 as uuidv4 } from "uuid";
 import { QueryTypes } from "sequelize";
 
-// ==================== VALIDATION SCHEMAS ====================
+// ==================== SINGLE UNIFIED VALIDATION SCHEMA ====================
 const leadTaskSchema = yup.object({
-  lead_id: yup.string().uuid("Invalid lead ID").required("Lead ID is required"),
-  task_type: yup.string().oneOf(["meeting", "phonecall", "followup"]).default("followup"),
-  subject: yup.string().trim().max(255).optional(),
-  details: yup.string().trim().optional(),
-  location: yup.string().trim().max(255).optional(),
-  start_at: yup.date().nullable().optional(),
-  end_at: yup.date().nullable().optional(),
-  assigned_agent_id: yup.string().uuid("Invalid agent ID").nullable().optional(),
-});
-
-const updateLeadTaskSchema = yup.object({
   id: yup.string().uuid("Invalid task ID").optional(),
   task_id: yup.string().uuid("Invalid task ID").optional(),
-  task_type: yup.string().oneOf(["meeting", "phonecall", "followup"]).optional(),
+  lead_id: yup.string().uuid("Invalid lead ID").optional(),
+  task_type: yup.string().oneOf(["meeting", "phonecall", "followup"]).default("followup"),
   subject: yup.string().trim().max(255).optional(),
   details: yup.string().trim().optional(),
   location: yup.string().trim().max(255).optional(),
@@ -39,6 +29,11 @@ const parseDate = (val: any): Date | null => {
 // ==================== 1. CREATE TASK ====================
 export const createTask = async (req: Request, res: Response) => {
   try {
+    const lead_id = req.body?.lead_id;
+    if (!lead_id) {
+      return res.status(400).json({ success: false, message: "Lead ID is required" });
+    }
+
     const validatedData = await leadTaskSchema.validate(req.body, { abortEarly: false });
     const id = uuidv4();
     const now = new Date();
@@ -50,7 +45,7 @@ export const createTask = async (req: Request, res: Response) => {
     if (!agent_id) {
       const leadRows: any[] = await db.sequelize.query(
         `SELECT agent_id, full_name FROM public.leads WHERE id = :lead_id LIMIT 1`,
-        { replacements: { lead_id: validatedData.lead_id }, type: QueryTypes.SELECT }
+        { replacements: { lead_id }, type: QueryTypes.SELECT }
       );
       agent_id = leadRows[0]?.agent_id || null;
     }
@@ -72,7 +67,7 @@ export const createTask = async (req: Request, res: Response) => {
       {
         replacements: {
           id,
-          lead_id: validatedData.lead_id,
+          lead_id,
           assigned_agent_id: agent_id,
           task_type: validatedData.task_type || "followup",
           subject,
@@ -145,7 +140,7 @@ export const updateTask = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "Task ID is required" });
     }
 
-    const validatedData = await updateLeadTaskSchema.validate(req.body, { abortEarly: false });
+    const validatedData = await leadTaskSchema.validate(req.body, { abortEarly: false });
     const now = new Date();
 
     const startAt = parseDate(validatedData.start_at || req.body.start_at_text);
