@@ -157,19 +157,10 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const limit = Number(req.query.limit || req.query.pageSize) || 50;
     const offset = (page - 1) * limit;
-    const filterAgentId = (req.query.agent_id || (req as any)?.user?.system_user_id) as string | undefined;
-
-    let whereClause = "WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL";
-    const replacements: any = { limit, offset };
-
-    if (filterAgentId) {
-      whereClause += " AND l.agent_id = :filterAgentId";
-      replacements.filterAgentId = filterAgentId;
-    }
 
     const countResult: any[] = await db.sequelize.query(
-      `SELECT COUNT(*) as total FROM public.leads l ${whereClause}`,
-      { replacements, type: QueryTypes.SELECT }
+      `SELECT COUNT(*) as total FROM public.leads WHERE deleted_at IS NULL AND agent_id IS NOT NULL`,
+      { type: QueryTypes.SELECT }
     );
     const total = parseInt(countResult[0]?.total || "0");
 
@@ -183,10 +174,10 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
        LEFT JOIN public.system_users su ON su.id = l.agent_id
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
-       ${whereClause}
+       WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
-      { replacements, type: QueryTypes.SELECT }
+      { replacements: { limit, offset }, type: QueryTypes.SELECT }
     );
 
     return res.status(200).json({
