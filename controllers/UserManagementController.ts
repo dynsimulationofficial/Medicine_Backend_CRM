@@ -1,9 +1,11 @@
 import { Request, Response } from "express";
 import * as Yup from "yup";
-import db, { SystemUserActivity } from "../models";
+import db from "../models";
 import { v4 as uuidv4 } from "uuid";
 import bcrypt from "bcrypt";
 import { QueryTypes } from "sequelize";
+
+const { SystemUserActivity } = db;
 
 // ==================== VALIDATION SCHEMAS ====================
 const createUserSchema = Yup.object({

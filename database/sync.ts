@@ -1,13 +1,9 @@
 // src/database/sync.ts
 import { Sequelize, Op } from "sequelize";
 import { v4 as uuidv4 } from "uuid";
-import {
-  Role,
-  Permission,
-  RolePermission,
-  LeadDisposition,
-  LeadSource,
-} from "../models";
+import db from "../models";
+
+const { Role, Permission, RolePermission, LeadDisposition, LeadSource } = db;
 
 /**
  * Make sure block columns/index/foreign key exist on system_users

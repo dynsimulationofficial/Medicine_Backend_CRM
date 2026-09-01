@@ -5,7 +5,7 @@ import * as Sentry from "@sentry/node";
 import cors from "cors";
 
 import SystemuserRouter from "./routes/SystemuserRoute";
-import { sequelize } from "./models";
+import db from "./models";
 import { syncDatabase } from "./database/sync";
 import emailService from "./service/EmailService";
 dotenv.config();
@@ -26,7 +26,8 @@ Sentry.init({
 app.use(
   cors({
     origin: "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
     credentials: false,
   })
 );
@@ -55,10 +56,10 @@ async function startServer() {
     }
 
     console.log("📦 Connecting to database...");
-    await sequelize.authenticate();
+    await db.sequelize.authenticate();
     console.log("✅ Database connection established");
 
-    await syncDatabase(sequelize);
+    await syncDatabase(db.sequelize);
 
     console.log("🚀 Launching server...");
     app.listen(port, "0.0.0.0", () => {

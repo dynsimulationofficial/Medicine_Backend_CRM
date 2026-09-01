@@ -427,29 +427,5 @@ const db = {
 };
 
 export default db;
-export {
-  dbService,
-  sequelize,
-  Role,
-  Permission,
-  RolePermission,
-  SystemUser,
-  SystemUserActivity,
-  UserRole,
-  Lead,
-  LeadDisposition,
-  LeadActivityHistory,
-  LeadTask,
-  LeadDocument,
-  MasterMedicine,
-  LeadMedicine,
-  LeadOrder,
-  LeadOrderItem,
-  OrderTrackingLog,
-  LeadSource,
-  UserLogin,
-  UserOtp,
-  AssignedLeadNotification,
-  SystemUserSecret,
-  LeadBulkDocument,
-};
+
+

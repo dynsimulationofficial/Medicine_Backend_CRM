@@ -34,16 +34,11 @@ const loginRequestOtpSchema = Yup.object().shape({
   password: Yup.string().required("Password is required"),
 }).noUnknown(true);
 
+import db from "../models";
 import { tokenBlacklist } from "../utils/tokenBlacklisted";
 import emailService from "../service/EmailService";
-import { DateTime } from "luxon";
-import db, { SystemUserActivity, UserLogin } from "../models"; // adjust path
-interface User {
-  id: string;
-  email: string;
-  mobile_number: string;
-  deleted_at: Date | null;
-}
+
+const { SystemUserActivity, UserLogin } = db;
 
 
 
