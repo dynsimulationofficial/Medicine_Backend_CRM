@@ -67,11 +67,11 @@ SystemuserRouter.get("/leadsources", leadController.getLeadSources);
 SystemuserRouter.get("/leads/random", leadController.getNextUnassignedLead);
 
 /* -------------------- Lead Activity -------------------- */
-SystemuserRouter.post("/leads/activities/list", leadActivityHistoryController.listActivities);
-SystemuserRouter.post("/leads/activities/create", leadActivityHistoryController.addActivity);
+SystemuserRouter.post("/leads/activities/create", leadActivityHistoryController.createActivity);
+SystemuserRouter.post("/leads/activities/list", leadActivityHistoryController.getAllActivities);
 SystemuserRouter.post("/leads/update/activity", leadActivityHistoryController.updateActivity);
-SystemuserRouter.post("/leads/activities/delete", leadActivityHistoryController.softDeleteActivity);
-SystemuserRouter.post("/leads/activities/soft-delete", leadActivityHistoryController.softDeleteActivity);
+SystemuserRouter.post("/leads/activities/delete", leadActivityHistoryController.deleteActivity);
+SystemuserRouter.post("/leads/activities/soft-delete", leadActivityHistoryController.deleteActivity);
 SystemuserRouter.get("/leads/dispositions/all", leadActivityHistoryController.getAllDispositions);
 
 /* -------------------- Lead Tasks -------------------- */
