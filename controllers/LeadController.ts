@@ -388,41 +388,24 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
 // ==================== 9. FILTER / SEARCH LEADS ====================
 export const searchLeads = async (req: Request, res: Response) => {
   try {
-    const page = Math.max(1, Number(req.body.page || req.query.page) || 1);
-    const limit = Number(req.body.limit || req.body.pageSize || req.query.limit || req.query.pageSize) || 50;
+    const page = Math.max(1, Number(req.body?.page || req.query?.page) || 1);
+    const limit = Number(req.body?.limit || req.body?.pageSize || req.query?.limit || req.query?.pageSize) || 50;
     const offset = (page - 1) * limit;
 
-    const { full_name, email, phone, city, lead_source_id, agent_ids } = req.body || {};
+    const { q, search, full_name, email, phone, city, lead_source_id } = { ...req.query, ...req.body };
+    const queryStr = (q || search || full_name || email || phone || city || "").toString().trim();
 
-    const where: string[] = ["l.deleted_at IS NULL"];
+    let whereClause = "WHERE l.deleted_at IS NULL";
     const replacements: any = { limit, offset };
 
-    if (full_name) {
-      where.push("l.full_name ILIKE :full_name");
-      replacements.full_name = `%${String(full_name).trim()}%`;
-    }
-    if (email) {
-      where.push("l.email ILIKE :email");
-      replacements.email = `%${String(email).trim()}%`;
-    }
-    if (phone) {
-      where.push("l.phone ILIKE :phone");
-      replacements.phone = `%${String(phone).trim()}%`;
-    }
-    if (city) {
-      where.push("l.city ILIKE :city");
-      replacements.city = `%${String(city).trim()}%`;
+    if (queryStr) {
+      whereClause += " AND (l.full_name ILIKE :search OR l.email ILIKE :search OR l.phone ILIKE :search OR l.city ILIKE :search)";
+      replacements.search = `%${queryStr}%`;
     }
     if (lead_source_id) {
-      where.push("l.lead_source_id = :lead_source_id");
+      whereClause += " AND l.lead_source_id = :lead_source_id";
       replacements.lead_source_id = lead_source_id;
     }
-    if (Array.isArray(agent_ids) && agent_ids.length > 0) {
-      where.push("l.agent_id = ANY(ARRAY[:agent_ids]::uuid[])");
-      replacements.agent_ids = agent_ids;
-    }
-
-    const whereClause = `WHERE ${where.join(" AND ")}`;
 
     const countResult: any[] = await db.sequelize.query(
       `SELECT COUNT(*) as total FROM public.leads l ${whereClause}`,
