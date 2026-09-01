@@ -380,16 +380,29 @@ OrderTrackingLog.belongsTo(LeadOrder, {
 /* -------------------------------------------------------------------------
    E. TASKS, ACTIVITIES & UPLOADS ASSOCIATIONS (START)
 ------------------------------------------------------------------------- */
+LeadActivityHistory.belongsTo(Lead, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "lead",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+Lead.hasMany(LeadActivityHistory, {
+  foreignKey: { name: "lead_id", allowNull: false },
+  as: "activities",
+  onDelete: "CASCADE",
+  onUpdate: "CASCADE",
+});
+
 LeadActivityHistory.belongsTo(SystemUser, {
-  foreignKey: { name: "created_by", allowNull: false },
-  as: "creator",
-  onDelete: "RESTRICT",
+  foreignKey: { name: "agent_id", allowNull: true },
+  as: "agent",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 SystemUser.hasMany(LeadActivityHistory, {
-  foreignKey: { name: "created_by", allowNull: false },
-  as: "createdActivities",
-  onDelete: "RESTRICT",
+  foreignKey: { name: "agent_id", allowNull: true },
+  as: "activities",
+  onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });
 
