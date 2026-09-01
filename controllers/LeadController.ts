@@ -4,19 +4,6 @@ import db from "../models";
 import { v4 as uuidv4 } from "uuid";
 import { QueryTypes } from "sequelize";
 import * as XLSX from "xlsx";
-import { DateTime } from "luxon";
-
-// ==================== HELPERS ====================
-const parseDate = (text?: string | null): DateTime | null => {
-  if (!text) return null;
-  const dt = DateTime.fromISO(text);
-  if (dt.isValid) return dt;
-  const dtFormat = DateTime.fromFormat(text, "yyyy-MM-dd");
-  if (dtFormat.isValid) return dtFormat;
-  const dtUS = DateTime.fromFormat(text, "MM-dd-yyyy");
-  if (dtUS.isValid) return dtUS;
-  return null;
-};
 
 // ==================== VALIDATION SCHEMA ====================
 const leadSchema = yup.object({
@@ -402,54 +389,43 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
 export const searchLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.body.page || req.query.page) || 1);
-    const limit = Number(req.body.pageSize || req.body.limit || req.query.pageSize || req.query.limit) || 50;
+    const limit = Number(req.body.limit || req.body.pageSize || req.query.limit || req.query.pageSize) || 50;
     const offset = (page - 1) * limit;
 
-    const { full_name, email, phone, city, state, lead_status, lead_source_id, agent_ids, created_from, created_to, search, q } = {
-      ...req.query,
-      ...req.body,
-    };
+    const { full_name, email, phone, city, lead_source_id, agent_ids } = req.body || {};
 
     const where: string[] = ["l.deleted_at IS NULL"];
     const replacements: any = { limit, offset };
 
-    const querySearch = (search || q || "").toString().trim();
-    if (querySearch) {
-      where.push("(l.full_name ILIKE :q OR l.email ILIKE :q OR l.phone ILIKE :q OR l.lead_number::text ILIKE :q)");
-      replacements.q = `%${querySearch}%`;
+    if (full_name) {
+      where.push("l.full_name ILIKE :full_name");
+      replacements.full_name = `%${String(full_name).trim()}%`;
     }
-
-    if (full_name) { where.push("l.full_name ILIKE :full_name"); replacements.full_name = `%${full_name}%`; }
-    if (email) { where.push("l.email ILIKE :email"); replacements.email = `%${email}%`; }
-    if (phone) { where.push("l.phone ILIKE :phone"); replacements.phone = `%${phone}%`; }
-    if (city) { where.push("l.city ILIKE :city"); replacements.city = `%${city}%`; }
-    if (state) { where.push("l.state ILIKE :state"); replacements.state = `%${state}%`; }
-    if (lead_status) { where.push("l.lead_status = :lead_status"); replacements.lead_status = lead_status; }
-    if (lead_source_id) { where.push("l.lead_source_id = :lead_source_id"); replacements.lead_source_id = lead_source_id; }
-    if (Array.isArray(agent_ids) && agent_ids.length) {
+    if (email) {
+      where.push("l.email ILIKE :email");
+      replacements.email = `%${String(email).trim()}%`;
+    }
+    if (phone) {
+      where.push("l.phone ILIKE :phone");
+      replacements.phone = `%${String(phone).trim()}%`;
+    }
+    if (city) {
+      where.push("l.city ILIKE :city");
+      replacements.city = `%${String(city).trim()}%`;
+    }
+    if (lead_source_id) {
+      where.push("l.lead_source_id = :lead_source_id");
+      replacements.lead_source_id = lead_source_id;
+    }
+    if (Array.isArray(agent_ids) && agent_ids.length > 0) {
       where.push("l.agent_id = ANY(ARRAY[:agent_ids]::uuid[])");
       replacements.agent_ids = agent_ids;
     }
 
-    if (created_from) {
-      const dt = parseDate(created_from);
-      if (dt && dt.isValid) {
-        where.push("l.created_at >= :created_from");
-        replacements.created_from = dt.toISO();
-      }
-    }
-    if (created_to) {
-      const dt = parseDate(created_to);
-      if (dt && dt.isValid) {
-        where.push("l.created_at <= :created_to");
-        replacements.created_to = dt.endOf("day").toISO();
-      }
-    }
-
-    const whereSql = `WHERE ${where.join(" AND ")}`;
+    const whereClause = `WHERE ${where.join(" AND ")}`;
 
     const countResult: any[] = await db.sequelize.query(
-      `SELECT COUNT(*) as total FROM public.leads l ${whereSql}`,
+      `SELECT COUNT(*) as total FROM public.leads l ${whereClause}`,
       { replacements, type: QueryTypes.SELECT }
     );
     const total = parseInt(countResult[0]?.total || "0");
@@ -464,7 +440,7 @@ export const searchLeads = async (req: Request, res: Response) => {
        LEFT JOIN public.system_users su ON su.id = l.agent_id
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
-       ${whereSql}
+       ${whereClause}
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
       { replacements, type: QueryTypes.SELECT }
@@ -479,8 +455,6 @@ export const searchLeads = async (req: Request, res: Response) => {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
-
-export const filterUnassignedLeads = searchLeads;
 
 // ==================== 10. GET ALL AGENTS ====================
 export const getAllAgents = async (req: Request, res: Response) => {
@@ -617,7 +591,6 @@ export default {
   updateLead,
   assignLeadToAgent,
   searchLeads,
-  filterUnassignedLeads,
   softDeleteLeads,
   getLeadSources,
   bulkUploadFromFile,
