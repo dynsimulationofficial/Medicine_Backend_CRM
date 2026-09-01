@@ -81,8 +81,6 @@ SystemuserRouter.post("/leads/tasks/filter", leadTaskController.getAllTasks);
 SystemuserRouter.post("/leads/tasks/complete", leadTaskController.completeTask);
 SystemuserRouter.post("/leads/tasks/delete", leadTaskController.deleteTask);
 SystemuserRouter.post("/leads/tasks/soft-delete", leadTaskController.deleteTask);
-SystemuserRouter.post("/leads/task/delete", leadTaskController.deleteTask);
-SystemuserRouter.post("/leads/task/soft-delete", leadTaskController.deleteTask);
 
 /* -------------------- Lead Documents -------------------- */
 SystemuserRouter.post("/leads/documents/list", leadDocumentController.listDocuments);

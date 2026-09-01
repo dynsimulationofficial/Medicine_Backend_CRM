@@ -246,11 +246,7 @@ export const deleteTask = async (req: Request, res: Response) => {
 export default {
   createTask,
   getAllTasks,
-  listTasks: getAllTasks,
   updateTask,
-  editTask: updateTask,
-  filterTasks: getAllTasks,
   completeTask,
   deleteTask,
-  softDeleteTask: deleteTask,
 };
