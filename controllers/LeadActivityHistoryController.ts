@@ -20,71 +20,18 @@ const updateLeadActivitySchema = yup.object({
   agent_id: yup.string().uuid("Invalid agent ID").nullable().optional(),
 });
 
-// ==================== 1. GET ALL DISPOSITIONS ====================
-export const getAllDispositions = async (req: Request, res: Response) => {
-  try {
-    const result: any[] = await db.sequelize.query(
-      `SELECT id, name, description, is_active, created_at
-       FROM public.lead_dispositions
-       WHERE is_active = TRUE
-       ORDER BY name ASC`,
-      { type: QueryTypes.SELECT }
-    );
-
-    return res.status(200).json({ success: true, data: result });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// ==================== 2. LIST ALL ACTIVITIES (NO LIMIT) ====================
-export const listActivities = async (req: Request, res: Response) => {
-  try {
-    const lead_id = req.body?.lead_id || req.query?.lead_id;
-    if (!lead_id) {
-      return res.status(400).json({ success: false, message: "Lead ID is required" });
-    }
-
-    const activities: any[] = await db.sequelize.query(
-      `SELECT
-         ah.id,
-         d.name AS disposition,
-         ah.disposition_id,
-         ah.conversation,
-         ah.occurred_at,
-         ah.created_at,
-         ah.updated_at,
-         ah.is_edited,
-         su.name AS agent_name,
-         ah.agent_id
-       FROM public.lead_activity_history ah
-       JOIN public.lead_dispositions d ON d.id = ah.disposition_id
-       LEFT JOIN public.system_users su ON su.id = ah.agent_id
-       WHERE ah.lead_id = :lead_id
-         AND ah.deleted_at IS NULL
-       ORDER BY ah.created_at DESC`,
-      { replacements: { lead_id }, type: QueryTypes.SELECT }
-    );
-
-    return res.status(200).json({ success: true, data: { activities } });
-  } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
-  }
-};
-
-// ==================== 3. ADD ACTIVITY ====================
+// ==================== 1. CREATE ACTIVITY ====================
 export const addActivity = async (req: Request, res: Response) => {
   try {
     const validatedData = await leadActivitySchema.validate(req.body, { abortEarly: false });
-    const authUser = (req as any)?.user;
 
-    let finalAgentId = validatedData.agent_id || authUser?.system_user_id || null;
+    let finalAgentId = validatedData.agent_id || null;
     if (!finalAgentId) {
       const leadRows: any[] = await db.sequelize.query(
         `SELECT agent_id FROM public.leads WHERE id = :lead_id LIMIT 1`,
         { replacements: { lead_id: validatedData.lead_id }, type: QueryTypes.SELECT }
       );
-      finalAgentId = leadRows[0]?.agent_id || authUser?.system_user_id || null;
+      finalAgentId = leadRows[0]?.agent_id || null;
     }
 
     const id = uuidv4();
@@ -126,6 +73,58 @@ export const addActivity = async (req: Request, res: Response) => {
     if (error.name === "ValidationError") {
       return res.status(400).json({ success: false, errors: error.errors });
     }
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== 2. GET ALL ACTIVITIES FOR LEAD ====================
+export const listActivities = async (req: Request, res: Response) => {
+  try {
+    const lead_id = req.body?.lead_id || req.query?.lead_id;
+    if (!lead_id) {
+      return res.status(400).json({ success: false, message: "Lead ID is required" });
+    }
+
+    const activities: any[] = await db.sequelize.query(
+      `SELECT
+         ah.id,
+         d.name AS disposition,
+         ah.disposition_id,
+         ah.conversation,
+         ah.occurred_at,
+         ah.created_at,
+         ah.updated_at,
+         ah.is_edited,
+         su.name AS agent_name,
+         ah.agent_id
+       FROM public.lead_activity_history ah
+       JOIN public.lead_dispositions d ON d.id = ah.disposition_id
+       LEFT JOIN public.system_users su ON su.id = ah.agent_id
+       WHERE ah.lead_id = :lead_id
+         AND ah.deleted_at IS NULL
+       ORDER BY ah.created_at DESC`,
+      { replacements: { lead_id }, type: QueryTypes.SELECT }
+    );
+
+    return res.status(200).json({ success: true, data: { activities } });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== 3. GET ALL DISPOSITIONS ====================
+export const getAllDispositions = async (req: Request, res: Response) => {
+  try {
+    const result: any[] = await db.sequelize.query(
+      `SELECT id, name, description, is_active, created_at
+       FROM public.lead_dispositions
+       WHERE is_active = TRUE
+       ORDER BY name ASC`,
+      { type: QueryTypes.SELECT }
+    );
+
+    return res.status(200).json({ success: true, data: result });
+  } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -210,9 +209,9 @@ export const softDeleteActivity = async (req: Request, res: Response) => {
 
 // ==================== DEFAULT EXPORT ====================
 export default {
-  getAllDispositions,
-  listActivities,
   addActivity,
+  listActivities,
+  getAllDispositions,
   updateActivity,
   softDeleteActivity,
 };
