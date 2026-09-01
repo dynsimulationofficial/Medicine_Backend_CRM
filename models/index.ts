@@ -233,6 +233,32 @@ LeadSource.hasMany(Lead, {
   onUpdate: "CASCADE",
 });
 
+Campaign.belongsTo(LeadSource, {
+  foreignKey: { name: "lead_source_id", allowNull: true },
+  as: "leadSource",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+LeadSource.hasMany(Campaign, {
+  foreignKey: { name: "lead_source_id", allowNull: true },
+  as: "campaigns",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+Lead.belongsTo(Campaign, {
+  foreignKey: { name: "campaign_id", allowNull: true },
+  as: "campaign",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+Campaign.hasMany(Lead, {
+  foreignKey: { name: "campaign_id", allowNull: true },
+  as: "leads",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
 Lead.belongsTo(SystemUser, {
   foreignKey: { name: "agent_id", allowNull: true },
   as: "agent",
