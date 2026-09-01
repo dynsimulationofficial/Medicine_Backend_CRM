@@ -7,7 +7,7 @@ import { QueryTypes } from "sequelize";
 // ==================== VALIDATION SCHEMA ====================
 const campaignSchema = yup.object({
   name: yup.string().trim().required("Campaign name is required").max(255),
-  lead_source_id: yup.string().uuid().nullable().optional(),
+  lead_source_id: yup.string().uuid("Invalid lead source ID").required("Lead source is required"),
 });
 
 // ==================== 1. CREATE CAMPAIGN ====================

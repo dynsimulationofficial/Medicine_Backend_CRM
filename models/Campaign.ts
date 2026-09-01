@@ -3,7 +3,7 @@ import { DataTypes, Sequelize, Model, Optional } from "sequelize";
 export interface CampaignAttributes {
   id: string;
   name: string;
-  lead_source_id?: string | null;
+  lead_source_id: string;
   created_at?: Date;
   updated_at?: Date;
   deleted_at?: Date | null;
@@ -11,7 +11,7 @@ export interface CampaignAttributes {
 
 export type CampaignCreationAttributes = Optional<
   CampaignAttributes,
-  "id" | "lead_source_id" | "created_at" | "updated_at" | "deleted_at"
+  "id" | "created_at" | "updated_at" | "deleted_at"
 >;
 
 export const initCampaignModel = (sequelize: Sequelize) => {
@@ -21,7 +21,7 @@ export const initCampaignModel = (sequelize: Sequelize) => {
   {
     public id!: string;
     public name!: string;
-    public lead_source_id!: string | null;
+    public lead_source_id!: string;
     public created_at!: Date;
     public updated_at!: Date;
     public deleted_at!: Date | null;
@@ -40,7 +40,7 @@ export const initCampaignModel = (sequelize: Sequelize) => {
       },
       lead_source_id: {
         type: DataTypes.UUID,
-        allowNull: true,
+        allowNull: false,
       },
       created_at: {
         type: DataTypes.DATE,
