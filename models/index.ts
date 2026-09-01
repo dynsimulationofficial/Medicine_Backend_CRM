@@ -281,18 +281,6 @@ LeadSource.hasMany(Campaign, {
 });
 /* -------------------- END CAMPAIGN & LEAD SOURCE ------------------------ */
 
-Lead.hasMany(LeadActivityHistory, {
-  foreignKey: { name: "lead_id", allowNull: false },
-  as: "activityHistories",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
-LeadActivityHistory.belongsTo(Lead, {
-  foreignKey: { name: "lead_id", allowNull: false },
-  as: "lead",
-  onDelete: "CASCADE",
-  onUpdate: "CASCADE",
-});
 
 Lead.hasMany(LeadTask, {
   foreignKey: { name: "lead_id", allowNull: false },
@@ -404,7 +392,7 @@ LeadActivityHistory.belongsTo(SystemUser, {
 });
 SystemUser.hasMany(LeadActivityHistory, {
   foreignKey: { name: "agent_id", allowNull: true },
-  as: "activities",
+  as: "leadActivities",
   onDelete: "SET NULL",
   onUpdate: "CASCADE",
 });

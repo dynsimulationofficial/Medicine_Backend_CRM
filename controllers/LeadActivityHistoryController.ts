@@ -7,13 +7,19 @@ import { QueryTypes } from "sequelize";
 // ==================== VALIDATION SCHEMAS ====================
 const leadActivitySchema = yup.object({
   lead_id: yup.string().uuid("Invalid lead ID").required("Lead ID is required"),
-  disposition_id: yup.string().uuid("Invalid disposition ID").required("Disposition is required"),
+  disposition_id: yup
+    .string()
+    .uuid("Invalid disposition ID")
+    .required("Disposition is required"),
   conversation: yup.string().trim().required("Conversation note is required"),
   agent_id: yup.string().uuid("Invalid agent ID").nullable().optional(),
 });
 
 const updateLeadActivitySchema = yup.object({
-  id: yup.string().uuid("Invalid activity ID").required("Activity ID is required"),
+  id: yup
+    .string()
+    .uuid("Invalid activity ID")
+    .required("Activity ID is required"),
   disposition_id: yup.string().uuid("Invalid disposition ID").optional(),
   conversation: yup.string().trim().optional(),
 });
@@ -21,13 +27,18 @@ const updateLeadActivitySchema = yup.object({
 // ==================== 1. CREATE ACTIVITY ====================
 export const addActivity = async (req: Request, res: Response) => {
   try {
-    const validatedData = await leadActivitySchema.validate(req.body, { abortEarly: false });
+    const validatedData = await leadActivitySchema.validate(req.body, {
+      abortEarly: false,
+    });
 
     let agent_id = validatedData.agent_id || null;
     if (!agent_id) {
       const leadRows: any[] = await db.sequelize.query(
         `SELECT agent_id FROM public.leads WHERE id = :lead_id LIMIT 1`,
-        { replacements: { lead_id: validatedData.lead_id }, type: QueryTypes.SELECT }
+        {
+          replacements: { lead_id: validatedData.lead_id },
+          type: QueryTypes.SELECT,
+        },
       );
       agent_id = leadRows[0]?.agent_id || null;
     }
@@ -79,7 +90,9 @@ export const listActivities = async (req: Request, res: Response) => {
   try {
     const lead_id = req.body?.lead_id || req.query?.lead_id;
     if (!lead_id) {
-      return res.status(400).json({ success: false, message: "Lead ID is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Lead ID is required" });
     }
 
     const activities: any[] = await db.sequelize.query(
@@ -100,7 +113,7 @@ export const listActivities = async (req: Request, res: Response) => {
        WHERE ah.lead_id = :lead_id
          AND ah.deleted_at IS NULL
        ORDER BY ah.created_at DESC`,
-      { replacements: { lead_id }, type: QueryTypes.SELECT }
+      { replacements: { lead_id }, type: QueryTypes.SELECT },
     );
 
     return res.status(200).json({ success: true, data: { activities } });
@@ -117,7 +130,7 @@ export const getAllDispositions = async (req: Request, res: Response) => {
        FROM public.lead_dispositions
        WHERE is_active = TRUE
        ORDER BY name ASC`,
-      { type: QueryTypes.SELECT }
+      { type: QueryTypes.SELECT },
     );
 
     return res.status(200).json({ success: true, data: result });
@@ -131,10 +144,14 @@ export const updateActivity = async (req: Request, res: Response) => {
   try {
     const id = req.body?.id || req.query?.id;
     if (!id) {
-      return res.status(400).json({ success: false, message: "Activity ID is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Activity ID is required" });
     }
 
-    const validatedData = await updateLeadActivitySchema.validate(req.body, { abortEarly: false });
+    const validatedData = await updateLeadActivitySchema.validate(req.body, {
+      abortEarly: false,
+    });
     const now = new Date();
 
     const query = `
@@ -160,14 +177,18 @@ export const updateActivity = async (req: Request, res: Response) => {
       replacements: {
         id,
         disposition_id: validatedData.disposition_id || null,
-        conversation: validatedData.conversation ? validatedData.conversation.trim() : null,
+        conversation: validatedData.conversation
+          ? validatedData.conversation.trim()
+          : null,
         now,
       },
       type: QueryTypes.SELECT,
     });
 
     if (result.length === 0) {
-      return res.status(404).json({ success: false, message: "Activity record not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Activity record not found" });
     }
 
     return res.status(200).json({ success: true, data: result[0] });
@@ -184,19 +205,25 @@ export const softDeleteActivity = async (req: Request, res: Response) => {
   try {
     const id = req.body?.id || req.query?.id;
     if (!id) {
-      return res.status(400).json({ success: false, message: "Activity ID is required" });
+      return res
+        .status(400)
+        .json({ success: false, message: "Activity ID is required" });
     }
 
     const result: any[] = await db.sequelize.query(
       `UPDATE public.lead_activity_history SET deleted_at = NOW(), updated_at = NOW() WHERE id = :id AND deleted_at IS NULL RETURNING id`,
-      { replacements: { id }, type: QueryTypes.SELECT }
+      { replacements: { id }, type: QueryTypes.SELECT },
     );
 
     if (result.length === 0) {
-      return res.status(404).json({ success: false, message: "Activity record not found" });
+      return res
+        .status(404)
+        .json({ success: false, message: "Activity record not found" });
     }
 
-    return res.status(200).json({ success: true, message: "Activity deleted successfully" });
+    return res
+      .status(200)
+      .json({ success: true, message: "Activity deleted successfully" });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
