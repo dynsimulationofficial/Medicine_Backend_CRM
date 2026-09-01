@@ -140,7 +140,7 @@ SystemuserRouter.delete("/medicines/:id", masterMedicineController.deleteMedicin
 SystemuserRouter.post("/lead-sources", leadSourceController.createLeadSource);
 SystemuserRouter.post("/lead-sources/create", leadSourceController.createLeadSource);
 SystemuserRouter.get("/lead-sources", leadSourceController.getAllLeadSources);
-SystemuserRouter.get("/lead-sources/search", leadSourceController.searchLeadSources);
+SystemuserRouter.get("/lead-sources/search", leadSourceController.getAllLeadSources);
 SystemuserRouter.get("/lead-sources/:id", leadSourceController.getLeadSourceById);
 SystemuserRouter.put("/lead-sources/:id", leadSourceController.updateLeadSource);
 SystemuserRouter.post("/lead-sources/edit", leadSourceController.updateLeadSource);
@@ -151,7 +151,7 @@ SystemuserRouter.post("/lead-sources/delete", leadSourceController.deleteLeadSou
 SystemuserRouter.post("/campaigns", campaignController.createCampaign);
 SystemuserRouter.post("/campaigns/create", campaignController.createCampaign);
 SystemuserRouter.get("/campaigns", campaignController.getAllCampaigns);
-SystemuserRouter.get("/campaigns/search", campaignController.searchCampaigns);
+SystemuserRouter.get("/campaigns/search", campaignController.getAllCampaigns);
 SystemuserRouter.get("/campaigns/by-source", campaignController.getCampaignsBySource);
 SystemuserRouter.get("/campaigns/:id", campaignController.getCampaignById);
 SystemuserRouter.put("/campaigns/:id", campaignController.updateCampaign);

@@ -16,6 +16,7 @@ import { initSystemUserSecretModel } from "./SystemUserSecret";
 // Lead & Core Business Models
 import { initLeadModel } from "./Lead";
 import { initLeadSourceModel } from "./LeadSource";
+import { initCampaignModel } from "./Campaign";
 import { initLeadDispositionModel } from "./LeadDisposition";
 import { initLeadActivityHistoryModel } from "./LeadActivityHistory";
 import { initLeadTaskModel } from "./LeadTask";
@@ -51,6 +52,7 @@ const SystemUserSecret = initSystemUserSecretModel(sequelize);
 
 const Lead = initLeadModel(sequelize);
 const LeadSource = initLeadSourceModel(sequelize);
+const Campaign = initCampaignModel(sequelize);
 const LeadDisposition = initLeadDispositionModel(sequelize);
 const LeadActivityHistory = initLeadActivityHistoryModel(sequelize);
 const LeadTask = initLeadTaskModel(sequelize);
@@ -414,6 +416,7 @@ const db = {
   LeadTask,
   LeadDocument,
   LeadSource,
+  Campaign,
   MasterMedicine,
   LeadMedicine,
   LeadOrder,
