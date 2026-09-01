@@ -5,7 +5,7 @@ import * as leadSourceController from "../controllers/LeadSourceController";
 import * as campaignController from "../controllers/CampaignController";
 import LeadOrderController from "../controllers/LeadOrderController";
 import LeadDocumentController from "../controllers/LeadDocumentController";
-import LeadTaskController from "../controllers/LeadTaskController";
+import leadTaskController from "../controllers/LeadTaskController";
 import leadActivityHistoryController from "../controllers/LeadActivityHistoryController";
 import express from "express";
 import CompressCrmController from "../controllers/AdvanceLeadCRMController";
@@ -21,7 +21,6 @@ export const SystemuserRouter = express.Router();
 
 const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
-const leadTaskController = new LeadTaskController();
 const leadDocumentController = new LeadDocumentController();
 const leadOrderController = new LeadOrderController();
 
@@ -76,14 +75,14 @@ SystemuserRouter.get("/leads/dispositions/all", leadActivityHistoryController.ge
 
 /* -------------------- Lead Tasks -------------------- */
 SystemuserRouter.post("/leads/tasks/create", leadTaskController.createTask);
-SystemuserRouter.post("/leads/tasks/list", leadTaskController.listTasks);
-SystemuserRouter.post("/leads/tasks/edit", leadTaskController.editTask);
-SystemuserRouter.post("/leads/tasks/filter", leadTaskController.filterTasks);
+SystemuserRouter.post("/leads/tasks/list", leadTaskController.getAllTasks);
+SystemuserRouter.post("/leads/tasks/edit", leadTaskController.updateTask);
+SystemuserRouter.post("/leads/tasks/filter", leadTaskController.getAllTasks);
 SystemuserRouter.post("/leads/tasks/complete", leadTaskController.completeTask);
-SystemuserRouter.post("/leads/tasks/delete", leadTaskController.softDeleteTask);
-SystemuserRouter.post("/leads/tasks/soft-delete", leadTaskController.softDeleteTask);
-SystemuserRouter.post("/leads/task/delete", leadTaskController.softDeleteTask);
-SystemuserRouter.post("/leads/task/soft-delete", leadTaskController.softDeleteTask);
+SystemuserRouter.post("/leads/tasks/delete", leadTaskController.deleteTask);
+SystemuserRouter.post("/leads/tasks/soft-delete", leadTaskController.deleteTask);
+SystemuserRouter.post("/leads/task/delete", leadTaskController.deleteTask);
+SystemuserRouter.post("/leads/task/soft-delete", leadTaskController.deleteTask);
 
 /* -------------------- Lead Documents -------------------- */
 SystemuserRouter.post("/leads/documents/list", leadDocumentController.listDocuments);

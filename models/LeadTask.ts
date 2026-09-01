@@ -1,57 +1,58 @@
-import { Sequelize, DataTypes, Model, Optional } from "sequelize";
+import { DataTypes, Sequelize, Model, Optional } from "sequelize";
 
-export interface LeadTaskAttrs {
+export interface LeadTaskAttributes {
   id: string;
   lead_id: string;
-  assigned_agent_id: string;
+  assigned_agent_id?: string | null;
   task_type: "meeting" | "phonecall" | "followup";
   subject?: string | null;
-  details: string;
-  timer_minutes: number;
-  timer_hours: number;
-  due_at: Date;                 // pivot (same as start_at for countdown)
+  details?: string | null;
+  location?: string | null;
   start_at?: Date | null;
   end_at?: Date | null;
+  due_at?: Date | null;
   status: "pending" | "done";
-  location?: string | null;
   created_at?: Date;
   updated_at?: Date;
-  deleted_at?: Date | null;     // 👈 NEW for soft delete
+  deleted_at?: Date | null;
 }
 
-type LeadTaskCreation = Optional<
-  LeadTaskAttrs,
+export type LeadTaskCreationAttributes = Optional<
+  LeadTaskAttributes,
   | "id"
+  | "assigned_agent_id"
+  | "task_type"
   | "subject"
-  | "timer_hours"
+  | "details"
+  | "location"
   | "start_at"
   | "end_at"
+  | "due_at"
   | "status"
   | "created_at"
   | "updated_at"
-  | "location"
-  | "deleted_at" // 👈 NEW optional
+  | "deleted_at"
 >;
 
-export function initLeadTaskModel(sequelize: Sequelize) {
-  class LeadTask extends Model<LeadTaskAttrs, LeadTaskCreation>
-    implements LeadTaskAttrs {
+export const initLeadTaskModel = (sequelize: Sequelize) => {
+  class LeadTask
+    extends Model<LeadTaskAttributes, LeadTaskCreationAttributes>
+    implements LeadTaskAttributes
+  {
     public id!: string;
     public lead_id!: string;
-    public assigned_agent_id!: string;
+    public assigned_agent_id!: string | null;
     public task_type!: "meeting" | "phonecall" | "followup";
     public subject!: string | null;
-    public details!: string;
-    public timer_minutes!: number;
-    public timer_hours!: number;
-    public due_at!: Date;
+    public details!: string | null;
+    public location!: string | null;
     public start_at!: Date | null;
     public end_at!: Date | null;
+    public due_at!: Date | null;
     public status!: "pending" | "done";
-    public location!: string | null;
     public created_at!: Date;
     public updated_at!: Date;
-    public deleted_at!: Date | null; // 👈 added to class
+    public deleted_at!: Date | null;
   }
 
   LeadTask.init(
@@ -61,21 +62,43 @@ export function initLeadTaskModel(sequelize: Sequelize) {
         primaryKey: true,
         defaultValue: DataTypes.UUIDV4,
       },
-      lead_id: { type: DataTypes.UUID, allowNull: false },
-      assigned_agent_id: { type: DataTypes.UUID, allowNull: false },
+      lead_id: {
+        type: DataTypes.UUID,
+        allowNull: false,
+      },
+      assigned_agent_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       task_type: {
         type: DataTypes.ENUM("meeting", "phonecall", "followup"),
         allowNull: false,
         defaultValue: "followup",
       },
-      subject: { type: DataTypes.STRING(255), allowNull: true },
-      details: { type: DataTypes.TEXT, allowNull: false },
-      timer_minutes: { type: DataTypes.INTEGER, allowNull: false },
-      timer_hours: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },
-      due_at: { type: DataTypes.DATE, allowNull: false },
-      start_at: { type: DataTypes.DATE, allowNull: true },
-      end_at: { type: DataTypes.DATE, allowNull: true },
-      location: { type: DataTypes.STRING(255), allowNull: true },
+      subject: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      details: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      location: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      start_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      end_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
+      due_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       status: {
         type: DataTypes.ENUM("pending", "done"),
         allowNull: false,
@@ -91,27 +114,18 @@ export function initLeadTaskModel(sequelize: Sequelize) {
         allowNull: false,
         defaultValue: DataTypes.NOW,
       },
-      deleted_at: { type: DataTypes.DATE, allowNull: true }, // 👈 added column
+      deleted_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
       sequelize,
       tableName: "lead_tasks",
       schema: "public",
-      timestamps: true,
-      paranoid: true,              // 👈 enables soft delete in Sequelize
-      createdAt: "created_at",
-      updatedAt: "updated_at",
-      deletedAt: "deleted_at",     // 👈 maps deletedAt
-      indexes: [
-        { fields: ["lead_id"] },
-        { fields: ["assigned_agent_id"] },
-        { fields: ["task_type"] },
-        { fields: ["due_at"] },
-        { fields: ["start_at"] },
-        { fields: ["end_at"] },
-      ],
+      timestamps: false,
     }
   );
 
   return LeadTask;
-}
+};
