@@ -17,3 +17,7 @@
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-02T08:41:04.275Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-02T08:41:12.359Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-02T08:44:40.464Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-02T09:33:27.578Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-02T11:58:15.821Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6IjUzN2NmYmMxLWE0M2UtNDNiZS1iODRiLTAyZmFmMTEwZmNhZSIsInVzZXJJZCI6IjUzN2NmYmMxLWE0M2UtNDNiZS1iODRiLTAyZmFmMTEwZmNhZSIsInNlY3JldEtleSI6Ik9KSFZFVkJKSVpKRlFQUktLUlVFTVYyR0xOUkVLVkNTIiwiaWF0IjoxNzg4MzQzNjQ3LCJleHAiOjE3ODg0MzAwNDd9._5AnJB_EKZPhyKv78V_DiS97JnA9UnCko_b6-H_lk8s","timestamp":"2026-09-02T11:58:23.748Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6ImQ2YmYxZGQ1LTU3NzUtNDk2Yi04ZTFhLWQ0ZDY4MzQyOTY4MyIsImVtYWlsIjoid2FzaXF1ZWtoYW45MEBnbWFpbC5jb20iLCJpYXQiOjE3ODgzNTAzMjcsImV4cCI6MTc4ODM5MzUyN30.XWtGZ6LqCdYWGJXAaFuG2Zmo-B3DK4SZTUDsoIT7Hqg","timestamp":"2026-09-02T11:58:57.573Z"}

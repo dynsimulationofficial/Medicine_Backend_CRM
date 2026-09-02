@@ -51,21 +51,23 @@ export const createUser = async (req: Request, res: Response) => {
     const { name, mobile_number, email, password, roleLevel } = validatedData;
 
     const existing: any[] = await db.sequelize.query(
-      `SELECT email, mobile_number FROM public.system_users WHERE (email = :email OR mobile_number = :mobile_number) AND deleted_at IS NULL`,
+      `SELECT email, mobile_number FROM public.system_users WHERE (LOWER(email) = LOWER(:email) OR mobile_number = :mobile_number) LIMIT 1`,
       { replacements: { email, mobile_number }, type: QueryTypes.SELECT, transaction: t }
     );
     
     if (existing.length) {
       await t.rollback();
-      return res.status(409).json({ success: false, message: "Email or Mobile number is already in use" });
+      const isEmail = existing[0].email?.toLowerCase() === email.toLowerCase();
+      const msg = isEmail ? "Email is already registered" : "Mobile number is already registered";
+      return res.status(409).json({ success: false, message: msg });
     }
 
     const userId = uuidv4();
     const hash = await bcrypt.hash(password, 10);
 
     await db.sequelize.query(
-      `INSERT INTO public.system_users (id, name, mobile_number, email, password, created_at, updated_at)
-       VALUES (:id, :name, :mobile_number, :email, :password, NOW(), NOW())`,
+      `INSERT INTO public.system_users (id, name, mobile_number, email, password, is_blocked, created_at, updated_at)
+       VALUES (:id, :name, :mobile_number, :email, :password, false, NOW(), NOW())`,
       { replacements: { id: userId, name, mobile_number, email, password: hash }, type: QueryTypes.INSERT, transaction: t }
     );
 
@@ -90,12 +92,16 @@ export const createUser = async (req: Request, res: Response) => {
 
     await t.commit();
 
-    await SystemUserActivity.create({
-      system_user_id: authUser.system_user_id,
-      user_activity: `Created user ${name}`,
-      module: 'user_management',
-      type: 'create',
-    });
+    try {
+      await SystemUserActivity.create({
+        system_user_id: authUser.system_user_id,
+        user_activity: `Created user ${name}`,
+        module: 'user_management',
+        type: 'create',
+      });
+    } catch (actErr) {
+      console.warn("Could not log user creation activity:", actErr);
+    }
 
     return res.status(201).json({ success: true, data: { userId, role: roleName }, message: "User registered successfully" });
   } catch (error: any) {
@@ -103,7 +109,12 @@ export const createUser = async (req: Request, res: Response) => {
     if (error.name === "ValidationError") {
       return res.status(400).json({ success: false, errors: error.errors });
     }
-    return res.status(500).json({ success: false, message: error.message });
+    const detailMsg =
+      error?.errors?.map((e: any) => e.message).join(", ") ||
+      error?.parent?.detail ||
+      error.message ||
+      "Failed to register user";
+    return res.status(500).json({ success: false, message: detailMsg });
   }
 };
 
