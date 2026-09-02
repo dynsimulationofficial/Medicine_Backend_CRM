@@ -3,7 +3,7 @@ import agentDashboardController from "../controllers/AgentDashboardController";
 import * as masterMedicineController from "../controllers/MasterMedicineController";
 import * as leadSourceController from "../controllers/LeadSourceController";
 import * as campaignController from "../controllers/CampaignController";
-import LeadOrderController from "../controllers/LeadOrderController";
+import leadOrderController from "../controllers/LeadOrderController";
 import leadDocumentController from "../controllers/LeadDocumentController";
 import leadTaskController from "../controllers/LeadTaskController";
 import leadActivityHistoryController from "../controllers/LeadActivityHistoryController";
@@ -21,7 +21,6 @@ export const SystemuserRouter = express.Router();
 
 const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
-const leadOrderController = new LeadOrderController();
 
 /* ==================== 1. PUBLIC AUTH ROUTES ==================== */
 SystemuserRouter.post("/sendotp", systemuserController.loginRequestOtp);
