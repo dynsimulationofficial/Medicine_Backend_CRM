@@ -103,7 +103,13 @@ SystemuserRouter.get("/leads/medicines/suggestions", leadOrderController.getMedi
 
 /* -------------------- Lead Orders -------------------- */
 SystemuserRouter.post("/leads/orders/create", leadOrderController.createOrder);
-SystemuserRouter.post("/leads/orders/save", leadOrderController.createOrder);
+SystemuserRouter.post("/leads/orders/update", leadOrderController.updateOrder);
+SystemuserRouter.post("/leads/orders/save", (req, res) => {
+  if (req.body?.id || req.body?.order_id) {
+    return leadOrderController.updateOrder(req, res);
+  }
+  return leadOrderController.createOrder(req, res);
+});
 SystemuserRouter.post("/leads/orders/list", leadOrderController.getAllOrders);
 SystemuserRouter.post("/leads/orders/delete", leadOrderController.deleteOrder);
 SystemuserRouter.post("/leads/orders/update-status", leadOrderController.updateOrder);

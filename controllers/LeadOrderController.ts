@@ -34,7 +34,6 @@ export const createOrder = async (req: Request, res: Response) => {
   const transaction = await db.sequelize.transaction();
   try {
     const body = await leadOrderSchema.validate(req.body, { abortEarly: false });
-    const existingOrderId = body.id || body.order_id || null;
     const { lead_id, payment_status, payment_mode, order_status, order_notes, courier_name, tracking_number, items } = body;
 
     if (!lead_id) {
@@ -77,85 +76,34 @@ export const createOrder = async (req: Request, res: Response) => {
     }
     grandTotal = Number(grandTotal.toFixed(2));
 
-    let orderId = existingOrderId;
-    let orderNumber = "";
-
-    if (existingOrderId) {
-      const [existingOrder]: any[] = await db.sequelize.query(
-        `SELECT id, order_number FROM public.lead_orders WHERE id = :id AND lead_id = :lead_id AND deleted_at IS NULL LIMIT 1`,
-        { replacements: { id: existingOrderId, lead_id }, type: QueryTypes.SELECT, transaction }
-      );
-      if (!existingOrder) {
-        await transaction.rollback();
-        return res.status(404).json({ success: false, message: "Order not found" });
+    const orderId = uuidv4();
+    const [newOrderRow]: any[] = await db.sequelize.query(
+      `INSERT INTO public.lead_orders
+          (id, lead_id, agent_id, total_items, grand_total, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number, created_at, updated_at)
+        VALUES
+          (:id, :lead_id, :agent_id, :total_items, :grand_total, :order_status, :payment_status, :payment_mode, :order_notes, :courier_name, :tracking_number, NOW(), NOW())
+        RETURNING id, order_number, created_at, updated_at`,
+      {
+        replacements: {
+          id: orderId,
+          lead_id,
+          agent_id: authUserId,
+          total_items: computedItems.length,
+          grand_total: grandTotal,
+          order_status,
+          payment_status,
+          payment_mode,
+          order_notes: order_notes || null,
+          courier_name: courier_name || null,
+          tracking_number: tracking_number || null,
+        },
+        type: QueryTypes.SELECT,
+        transaction,
       }
-      orderNumber = existingOrder.order_number;
+    );
+    const orderNumber = newOrderRow.order_number;
 
-      await db.sequelize.query(
-        `UPDATE public.lead_orders
-             SET total_items = :total_items,
-                 grand_total = :grand_total,
-                 order_status = :order_status,
-                 payment_status = :payment_status,
-                 payment_mode = :payment_mode,
-                 order_notes = :order_notes,
-                 courier_name = :courier_name,
-                 tracking_number = :tracking_number,
-                 agent_id = COALESCE(:agent_id, agent_id),
-                 updated_at = NOW()
-           WHERE id = :id AND lead_id = :lead_id`,
-        {
-          replacements: {
-            id: existingOrderId,
-            lead_id,
-            total_items: computedItems.length,
-            grand_total: grandTotal,
-            order_status,
-            payment_status,
-            payment_mode,
-            order_notes: order_notes || null,
-            courier_name: courier_name || null,
-            tracking_number: tracking_number || null,
-            agent_id: authUserId,
-          },
-          type: QueryTypes.UPDATE,
-          transaction,
-        }
-      );
-
-      await db.sequelize.query(
-        `DELETE FROM public.lead_order_items WHERE order_id = :order_id`,
-        { replacements: { order_id: existingOrderId }, type: QueryTypes.DELETE, transaction }
-      );
-    } else {
-      orderId = uuidv4();
-      const [newOrderRow]: any[] = await db.sequelize.query(
-        `INSERT INTO public.lead_orders
-            (id, lead_id, agent_id, total_items, grand_total, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number, created_at, updated_at)
-          VALUES
-            (:id, :lead_id, :agent_id, :total_items, :grand_total, :order_status, :payment_status, :payment_mode, :order_notes, :courier_name, :tracking_number, NOW(), NOW())
-          RETURNING id, order_number, created_at, updated_at`,
-        {
-          replacements: {
-            id: orderId,
-            lead_id,
-            agent_id: authUserId,
-            total_items: computedItems.length,
-            grand_total: grandTotal,
-            order_status,
-            payment_status,
-            payment_mode,
-            order_notes: order_notes || null,
-            courier_name: courier_name || null,
-            tracking_number: tracking_number || null,
-          },
-          type: QueryTypes.SELECT,
-          transaction,
-        }
-      );
-      orderNumber = newOrderRow.order_number;
-    }
-
+    // Insert order items
     const insertedItems: any[] = [];
     for (const item of computedItems) {
       const itemId = uuidv4();
@@ -199,7 +147,7 @@ export const createOrder = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      msg: `Order ${orderNumber} saved successfully`,
+      msg: `Order ${orderNumber} created successfully`,
       data: {
         id: orderId,
         order_number: orderNumber,
@@ -330,15 +278,88 @@ export const deleteOrder = async (req: Request, res: Response) => {
 
 // ==================== 4. UPDATE ORDER ====================
 export const updateOrder = async (req: Request, res: Response) => {
+  const transaction = await db.sequelize.transaction();
   try {
     const targetId = req.body?.id || req.body?.order_id || req.query?.id || req.query?.order_id;
     if (!targetId) {
+      await transaction.rollback();
       return res.status(400).json({ success: false, message: "Order ID is required" });
     }
 
     const body = await leadOrderSchema.validate(req.body, { abortEarly: false });
-    const { lead_id, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number } = body;
+    const { lead_id, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number, items } = body;
 
+    // Verify order exists
+    const [existingOrder]: any[] = await db.sequelize.query(
+      `SELECT id, lead_id, order_number FROM public.lead_orders WHERE id = :targetId AND deleted_at IS NULL LIMIT 1`,
+      { replacements: { targetId }, type: QueryTypes.SELECT, transaction }
+    );
+    if (!existingOrder) {
+      await transaction.rollback();
+      return res.status(404).json({ success: false, message: "Order not found" });
+    }
+
+    const resolvedLeadId = lead_id || existingOrder.lead_id;
+    const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
+
+    let totalItemsCount = undefined;
+    let grandTotal = undefined;
+    let updatedItems: any[] = [];
+
+    // If items are provided in edit, recalculate and replace items
+    if (Array.isArray(items) && items.length > 0) {
+      let sumTotal = 0;
+      const computedItems: any[] = [];
+      for (const item of items) {
+        const qty = Number(item.quantity) || 1;
+        const rate = Number(item.rate) || 0;
+        const totalPrice = Number((qty * rate).toFixed(2));
+        sumTotal += totalPrice;
+        computedItems.push({
+          medicine_name: item.medicine_name.trim(),
+          unit: item.unit || "Strip",
+          quantity: qty,
+          rate,
+          total_price: totalPrice,
+        });
+      }
+      grandTotal = Number(sumTotal.toFixed(2));
+      totalItemsCount = computedItems.length;
+
+      // Delete old items and insert updated ones
+      await db.sequelize.query(
+        `DELETE FROM public.lead_order_items WHERE order_id = :order_id`,
+        { replacements: { order_id: targetId }, type: QueryTypes.DELETE, transaction }
+      );
+
+      for (const item of computedItems) {
+        const itemId = uuidv4();
+        const [itemRow]: any[] = await db.sequelize.query(
+          `INSERT INTO public.lead_order_items
+              (id, order_id, lead_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at)
+            VALUES
+              (:id, :order_id, :lead_id, :medicine_name, :unit, :quantity, :rate, :total_price, NOW(), NOW())
+            RETURNING id, order_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at`,
+          {
+            replacements: {
+              id: itemId,
+              order_id: targetId,
+              lead_id: resolvedLeadId,
+              medicine_name: item.medicine_name,
+              unit: item.unit,
+              quantity: item.quantity,
+              rate: item.rate,
+              total_price: item.total_price,
+            },
+            type: QueryTypes.SELECT,
+            transaction,
+          }
+        );
+        if (itemRow) updatedItems.push(itemRow);
+      }
+    }
+
+    // Update main order row
     const [updatedOrder]: any[] = await db.sequelize.query(
       `UPDATE public.lead_orders
            SET order_status = COALESCE(:order_status, order_status),
@@ -347,9 +368,12 @@ export const updateOrder = async (req: Request, res: Response) => {
                order_notes = COALESCE(:order_notes, order_notes),
                courier_name = COALESCE(:courier_name, courier_name),
                tracking_number = COALESCE(:tracking_number, tracking_number),
+               total_items = COALESCE(:total_items, total_items),
+               grand_total = COALESCE(:grand_total, grand_total),
+               agent_id = COALESCE(:agent_id, agent_id),
                updated_at = NOW()
          WHERE id = :targetId AND deleted_at IS NULL
-         RETURNING id, lead_id, order_number, order_status, payment_status, payment_mode, grand_total`,
+         RETURNING id, lead_id, order_number, order_status, payment_status, payment_mode, total_items, grand_total`,
       {
         replacements: {
           targetId,
@@ -359,16 +383,16 @@ export const updateOrder = async (req: Request, res: Response) => {
           order_notes: order_notes !== undefined ? order_notes : null,
           courier_name: courier_name !== undefined ? courier_name : null,
           tracking_number: tracking_number !== undefined ? tracking_number : null,
+          total_items: totalItemsCount !== undefined ? totalItemsCount : null,
+          grand_total: grandTotal !== undefined ? grandTotal : null,
+          agent_id: authUserId,
         },
         type: QueryTypes.SELECT,
+        transaction,
       }
     );
 
-    if (!updatedOrder) {
-      return res.status(404).json({ success: false, message: "Order not found" });
-    }
-
-    const resolvedLeadId = lead_id || updatedOrder.lead_id;
+    // Auto convert lead on confirmed/paid status
     const isConverted = ["Confirmed", "Shipped", "Delivered"].includes(updatedOrder.order_status) || updatedOrder.payment_status === "Paid";
     if (isConverted && resolvedLeadId) {
       await db.sequelize.query(
@@ -376,12 +400,22 @@ export const updateOrder = async (req: Request, res: Response) => {
          SET lead_status = 'Converted',
              updated_at = NOW()
          WHERE id = :resolvedLeadId AND deleted_at IS NULL`,
-        { replacements: { resolvedLeadId }, type: QueryTypes.UPDATE }
+        { replacements: { resolvedLeadId }, type: QueryTypes.UPDATE, transaction }
       );
     }
 
-    return res.status(200).json({ success: true, message: "Order status updated successfully", data: updatedOrder });
+    await transaction.commit();
+
+    return res.status(200).json({
+      success: true,
+      msg: `Order ${existingOrder.order_number} updated successfully`,
+      data: {
+        ...updatedOrder,
+        items: updatedItems.length > 0 ? updatedItems : undefined,
+      },
+    });
   } catch (error: any) {
+    await transaction.rollback();
     if (error.name === "ValidationError") {
       return res.status(400).json({ success: false, errors: error.errors });
     }
@@ -441,10 +475,16 @@ export const saveLeadMedicines = async (req: Request, res: Response) => {
     }
 
     await transaction.commit();
+
     return res.status(200).json({
       success: true,
       message: "Lead medicines saved successfully",
-      data: { items: insertedRows, total_items: insertedRows.length, grand_total: Number(grandTotal.toFixed(2)) },
+      data: {
+        lead_id,
+        items: insertedRows,
+        total_items: insertedRows.length,
+        grand_total: Number(grandTotal.toFixed(2)),
+      },
     });
   } catch (error: any) {
     await transaction.rollback();
@@ -471,7 +511,11 @@ export const listLeadMedicines = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      data: { items: rows, total_items: rows.length, grand_total: Number(grandTotal.toFixed(2)) },
+      data: {
+        items: rows,
+        total_items: rows.length,
+        grand_total: Number(grandTotal.toFixed(2)),
+      },
     });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
@@ -532,13 +576,9 @@ export const getMedicineSuggestions = async (req: Request, res: Response) => {
 // ==================== DEFAULT EXPORT ====================
 export default {
   createOrder,
-  saveLeadOrder: createOrder,
   getAllOrders,
-  listLeadOrders: getAllOrders,
   updateOrder,
-  updateLeadOrderStatus: updateOrder,
   deleteOrder,
-  deleteLeadOrder: deleteOrder,
   saveLeadMedicines,
   listLeadMedicines,
   deleteLeadMedicine,
