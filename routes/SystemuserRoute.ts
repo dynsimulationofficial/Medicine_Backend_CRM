@@ -4,7 +4,7 @@ import * as masterMedicineController from "../controllers/MasterMedicineControll
 import * as leadSourceController from "../controllers/LeadSourceController";
 import * as campaignController from "../controllers/CampaignController";
 import LeadOrderController from "../controllers/LeadOrderController";
-import LeadDocumentController from "../controllers/LeadDocumentController";
+import leadDocumentController from "../controllers/LeadDocumentController";
 import leadTaskController from "../controllers/LeadTaskController";
 import leadActivityHistoryController from "../controllers/LeadActivityHistoryController";
 import express from "express";
@@ -21,7 +21,6 @@ export const SystemuserRouter = express.Router();
 
 const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
-const leadDocumentController = new LeadDocumentController();
 const leadOrderController = new LeadOrderController();
 
 /* ==================== 1. PUBLIC AUTH ROUTES ==================== */
@@ -83,21 +82,19 @@ SystemuserRouter.post("/leads/tasks/delete", leadTaskController.deleteTask);
 SystemuserRouter.post("/leads/tasks/soft-delete", leadTaskController.deleteTask);
 
 /* -------------------- Lead Documents -------------------- */
-SystemuserRouter.post("/leads/documents/list", leadDocumentController.listDocuments);
+SystemuserRouter.post("/leads/documents/list", leadDocumentController.getAllDocuments);
 SystemuserRouter.post("/leads/documents/upload", uploadFile.single("file"), leadDocumentController.uploadDocument);
 SystemuserRouter.post("/leads/bulk/upload", uploadFile.single("file"), leadController.bulkUploadFromFile);
 SystemuserRouter.post("/leads/documents/download", leadDocumentController.getDocumentUrl);
-SystemuserRouter.post("/leads/documents/delete", leadDocumentController.softDeleteDocument);
-SystemuserRouter.post("/leads/documents/soft-delete", leadDocumentController.softDeleteDocument);
-SystemuserRouter.post("/leads/document/delete", leadDocumentController.softDeleteDocument);
-SystemuserRouter.post("/leads/document/soft-delete", leadDocumentController.softDeleteDocument);
-SystemuserRouter.post("/leads/document/notes", leadDocumentController.updateDocumentNotes);
-SystemuserRouter.post("/leads/documents/notes", leadDocumentController.updateDocumentNotes);
-SystemuserRouter.post("/leads/documents/update/notes", leadDocumentController.updateDocumentNotes);
-SystemuserRouter.post("/leads/documents/edit", leadDocumentController.updateDocumentNotes);
-SystemuserRouter.post("/leads/documents/get", leadDocumentController.getDocument);
-SystemuserRouter.post("/leads/documents/filter", leadDocumentController.filterDocuments);
 SystemuserRouter.post("/leads/documents/geturl", leadDocumentController.getDocumentUrl);
+SystemuserRouter.post("/leads/documents/edit", leadDocumentController.updateDocument);
+SystemuserRouter.post("/leads/documents/notes", leadDocumentController.updateDocument);
+SystemuserRouter.post("/leads/document/notes", leadDocumentController.updateDocument);
+SystemuserRouter.post("/leads/documents/update/notes", leadDocumentController.updateDocument);
+SystemuserRouter.post("/leads/documents/delete", leadDocumentController.deleteDocument);
+SystemuserRouter.post("/leads/documents/soft-delete", leadDocumentController.deleteDocument);
+SystemuserRouter.post("/leads/document/delete", leadDocumentController.deleteDocument);
+SystemuserRouter.post("/leads/document/soft-delete", leadDocumentController.deleteDocument);
 
 /* -------------------- Lead Medicines / Order Items -------------------- */
 SystemuserRouter.post("/leads/medicines/save", leadOrderController.saveLeadMedicines);
