@@ -102,10 +102,11 @@ SystemuserRouter.post("/leads/medicines/delete", leadOrderController.deleteLeadM
 SystemuserRouter.get("/leads/medicines/suggestions", leadOrderController.getMedicineSuggestions);
 
 /* -------------------- Lead Orders -------------------- */
-SystemuserRouter.post("/leads/orders/save", leadOrderController.saveLeadOrder);
-SystemuserRouter.post("/leads/orders/list", leadOrderController.listLeadOrders);
-SystemuserRouter.post("/leads/orders/delete", leadOrderController.deleteLeadOrder);
-SystemuserRouter.post("/leads/orders/update-status", leadOrderController.updateLeadOrderStatus);
+SystemuserRouter.post("/leads/orders/create", leadOrderController.createOrder);
+SystemuserRouter.post("/leads/orders/save", leadOrderController.createOrder);
+SystemuserRouter.post("/leads/orders/list", leadOrderController.getAllOrders);
+SystemuserRouter.post("/leads/orders/delete", leadOrderController.deleteOrder);
+SystemuserRouter.post("/leads/orders/update-status", leadOrderController.updateOrder);
 
 /* -------------------- Dashboards -------------------- */
 SystemuserRouter.post("/leads/task/agent/dashboard", agentDashboardController.getAgentTasksDashboard);

@@ -4,47 +4,48 @@ import { QueryTypes } from "sequelize";
 import { v4 as uuidv4 } from "uuid";
 import db from "../models";
 
-// ==================== VALIDATION SCHEMAS ====================
-const orderItemSchema = yup.object({
-  id: yup.string().uuid("Invalid item ID").optional(),
-  medicine_name: yup.string().trim().required("Medicine name is required"),
-  unit: yup.string().trim().default("Strip"),
-  quantity: yup.number().integer().min(1, "Quantity must be at least 1").required("Quantity is required"),
-  rate: yup.number().min(0, "Rate cannot be negative").required("Rate is required"),
-});
-
-const saveOrderSchema = yup.object({
+// ==================== UNIFIED ORDER VALIDATION SCHEMA ====================
+const leadOrderSchema = yup.object({
   id: yup.string().uuid("Invalid order ID").nullable().optional(),
   order_id: yup.string().uuid("Invalid order ID").nullable().optional(),
-  lead_id: yup.string().uuid("Invalid lead ID").required("Lead ID is required"),
+  lead_id: yup.string().uuid("Invalid lead ID").nullable().optional(),
   payment_status: yup.string().default("Pending"),
   payment_mode: yup.string().default("COD"),
   order_status: yup.string().default("Pending"),
   order_notes: yup.string().nullable().optional(),
   courier_name: yup.string().nullable().optional(),
   tracking_number: yup.string().nullable().optional(),
-  items: yup.array().of(orderItemSchema).min(1, "At least one medicine item is required").required("Items are required"),
+  items: yup
+    .array()
+    .of(
+      yup.object({
+        id: yup.string().uuid("Invalid item ID").optional(),
+        medicine_name: yup.string().trim().required("Medicine name is required"),
+        unit: yup.string().trim().default("Strip"),
+        quantity: yup.number().integer().min(1, "Quantity must be at least 1").required("Quantity is required"),
+        rate: yup.number().min(0, "Rate cannot be negative").required("Rate is required"),
+      })
+    )
+    .optional(),
 });
 
-const updateStatusSchema = yup.object({
-  id: yup.string().uuid("Invalid order ID").optional(),
-  order_id: yup.string().uuid("Invalid order ID").optional(),
-  lead_id: yup.string().uuid("Invalid lead ID").optional(),
-  order_status: yup.string().optional(),
-  payment_status: yup.string().optional(),
-  payment_mode: yup.string().optional(),
-  order_notes: yup.string().nullable().optional(),
-  courier_name: yup.string().nullable().optional(),
-  tracking_number: yup.string().nullable().optional(),
-});
-
-// ==================== 1. SAVE LEAD ORDER (CREATE OR UPDATE) ====================
-export const saveLeadOrder = async (req: Request, res: Response) => {
+// ==================== 1. CREATE ORDER ====================
+export const createOrder = async (req: Request, res: Response) => {
   const transaction = await db.sequelize.transaction();
   try {
-    const body = await saveOrderSchema.validate(req.body, { abortEarly: false });
+    const body = await leadOrderSchema.validate(req.body, { abortEarly: false });
     const existingOrderId = body.id || body.order_id || null;
     const { lead_id, payment_status, payment_mode, order_status, order_notes, courier_name, tracking_number, items } = body;
+
+    if (!lead_id) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, message: "Lead ID is required" });
+    }
+
+    if (!items || items.length === 0) {
+      await transaction.rollback();
+      return res.status(400).json({ success: false, message: "At least one medicine item is required" });
+    }
 
     // Verify lead exists
     const [leadRow]: any[] = await db.sequelize.query(
@@ -222,8 +223,8 @@ export const saveLeadOrder = async (req: Request, res: Response) => {
   }
 };
 
-// ==================== 2. LIST LEAD ORDERS ====================
-export const listLeadOrders = async (req: Request, res: Response) => {
+// ==================== 2. GET ALL ORDERS ====================
+export const getAllOrders = async (req: Request, res: Response) => {
   try {
     const lead_id = req.body?.lead_id || req.query?.lead_id;
     if (!lead_id) {
@@ -284,8 +285,8 @@ export const listLeadOrders = async (req: Request, res: Response) => {
   }
 };
 
-// ==================== 3. DELETE LEAD ORDER ====================
-export const deleteLeadOrder = async (req: Request, res: Response) => {
+// ==================== 3. DELETE ORDER ====================
+export const deleteOrder = async (req: Request, res: Response) => {
   const transaction = await db.sequelize.transaction();
   try {
     const targetId = req.body?.id || req.body?.order_id || req.query?.id || req.query?.order_id;
@@ -327,15 +328,15 @@ export const deleteLeadOrder = async (req: Request, res: Response) => {
   }
 };
 
-// ==================== 4. UPDATE ORDER STATUS ====================
-export const updateLeadOrderStatus = async (req: Request, res: Response) => {
+// ==================== 4. UPDATE ORDER ====================
+export const updateOrder = async (req: Request, res: Response) => {
   try {
     const targetId = req.body?.id || req.body?.order_id || req.query?.id || req.query?.order_id;
     if (!targetId) {
       return res.status(400).json({ success: false, message: "Order ID is required" });
     }
 
-    const body = await updateStatusSchema.validate(req.body, { abortEarly: false });
+    const body = await leadOrderSchema.validate(req.body, { abortEarly: false });
     const { lead_id, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number } = body;
 
     const [updatedOrder]: any[] = await db.sequelize.query(
@@ -530,10 +531,14 @@ export const getMedicineSuggestions = async (req: Request, res: Response) => {
 
 // ==================== DEFAULT EXPORT ====================
 export default {
-  saveLeadOrder,
-  listLeadOrders,
-  deleteLeadOrder,
-  updateLeadOrderStatus,
+  createOrder,
+  saveLeadOrder: createOrder,
+  getAllOrders,
+  listLeadOrders: getAllOrders,
+  updateOrder,
+  updateLeadOrderStatus: updateOrder,
+  deleteOrder,
+  deleteLeadOrder: deleteOrder,
   saveLeadMedicines,
   listLeadMedicines,
   deleteLeadMedicine,
