@@ -507,23 +507,17 @@ export const getMedicineSuggestions = async (req: Request, res: Response) => {
   try {
     const query = (req.query.q as string || "").trim();
     const repl: Record<string, any> = {};
-    let whereClause = "WHERE deleted_at IS NULL AND medicine_name IS NOT NULL AND TRIM(medicine_name) != ''";
+    let whereClause = "WHERE deleted_at IS NULL AND is_active = TRUE AND name IS NOT NULL AND TRIM(name) != ''";
     if (query) {
-      whereClause += " AND medicine_name ILIKE :q";
+      whereClause += " AND name ILIKE :q";
       repl.q = `%${query}%`;
     }
 
     const dbMeds: any[] = await db.sequelize.query(
-      `SELECT DISTINCT ON (LOWER(TRIM(medicine_name))) medicine_name, unit, rate
-         FROM (
-             SELECT name AS medicine_name, 'Strip'::varchar AS unit, 0::numeric AS rate, created_at, deleted_at FROM public.master_medicines
-             UNION ALL
-             SELECT medicine_name, COALESCE(unit, 'Strip')::varchar AS unit, COALESCE(rate, 0)::numeric AS rate, created_at, deleted_at FROM public.lead_order_items
-             UNION ALL
-             SELECT medicine_name, COALESCE(unit, 'Strip')::varchar AS unit, COALESCE(rate, 0)::numeric AS rate, created_at, deleted_at FROM public.lead_medicines
-         ) combined
+      `SELECT name AS medicine_name, COALESCE(unit, 'Strip')::varchar AS unit, COALESCE(rate, 0)::numeric AS rate
+         FROM public.master_medicines
         ${whereClause}
-        ORDER BY LOWER(TRIM(medicine_name)) ASC, created_at DESC
+        ORDER BY LOWER(TRIM(name)) ASC
         LIMIT 100`,
       { replacements: repl, type: QueryTypes.SELECT }
     );
