@@ -316,6 +316,9 @@ LeadDocument.belongsTo(Lead, {
 /* -------------------------------------------------------------------------
    D. MEDICINE & ORDER MANAGEMENT ASSOCIATIONS (START)
 ------------------------------------------------------------------------- */
+
+/* -------------------- 1. LEAD RAW MEDICINES -------------------- */
+// Ek Lead ke multiple raw medicines ho sakte hain
 Lead.hasMany(LeadMedicine, {
   foreignKey: { name: "lead_id", allowNull: false },
   as: "medicines",
@@ -329,6 +332,8 @@ LeadMedicine.belongsTo(Lead, {
   onUpdate: "CASCADE",
 });
 
+/* -------------------- 2. LEAD ORDERS (CORE) -------------------- */
+// Ek Lead ke multiple Orders ho sakte hain (1 Lead -> Many Orders)
 Lead.hasMany(LeadOrder, {
   foreignKey: { name: "lead_id", allowNull: false },
   as: "orders",
@@ -342,6 +347,8 @@ LeadOrder.belongsTo(Lead, {
   onUpdate: "CASCADE",
 });
 
+/* -------------------- 3. ORDER MEDICINE ITEMS -------------------- */
+// Ek Order ke andar multiple medicine items hote hain (1 Order -> Many Items)
 LeadOrder.hasMany(LeadOrderItem, {
   foreignKey: { name: "order_id", allowNull: false },
   as: "items",
@@ -355,6 +362,23 @@ LeadOrderItem.belongsTo(LeadOrder, {
   onUpdate: "CASCADE",
 });
 
+/* -------------------- 4. ORDER AGENT (PUNCHED BY) -------------------- */
+// Har Order kisi Agent (SystemUser) dwara banaya/punch kiya jata hai
+LeadOrder.belongsTo(SystemUser, {
+  foreignKey: { name: "agent_id", allowNull: true },
+  as: "agent",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+SystemUser.hasMany(LeadOrder, {
+  foreignKey: { name: "agent_id", allowNull: true },
+  as: "orders",
+  onDelete: "SET NULL",
+  onUpdate: "CASCADE",
+});
+
+/* -------------------- 5. ORDER COURIER PARCEL TRACKING -------------------- */
+// Ek Order ke multiple live parcel tracking checkpoints hote hain
 LeadOrder.hasMany(OrderTrackingLog, {
   foreignKey: { name: "order_id", allowNull: false },
   as: "trackingLogs",
@@ -367,6 +391,7 @@ OrderTrackingLog.belongsTo(LeadOrder, {
   onDelete: "CASCADE",
   onUpdate: "CASCADE",
 });
+
 /* -------------------- END MEDICINE & ORDER MANAGEMENT ------------------- */
 
 /* -------------------------------------------------------------------------
