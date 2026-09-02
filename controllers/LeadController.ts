@@ -351,20 +351,22 @@ export const assignLeadToAgent = async (req: Request, res: Response) => {
     // In-App Notification
     try {
       await db.sequelize.query(
-        `INSERT INTO public.assigned_lead_notifications (id, user_id, lead_id, title, body, is_read, created_at, updated_at)
-         VALUES (:id, :userId, :leadId, :title, :body, false, NOW(), NOW())`,
+        `INSERT INTO public.assigned_lead_notifications (id, recipient_user_id, title, body, data, created_at, updated_at)
+         VALUES (:id, :recipient_user_id, :title, :body, :data::jsonb, NOW(), NOW())`,
         {
           replacements: {
             id: uuidv4(),
-            userId: agent_id,
-            leadId: lead_id,
+            recipient_user_id: agent_id,
             title: "New Lead Assigned",
             body: `Lead ${result[0].full_name || result[0].lead_number || ""} has been assigned to you.`,
+            data: JSON.stringify({ lead_id }),
           },
           type: QueryTypes.INSERT,
         }
       );
-    } catch {}
+    } catch (notifErr) {
+      console.error("Failed to insert assigned lead notification:", notifErr);
+    }
 
     return res.status(200).json({ success: true, data: result[0], message: "Lead assigned successfully" });
   } catch (error: any) {
@@ -388,20 +390,22 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
     // In-App Notification
     try {
       await db.sequelize.query(
-        `INSERT INTO public.assigned_lead_notifications (id, user_id, lead_id, title, body, is_read, created_at, updated_at)
-         VALUES (:id, :userId, :leadId, :title, :body, false, NOW(), NOW())`,
+        `INSERT INTO public.assigned_lead_notifications (id, recipient_user_id, title, body, data, created_at, updated_at)
+         VALUES (:id, :recipient_user_id, :title, :body, :data::jsonb, NOW(), NOW())`,
         {
           replacements: {
             id: uuidv4(),
-            userId: agent_id,
-            leadId: lead_ids[0],
+            recipient_user_id: agent_id,
             title: "Bulk Leads Assigned",
             body: `${lead_ids.length} new leads have been assigned to you.`,
+            data: JSON.stringify({ lead_ids, lead_id: lead_ids[0] }),
           },
           type: QueryTypes.INSERT,
         }
       );
-    } catch {}
+    } catch (notifErr) {
+      console.error("Failed to insert bulk assigned lead notification:", notifErr);
+    }
 
     return res.status(200).json({ success: true, message: `${lead_ids.length} leads assigned successfully` });
   } catch (error: any) {
@@ -575,9 +579,35 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
 // ==================== 14. GET ASSIGNED NOTIFICATIONS ====================
 export const getAssignedLeadNotifications = async (req: Request, res: Response) => {
   try {
+    const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id;
+
+    let whereClause = "";
+    const replacements: any = {};
+    if (authUserId) {
+      const [roleRow]: any[] = await db.sequelize.query(
+        `SELECT r.name FROM public.user_role ur JOIN public.roles r ON ur.role_id = r.id WHERE ur.system_user_id = :authUserId LIMIT 1`,
+        { replacements: { authUserId }, type: QueryTypes.SELECT }
+      );
+      if (roleRow && roleRow.name?.toLowerCase() !== "admin") {
+        whereClause = "WHERE recipient_user_id = :authUserId";
+        replacements.authUserId = authUserId;
+      }
+    }
+
     const rows: any[] = await db.sequelize.query(
-      `SELECT * FROM public.assigned_lead_notifications ORDER BY created_at DESC LIMIT 50`,
-      { type: QueryTypes.SELECT }
+      `SELECT 
+         id, 
+         recipient_user_id, 
+         title, 
+         body, 
+         COALESCE(data->>'lead_id', null) AS lead_id, 
+         data, 
+         created_at, 
+         updated_at 
+       FROM public.assigned_lead_notifications 
+       ${whereClause} 
+       ORDER BY created_at DESC LIMIT 50`,
+      { replacements, type: QueryTypes.SELECT }
     );
 
     return res.status(200).json({ success: true, data: rows });
