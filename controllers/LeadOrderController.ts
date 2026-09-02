@@ -291,7 +291,9 @@ export const updateOrder = async (req: Request, res: Response) => {
 
     // Verify order exists
     const [existingOrder]: any[] = await db.sequelize.query(
-      `SELECT id, lead_id, order_number FROM public.lead_orders WHERE id = :targetId AND deleted_at IS NULL LIMIT 1`,
+      `SELECT id, lead_id, order_number, order_status, payment_status, payment_mode, order_notes, courier_name, tracking_number, total_items, grand_total, agent_id
+         FROM public.lead_orders
+        WHERE id = :targetId AND deleted_at IS NULL LIMIT 1`,
       { replacements: { targetId }, type: QueryTypes.SELECT, transaction }
     );
     if (!existingOrder) {
@@ -359,33 +361,44 @@ export const updateOrder = async (req: Request, res: Response) => {
       }
     }
 
-    // Update main order row
+    // Resolve final values in JS (No COALESCE needed)
+    const finalOrderStatus = order_status || existingOrder.order_status;
+    const finalPaymentStatus = payment_status || existingOrder.payment_status;
+    const finalPaymentMode = payment_mode || existingOrder.payment_mode;
+    const finalOrderNotes = order_notes !== undefined ? order_notes : existingOrder.order_notes;
+    const finalCourierName = courier_name !== undefined ? courier_name : existingOrder.courier_name;
+    const finalTrackingNumber = tracking_number !== undefined ? tracking_number : existingOrder.tracking_number;
+    const finalTotalItems = totalItemsCount !== undefined ? totalItemsCount : existingOrder.total_items;
+    const finalGrandTotal = grandTotal !== undefined ? grandTotal : existingOrder.grand_total;
+    const finalAgentId = authUserId || existingOrder.agent_id;
+
+    // Update main order row with clean SQL
     const [updatedOrder]: any[] = await db.sequelize.query(
       `UPDATE public.lead_orders
-           SET order_status = COALESCE(:order_status, order_status),
-               payment_status = COALESCE(:payment_status, payment_status),
-               payment_mode = COALESCE(:payment_mode, payment_mode),
-               order_notes = COALESCE(:order_notes, order_notes),
-               courier_name = COALESCE(:courier_name, courier_name),
-               tracking_number = COALESCE(:tracking_number, tracking_number),
-               total_items = COALESCE(:total_items, total_items),
-               grand_total = COALESCE(:grand_total, grand_total),
-               agent_id = COALESCE(:agent_id, agent_id),
+           SET order_status = :order_status,
+               payment_status = :payment_status,
+               payment_mode = :payment_mode,
+               order_notes = :order_notes,
+               courier_name = :courier_name,
+               tracking_number = :tracking_number,
+               total_items = :total_items,
+               grand_total = :grand_total,
+               agent_id = :agent_id,
                updated_at = NOW()
          WHERE id = :targetId AND deleted_at IS NULL
          RETURNING id, lead_id, order_number, order_status, payment_status, payment_mode, total_items, grand_total`,
       {
         replacements: {
           targetId,
-          order_status: order_status || null,
-          payment_status: payment_status || null,
-          payment_mode: payment_mode || null,
-          order_notes: order_notes !== undefined ? order_notes : null,
-          courier_name: courier_name !== undefined ? courier_name : null,
-          tracking_number: tracking_number !== undefined ? tracking_number : null,
-          total_items: totalItemsCount !== undefined ? totalItemsCount : null,
-          grand_total: grandTotal !== undefined ? grandTotal : null,
-          agent_id: authUserId,
+          order_status: finalOrderStatus,
+          payment_status: finalPaymentStatus,
+          payment_mode: finalPaymentMode,
+          order_notes: finalOrderNotes,
+          courier_name: finalCourierName,
+          tracking_number: finalTrackingNumber,
+          total_items: finalTotalItems,
+          grand_total: finalGrandTotal,
+          agent_id: finalAgentId,
         },
         type: QueryTypes.SELECT,
         transaction,
