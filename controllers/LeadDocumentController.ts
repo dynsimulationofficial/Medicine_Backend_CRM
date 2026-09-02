@@ -167,6 +167,7 @@ export const getDocumentUrl = async (req: Request, res: Response) => {
       const command = new GetObjectCommand({
         Bucket: process.env.AWS_S3_BUCKET_NAME,
         Key: doc.storage_path,
+        ResponseContentDisposition: `attachment; filename="${encodeURIComponent(doc.file_name)}"`,
       });
       const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
       return res.status(200).json({ success: true, data: { file_name: doc.file_name, mime_type: doc.mime_type, url: signedUrl } });
