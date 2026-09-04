@@ -4,15 +4,6 @@ import { QueryTypes } from "sequelize";
 import db from "../models";
 import trackingService from "../service/TrackingService";
 
-// ==================== RESPONSE HELPERS ====================
-const sendSuccess = (res: Response, data: any, message: string = "Success", code = 200) => {
-  return res.status(code).json({ success: true, msg: message, message, data });
-};
-
-const sendError = (res: Response, data: any = {}, message: string = "Error", code = 400) => {
-  return res.status(code).json({ success: false, msg: message, message, data });
-};
-
 // ==================== VALIDATION SCHEMAS ====================
 const syncTrackingSchema = yup.object({
   order_id: yup.string().uuid("Invalid order ID").optional().nullable(),
@@ -21,11 +12,7 @@ const syncTrackingSchema = yup.object({
 });
 
 // ==================== 1. SYNC TRACKING ON-DEMAND ====================
-/**
- * POST /api/v1/managelead/tracking/sync
- * Synchronizes tracking on-demand for a single order or queries carrier directly by tracking number
- */
-export const syncTracking = async (req: Request, res: Response): Promise<void> => {
+export const syncTracking = async (req: Request, res: Response) => {
   try {
     const body = await syncTrackingSchema.validate(req.body, { abortEarly: false });
     const orderId = body.order_id || body.id;
@@ -33,42 +20,55 @@ export const syncTracking = async (req: Request, res: Response): Promise<void> =
     if (orderId) {
       const trackingResult = await trackingService.syncOrderTracking(orderId);
       if (!trackingResult) {
-        sendError(res, {}, "Order has no tracking number or not found", 404);
-        return;
+        return res.status(404).json({
+          success: false,
+          message: "Order has no tracking number or not found",
+        });
       }
-      sendSuccess(res, trackingResult, "Tracking synced successfully");
-      return;
+      return res.status(200).json({
+        success: true,
+        message: "Tracking synced successfully",
+        data: trackingResult,
+      });
     }
 
     if (body.tracking_number) {
       const trackingResult = await trackingService.fetchTrackingInfo(body.tracking_number);
-      sendSuccess(res, trackingResult, "Tracking info fetched successfully");
-      return;
+      return res.status(200).json({
+        success: true,
+        message: "Tracking info fetched successfully",
+        data: trackingResult,
+      });
     }
 
-    sendError(res, {}, "order_id or tracking_number is required", 400);
-  } catch (err: any) {
-    console.error("syncTracking error:", err);
-    if (err instanceof yup.ValidationError) {
-      sendError(res, {}, err.errors.join(", "), 400);
-      return;
+    return res.status(400).json({
+      success: false,
+      message: "order_id or tracking_number is required",
+    });
+  } catch (error: any) {
+    console.error("syncTracking error:", error);
+    if (error instanceof yup.ValidationError) {
+      return res.status(400).json({
+        success: false,
+        message: error.errors.join(", "),
+      });
     }
-    sendError(res, {}, err?.message || "Internal server error", 500);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
 // ==================== 2. GET TRACKING HISTORY & TIMELINE ====================
-/**
- * GET /api/v1/managelead/tracking/history/:order_id
- * POST /api/v1/managelead/tracking/history
- * Returns complete checkpoint history and order info for visual timeline drawer
- */
-export const getTrackingHistory = async (req: Request, res: Response): Promise<void> => {
+export const getTrackingHistory = async (req: Request, res: Response) => {
   try {
     const orderId = req.params?.order_id || req.body?.order_id || req.body?.id;
     if (!orderId) {
-      sendError(res, {}, "order_id is required", 400);
-      return;
+      return res.status(400).json({
+        success: false,
+        message: "order_id is required",
+      });
     }
 
     const [order]: any[] = await db.sequelize.query(
@@ -92,23 +92,24 @@ export const getTrackingHistory = async (req: Request, res: Response): Promise<v
     );
 
     if (!order) {
-      sendError(res, {}, "Order not found", 404);
-      return;
+      return res.status(404).json({
+        success: false,
+        message: "Order not found",
+      });
     }
 
     if (!order.tracking_number) {
-      sendSuccess(
-        res,
-        {
+      return res.status(200).json({
+        success: true,
+        message: "Order has no tracking number assigned yet",
+        data: {
           order,
           tracking_number: null,
           courier_name: order.courier_name,
           status: order.order_status || "Pending",
           events: [],
         },
-        "Order has no tracking number assigned yet"
-      );
-      return;
+      });
     }
 
     // Fetch logged checkpoints from database
@@ -123,9 +124,10 @@ export const getTrackingHistory = async (req: Request, res: Response): Promise<v
     // If no logs saved in database yet, auto-sync on the fly
     if (logs.length === 0) {
       const liveResult = await trackingService.syncOrderTracking(orderId);
-      sendSuccess(
-        res,
-        {
+      return res.status(200).json({
+        success: true,
+        message: "Tracking history fetched",
+        data: {
           order,
           tracking_number: order.tracking_number,
           courier_name: order.courier_name || "India Post",
@@ -134,16 +136,15 @@ export const getTrackingHistory = async (req: Request, res: Response): Promise<v
           latest_event: liveResult?.latest_event,
           events: liveResult?.events || [],
         },
-        "Tracking history fetched"
-      );
-      return;
+      });
     }
 
     const latestLog = logs[0];
 
-    sendSuccess(
-      res,
-      {
+    return res.status(200).json({
+      success: true,
+      message: "Tracking history retrieved successfully",
+      data: {
         order,
         tracking_number: order.tracking_number,
         courier_name: order.courier_name || "India Post",
@@ -152,20 +153,18 @@ export const getTrackingHistory = async (req: Request, res: Response): Promise<v
         latest_event: latestLog?.details,
         events: logs,
       },
-      "Tracking history retrieved successfully"
-    );
-  } catch (err: any) {
-    console.error("getTrackingHistory error:", err);
-    sendError(res, {}, err?.message || "Internal server error", 500);
+    });
+  } catch (error: any) {
+    console.error("getTrackingHistory error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
 // ==================== 3. RUN CRON BATCH SYNC ====================
-/**
- * POST /api/v1/managelead/tracking/cron-sync
- * Runs batch synchronization for all active in-transit orders
- */
-export const runCronBatchSync = async (req: Request, res: Response): Promise<void> => {
+export const runCronBatchSync = async (req: Request, res: Response) => {
   try {
     const activeOrders: any[] = await db.sequelize.query(
       `SELECT id, order_number, tracking_number, courier_name
@@ -188,17 +187,20 @@ export const runCronBatchSync = async (req: Request, res: Response): Promise<voi
       }
     }
 
-    sendSuccess(
-      res,
-      {
+    return res.status(200).json({
+      success: true,
+      message: `Batch tracking sync completed. ${syncedCount} orders updated.`,
+      data: {
         total_active_orders: activeOrders.length,
         synced_count: syncedCount,
       },
-      `Batch tracking sync completed. ${syncedCount} orders updated.`
-    );
-  } catch (err: any) {
-    console.error("runCronBatchSync error:", err);
-    sendError(res, {}, err?.message || "Internal server error", 500);
+    });
+  } catch (error: any) {
+    console.error("runCronBatchSync error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Internal server error",
+    });
   }
 };
 
