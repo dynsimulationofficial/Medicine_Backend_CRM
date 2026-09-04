@@ -114,6 +114,14 @@ SystemuserRouter.post("/leads/orders/update-status", leadOrderController.updateO
 /* -------------------- Dashboards -------------------- */
 SystemuserRouter.post("/leads/task/agent/dashboard", agentDashboardController.getAgentTasksDashboard);
 SystemuserRouter.post("/leads/admin/dashboard", adminDashboardController.getAdminDashboard);
+SystemuserRouter.post("/leads/admin/dashboard/cards", adminDashboardController.getAdminCards);
+SystemuserRouter.get("/leads/admin/dashboard/cards", adminDashboardController.getAdminCards);
+SystemuserRouter.post("/leads/admin/dashboard/campaigns", adminDashboardController.getCampaignPerformance);
+SystemuserRouter.get("/leads/admin/dashboard/campaigns", adminDashboardController.getCampaignPerformance);
+SystemuserRouter.post("/leads/admin/dashboard/team-tasks", adminDashboardController.getTeamTasks);
+SystemuserRouter.get("/leads/admin/dashboard/team-tasks", adminDashboardController.getTeamTasks);
+SystemuserRouter.post("/leads/admin/dashboard/tasks-list", adminDashboardController.getTasksList);
+SystemuserRouter.get("/leads/admin/dashboard/tasks-list", adminDashboardController.getTasksList);
 SystemuserRouter.get("/leads/search/dashboard", agentDashboardController.searchLeadsForDashboard);
 
 /* -------------------- Reports & Analytics -------------------- */
