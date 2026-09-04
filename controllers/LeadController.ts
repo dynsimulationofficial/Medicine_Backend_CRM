@@ -52,6 +52,19 @@ const updateLeadSchema = yup.object({
   note: yup.string().transform(emptyStringToNull).nullable().optional(),
 });
 
+const checkIsAdmin = async (userId: string | null): Promise<boolean> => {
+  if (!userId) return false;
+  try {
+    const rows: any[] = await db.sequelize.query(
+      `SELECT r.name FROM public.user_role ur JOIN public.roles r ON ur.role_id = r.id WHERE ur.system_user_id = :userId LIMIT 1`,
+      { replacements: { userId }, type: QueryTypes.SELECT }
+    );
+    return rows.length > 0 && rows[0].name?.toLowerCase() === "admin";
+  } catch {
+    return false;
+  }
+};
+
 // ==================== 1. CREATE LEAD ====================
 export const createLead = async (req: Request, res: Response) => {
   try {
@@ -169,9 +182,20 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
     const limit = Number(req.query.limit || req.query.pageSize) || 50;
     const offset = (page - 1) * limit;
 
+    const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
+    const userIsAdmin = await checkIsAdmin(authUserId);
+    const agentFilter = (req.query.agent_id as string) || (!userIsAdmin && authUserId ? authUserId : null);
+
+    const repl: Record<string, any> = { limit, offset };
+    let whereClause = "WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL";
+    if (agentFilter) {
+      whereClause += " AND l.agent_id = :agentFilter";
+      repl.agentFilter = agentFilter;
+    }
+
     const countResult: any[] = await db.sequelize.query(
-      `SELECT COUNT(*) as total FROM public.leads WHERE deleted_at IS NULL AND agent_id IS NOT NULL`,
-      { type: QueryTypes.SELECT }
+      `SELECT COUNT(*) as total FROM public.leads l ${whereClause}`,
+      { replacements: repl, type: QueryTypes.SELECT }
     );
     const total = parseInt(countResult[0]?.total || "0");
 
@@ -180,15 +204,28 @@ export const getAssignedLeads = async (req: Request, res: Response) => {
          l.*,
          su.name AS agent_name,
          ls.name AS lead_source_name,
-         camp.name AS campaign_name
+         camp.name AS campaign_name,
+         COALESCE(ord.order_count, 0)::int AS order_count,
+         COALESCE(ord.total_order_amount, 0)::numeric AS total_order_amount,
+         ord.latest_order_status,
+         ord.latest_order_number
        FROM public.leads l
        LEFT JOIN public.system_users su ON su.id = l.agent_id
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
-       WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(o.id)::int AS order_count,
+           COALESCE(SUM(o.grand_total), 0)::numeric AS total_order_amount,
+           (ARRAY_AGG(o.order_status ORDER BY o.created_at DESC))[1] AS latest_order_status,
+           (ARRAY_AGG(o.order_number ORDER BY o.created_at DESC))[1] AS latest_order_number
+         FROM public.lead_orders o
+         WHERE o.lead_id = l.id AND o.deleted_at IS NULL
+       ) ord ON true
+       ${whereClause}
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
-      { replacements: { limit, offset }, type: QueryTypes.SELECT }
+      { replacements: repl, type: QueryTypes.SELECT }
     );
 
     return res.status(200).json({
@@ -214,11 +251,24 @@ export const getLead = async (req: Request, res: Response) => {
          l.*,
          su.name AS agent_name,
          ls.name AS lead_source_name,
-         camp.name AS campaign_name
+         camp.name AS campaign_name,
+         COALESCE(ord.order_count, 0)::int AS order_count,
+         COALESCE(ord.total_order_amount, 0)::numeric AS total_order_amount,
+         ord.latest_order_status,
+         ord.latest_order_number
        FROM public.leads l
        LEFT JOIN public.system_users su ON su.id = l.agent_id
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(o.id)::int AS order_count,
+           COALESCE(SUM(o.grand_total), 0)::numeric AS total_order_amount,
+           (ARRAY_AGG(o.order_status ORDER BY o.created_at DESC))[1] AS latest_order_status,
+           (ARRAY_AGG(o.order_number ORDER BY o.created_at DESC))[1] AS latest_order_number
+         FROM public.lead_orders o
+         WHERE o.lead_id = l.id AND o.deleted_at IS NULL
+       ) ord ON true
        WHERE l.id = :id AND l.deleted_at IS NULL LIMIT 1`,
       { replacements: { id }, type: QueryTypes.SELECT }
     );
@@ -446,11 +496,24 @@ export const searchLeads = async (req: Request, res: Response) => {
          l.*,
          su.name AS agent_name,
          ls.name AS lead_source_name,
-         camp.name AS campaign_name
+         camp.name AS campaign_name,
+         COALESCE(ord.order_count, 0)::int AS order_count,
+         COALESCE(ord.total_order_amount, 0)::numeric AS total_order_amount,
+         ord.latest_order_status,
+         ord.latest_order_number
        FROM public.leads l
        LEFT JOIN public.system_users su ON su.id = l.agent_id
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(o.id)::int AS order_count,
+           COALESCE(SUM(o.grand_total), 0)::numeric AS total_order_amount,
+           (ARRAY_AGG(o.order_status ORDER BY o.created_at DESC))[1] AS latest_order_status,
+           (ARRAY_AGG(o.order_number ORDER BY o.created_at DESC))[1] AS latest_order_number
+         FROM public.lead_orders o
+         WHERE o.lead_id = l.id AND o.deleted_at IS NULL
+       ) ord ON true
        ${whereClause}
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
