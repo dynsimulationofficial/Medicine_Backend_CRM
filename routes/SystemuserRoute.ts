@@ -113,6 +113,21 @@ SystemuserRouter.post("/leads/orders/update-status", leadOrderController.updateO
 
 /* -------------------- Dashboards -------------------- */
 SystemuserRouter.post("/leads/task/agent/dashboard", agentDashboardController.getAgentTasksDashboard);
+SystemuserRouter.post("/leads/agent/dashboard/assigned-leads-count", agentDashboardController.getAssignedLeadsCount);
+SystemuserRouter.get("/leads/agent/dashboard/assigned-leads-count", agentDashboardController.getAssignedLeadsCount);
+SystemuserRouter.post("/leads/agent/dashboard/converted-deals-count", agentDashboardController.getConvertedDealsCount);
+SystemuserRouter.get("/leads/agent/dashboard/converted-deals-count", agentDashboardController.getConvertedDealsCount);
+SystemuserRouter.post("/leads/agent/dashboard/total-orders-count", agentDashboardController.getTotalOrdersCount);
+SystemuserRouter.get("/leads/agent/dashboard/total-orders-count", agentDashboardController.getTotalOrdersCount);
+SystemuserRouter.post("/leads/agent/dashboard/sales-revenue", agentDashboardController.getSalesRevenue);
+SystemuserRouter.get("/leads/agent/dashboard/sales-revenue", agentDashboardController.getSalesRevenue);
+SystemuserRouter.post("/leads/agent/dashboard/tasks-today", agentDashboardController.getTasksTodayCount);
+SystemuserRouter.get("/leads/agent/dashboard/tasks-today", agentDashboardController.getTasksTodayCount);
+SystemuserRouter.post("/leads/agent/dashboard/overdue-tasks", agentDashboardController.getOverdueTasksCount);
+SystemuserRouter.get("/leads/agent/dashboard/overdue-tasks", agentDashboardController.getOverdueTasksCount);
+SystemuserRouter.post("/leads/agent/dashboard/assigned-leads", agentDashboardController.getAssignedLeadsQueue);
+SystemuserRouter.get("/leads/agent/dashboard/assigned-leads", agentDashboardController.getAssignedLeadsQueue);
+
 SystemuserRouter.post("/leads/admin/dashboard", adminDashboardController.getAdminDashboard);
 SystemuserRouter.post("/leads/admin/dashboard/cards", adminDashboardController.getAdminCards);
 SystemuserRouter.get("/leads/admin/dashboard/cards", adminDashboardController.getAdminCards);

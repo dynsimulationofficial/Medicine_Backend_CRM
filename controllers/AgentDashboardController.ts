@@ -1,254 +1,551 @@
 import { Request, Response } from "express";
 import { QueryTypes } from "sequelize";
-import * as Yup from "yup";
 import { DateTime } from "luxon";
-import BaseController from "./BaseController";
-import DBServices from "../database/DBService";
+import db from "../models";
 
-class AgentDashboardController extends BaseController {
-    private db_services: DBServices;
+// ==========================================
+// 🕒 DATE FORMAT HELPERS
+// ==========================================
+const formatDate = (d: any): string | null => {
+  if (!d) return null;
+  const dt = DateTime.fromJSDate(new Date(d));
+  return dt.isValid ? dt.toFormat("MM-dd-yyyy") : null;
+};
 
-    constructor() {
-        super();
-        this.db_services = new DBServices();
+const formatDateTime = (d: any): string | null => {
+  if (!d) return null;
+  const dt = DateTime.fromJSDate(new Date(d));
+  return dt.isValid ? dt.toFormat("MM-dd-yyyy hh:mm a") : null;
+};
+
+// ==========================================
+// 1. API: ASSIGNED LEADS COUNT (Card 1)
+// POST /api/v1/managelead/leads/agent/dashboard/assigned-leads-count
+// ==========================================
+export const getAssignedLeadsCount = async (req: Request, res: Response) => {
+  try {
+    const auth = (req as any)?.user;
+    const agentId = auth?.system_user_id || auth?.id;
+    if (!agentId) {
+      return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
     }
 
-    private async isAdmin(systemUserId: string): Promise<boolean> {
-        try {
-            const rows: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT 1 FROM public.user_role ur JOIN public.roles r ON r.id = ur.role_id WHERE ur.system_user_id = :uid AND LOWER(TRIM(r.name)) = 'admin' LIMIT 1`,
-                { replacements: { uid: systemUserId }, type: QueryTypes.SELECT }
-            );
-            return rows.length > 0;
-        } catch {
-            return false;
-        }
+    const [row]: any[] = await db.sequelize.query(
+      `SELECT COUNT(id)::int AS count 
+       FROM public.leads 
+       WHERE deleted_at IS NULL AND agent_id = :agentId`,
+      { replacements: { agentId }, type: QueryTypes.SELECT }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Assigned leads count fetched",
+      data: { count: Number(row?.count ?? 0) },
+    });
+  } catch (error: any) {
+    console.error("getAssignedLeadsCount error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+  }
+};
+
+// ==========================================
+// 2. API: CONVERTED DEALS COUNT (Card 2)
+// POST /api/v1/managelead/leads/agent/dashboard/converted-deals-count
+// ==========================================
+export const getConvertedDealsCount = async (req: Request, res: Response) => {
+  try {
+    const auth = (req as any)?.user;
+    const agentId = auth?.system_user_id || auth?.id;
+    if (!agentId) {
+      return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
     }
 
-    // ==========================================
-    // 🔍 SEARCH LEADS FOR DASHBOARD
-    // ==========================================
-    public searchLeadsForDashboard = async (req: Request, res: Response) => {
-        try {
-            const query = (req.query.q as string) || "";
-            const phoneQuery = (req.query.phone as string) || "";
-            const emailQuery = (req.query.email as string) || "";
+    const [row]: any[] = await db.sequelize.query(
+      `SELECT COUNT(DISTINCT l.id)::int AS count 
+       FROM public.leads l 
+       LEFT JOIN public.lead_orders o ON o.lead_id = l.id AND o.deleted_at IS NULL
+       WHERE l.deleted_at IS NULL 
+         AND l.agent_id = :agentId 
+         AND (l.lead_status = 'Converted' OR o.id IS NOT NULL)`,
+      { replacements: { agentId }, type: QueryTypes.SELECT }
+    );
 
-            if (!query && !phoneQuery && !emailQuery) {
-                return this.sendError(res, {}, "Search query cannot be empty", 400);
-            }
+    return res.status(200).json({
+      success: true,
+      message: "Converted deals count fetched",
+      data: { count: Number(row?.count ?? 0) },
+    });
+  } catch (error: any) {
+    console.error("getConvertedDealsCount error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+  }
+};
 
-            const where: string[] = ["l.deleted_at IS NULL"];
-            const repl: any = {};
+// ==========================================
+// 3. API: TOTAL ORDERS COUNT (Card 3)
+// POST /api/v1/managelead/leads/agent/dashboard/total-orders-count
+// ==========================================
+export const getTotalOrdersCount = async (req: Request, res: Response) => {
+  try {
+    const auth = (req as any)?.user;
+    const agentId = auth?.system_user_id || auth?.id;
+    if (!agentId) {
+      return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
+    }
 
-            if (query) {
-                where.push(`(l.full_name ILIKE :q_like OR l.email ILIKE :q_like OR regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g') LIKE :q_digits OR regexp_replace(COALESCE(l.whatsapp_number, ''), '\\D', '', 'g') LIKE :q_digits)`);
-                repl.q_like = `%${query.trim()}%`;
-                repl.q_digits = `%${query.replace(/\D/g, "")}%`;
-            }
+    const [row]: any[] = await db.sequelize.query(
+      `SELECT COUNT(o.id)::int AS count 
+       FROM public.lead_orders o 
+       JOIN public.leads l ON l.id = o.lead_id AND l.deleted_at IS NULL
+       WHERE o.deleted_at IS NULL 
+         AND (o.agent_id = :agentId OR l.agent_id = :agentId)`,
+      { replacements: { agentId }, type: QueryTypes.SELECT }
+    );
 
-            if (phoneQuery) {
-                where.push(`(regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g') LIKE :p_digits OR regexp_replace(COALESCE(l.whatsapp_number, ''), '\\D', '', 'g') LIKE :p_digits)`);
-                repl.p_digits = `%${phoneQuery.replace(/\D/g, "")}%`;
-            }
+    return res.status(200).json({
+      success: true,
+      message: "Total orders count fetched",
+      data: { count: Number(row?.count ?? 0) },
+    });
+  } catch (error: any) {
+    console.error("getTotalOrdersCount error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+  }
+};
 
-            if (emailQuery) {
-                where.push(`regexp_replace(LOWER(TRIM(l.email)), '\\s+', '', 'g') LIKE :e_like`);
-                repl.e_like = `%${emailQuery.trim().toLowerCase()}%`;
-            }
+// ==========================================
+// 4. API: SALES REVENUE BY CURRENCY (Card 4)
+// POST /api/v1/managelead/leads/agent/dashboard/sales-revenue
+// ==========================================
+export const getSalesRevenue = async (req: Request, res: Response) => {
+  try {
+    const auth = (req as any)?.user;
+    const agentId = auth?.system_user_id || auth?.id;
+    if (!agentId) {
+      return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
+    }
 
-            const sql = `
-                SELECT
-                    l.id,
-                    l.full_name,
-                    l.email,
-                    l.phone,
-                    l.whatsapp_number,
-                    l.created_at,
-                    u.name AS agent_name
-                FROM leads l
-                LEFT JOIN system_users u ON u.id = l.agent_id
-                WHERE ${where.join(" AND ")}
-                ORDER BY l.created_at DESC
-                LIMIT 50
-            `;
+    const [row]: any[] = await db.sequelize.query(
+      `SELECT
+         COALESCE(SUM(CASE WHEN l.currency = 'INR' OR l.currency IS NULL THEN o.grand_total ELSE 0 END), 0)::float AS inr,
+         COALESCE(SUM(CASE WHEN l.currency = 'USD' THEN o.grand_total ELSE 0 END), 0)::float AS usd,
+         COALESCE(SUM(CASE WHEN l.currency = 'GBP' THEN o.grand_total ELSE 0 END), 0)::float AS gbp
+       FROM public.lead_orders o
+       JOIN public.leads l ON l.id = o.lead_id AND l.deleted_at IS NULL
+       WHERE o.deleted_at IS NULL 
+         AND o.order_status != 'Cancelled'
+         AND (o.agent_id = :agentId OR l.agent_id = :agentId)`,
+      { replacements: { agentId }, type: QueryTypes.SELECT }
+    );
 
-            const leads = await this.db_services.sequelizeWriter.query(sql, {
-                replacements: repl,
-                type: QueryTypes.SELECT,
-            });
+    return res.status(200).json({
+      success: true,
+      message: "Sales revenue fetched successfully",
+      data: {
+        inr: Number(row?.inr ?? 0),
+        usd: Number(row?.usd ?? 0),
+        gbp: Number(row?.gbp ?? 0),
+      },
+    });
+  } catch (error: any) {
+    console.error("getSalesRevenue error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+  }
+};
 
-            return this.sendSuccess(res, { leads }, "Leads fetched successfully");
-        } catch (err: any) {
-            console.error("searchLeadsForDashboard error:", err);
-            return this.sendError(res, {}, "Something went wrong", 500);
-        }
-    };
+// ==========================================
+// 5. API: TASKS TODAY (Card 5)
+// POST /api/v1/managelead/leads/agent/dashboard/tasks-today
+// ==========================================
+export const getTasksTodayCount = async (req: Request, res: Response) => {
+  try {
+    const auth = (req as any)?.user;
+    const agentId = auth?.system_user_id || auth?.id;
+    if (!agentId) {
+      return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
+    }
 
-    // ==========================================
-    // 📊 AGENT TASKS DASHBOARD
-    // ==========================================
-    public getAgentTasksDashboard = async (req: Request, res: Response) => {
-        try {
-            const auth = (req as any)?.user;
-            if (!auth?.system_user_id) {
-                return this.sendError(res, {}, "Unauthorized - Please login again", 401);
-            }
-            const me = String(auth.system_user_id);
-            const isAdmin = await this.isAdmin(me);
+    const now = DateTime.now();
+    const todayStartUTC = now.startOf("day").toUTC().toISO({ suppressMilliseconds: true })!;
+    const todayEndUTC = now.endOf("day").toUTC().toISO({ suppressMilliseconds: true })!;
 
-            const schema = Yup.object({
-                agent_id: Yup.string().uuid().optional(),
-                days: Yup.number().integer().min(1).max(31).default(7),
-            });
-            const qp = await schema.validate(req.query, { abortEarly: false });
-            const targetAgentId = isAdmin && qp.agent_id ? qp.agent_id : me;
-            const windowDays = Number(qp.days ?? 7);
+    const [row]: any[] = await db.sequelize.query(
+      `SELECT
+          COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END)::int AS total_today,
+          COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc 
+                     AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') THEN 1 END)::int AS pending_today,
+          COUNT(CASE WHEN LOWER(t.status) IN ('done', 'completed', 'complete') 
+                     AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) THEN 1 END)::int AS done_today
+       FROM public.lead_tasks t
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
+       WHERE t.deleted_at IS NULL AND t.assigned_agent_id = :agentId`,
+      {
+        replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC },
+        type: QueryTypes.SELECT,
+      }
+    );
 
-            const ZONE = "Asia/Kolkata";
-            const DATE_FMT = "MM-dd-yyyy";
-            const DATETIME_FMT = "MM-dd-yyyy hh:mm a";
+    return res.status(200).json({
+      success: true,
+      message: "Tasks today fetched successfully",
+      data: {
+        total_today: Number(row?.total_today ?? 0),
+        pending_today: Number(row?.pending_today ?? 0),
+        done_today: Number(row?.done_today ?? 0),
+      },
+    });
+  } catch (error: any) {
+    console.error("getTasksTodayCount error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+  }
+};
 
-            const nowEST = DateTime.now().setZone(ZONE);
-            const todayStartEST = nowEST.startOf("day");
-            const todayEndEST = nowEST.endOf("day");
-            const nowUtcISO = nowEST.toUTC().toISO({ suppressMilliseconds: true })!;
-            const todayStartUTC = todayStartEST.toUTC().toISO({ suppressMilliseconds: true })!;
-            const todayEndUTC = todayEndEST.toUTC().toISO({ suppressMilliseconds: true })!;
-            const rangeStartEST = todayStartEST.minus({ days: windowDays - 1 });
-            const rangeStartUTC = rangeStartEST.toUTC().toISO({ suppressMilliseconds: true })!;
-            const rangeEndUTC = todayEndUTC;
+// ==========================================
+// 6. API: OVERDUE TASKS (Card 6)
+// POST /api/v1/managelead/leads/agent/dashboard/overdue-tasks
+// ==========================================
+export const getOverdueTasksCount = async (req: Request, res: Response) => {
+  try {
+    const auth = (req as any)?.user;
+    const agentId = auth?.system_user_id || auth?.id;
+    if (!agentId) {
+      return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
+    }
 
-            const toESTString = (d: any): string | null =>
-                d ? DateTime.fromJSDate(new Date(d), { zone: "utc" }).setZone(ZONE).toFormat(DATETIME_FMT) : null;
-            const toESTDate = (d: any): string | null =>
-                d ? DateTime.fromJSDate(new Date(d), { zone: "utc" }).setZone(ZONE).toFormat(DATE_FMT) : null;
+    const nowUtcISO = DateTime.now().toUTC().toISO({ suppressMilliseconds: true })!;
 
-            const baseWhere = `
-            FROM public.lead_tasks t
-            JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
-            WHERE t.deleted_at IS NULL
-            AND t.assigned_agent_id = :aid
-            `;
+    const [row]: any[] = await db.sequelize.query(
+      `SELECT COUNT(t.id)::int AS count 
+       FROM public.lead_tasks t 
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       WHERE t.deleted_at IS NULL 
+         AND t.assigned_agent_id = :agentId 
+         AND COALESCE(t.end_at, t.start_at) < :now_utc 
+         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled')`,
+      { replacements: { agentId, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
+    );
 
-            const [pendingTodayRow]: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT COUNT(*)::int AS pending_today ${baseWhere} AND t.start_at >= :start_utc AND t.start_at <= :end_utc AND CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END = 'pending'`,
-                { replacements: { aid: targetAgentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
-            );
+    return res.status(200).json({
+      success: true,
+      message: "Overdue tasks count fetched",
+      data: { count: Number(row?.count ?? 0) },
+    });
+  } catch (error: any) {
+    console.error("getOverdueTasksCount error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+  }
+};
 
-            const [cancelledTodayRow]: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT COUNT(*)::int AS cancelled_today ${baseWhere} AND t.start_at >= :start_utc AND t.start_at <= :end_utc AND CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END = 'cancelled'`,
-                { replacements: { aid: targetAgentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
-            );
+// ==========================================
+// 7. API: MY ASSIGNED LEAD QUEUE TABLE (Section 7)
+// POST /api/v1/managelead/leads/agent/dashboard/assigned-leads
+// ==========================================
+export const getAssignedLeadsQueue = async (req: Request, res: Response) => {
+  try {
+    const auth = (req as any)?.user;
+    const agentId = auth?.system_user_id || auth?.id;
+    if (!agentId) {
+      return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
+    }
 
-            const [completedTodayRow]: any[] = await this.db_services.sequelizeWriter.query(
-                `WITH norm AS (SELECT t.id, t.start_at, t.updated_at, CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END AS s ${baseWhere}), today_start_done AS (SELECT id FROM norm WHERE s = 'done' AND start_at IS NOT NULL AND start_at >= :start_utc AND start_at <= :end_utc), marked_done_today AS (SELECT id FROM norm WHERE s = 'done' AND updated_at IS NOT NULL AND updated_at >= :start_utc AND updated_at <= :end_utc) SELECT COUNT(DISTINCT id)::int AS completed_today FROM (SELECT id FROM today_start_done UNION SELECT id FROM marked_done_today) u`,
-                { replacements: { aid: targetAgentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
-            );
+    const page = Math.max(1, Number(req.body?.page || req.query?.page || 1));
+    const pageSize = Math.max(1, Math.min(100, Number(req.body?.pageSize || req.query?.pageSize || 50)));
+    const offset = (page - 1) * pageSize;
 
-            const [dueRow]: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT SUM( (t.end_at < :now_utc AND (CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END) = 'pending')::int )::int AS overdue, SUM( (t.start_at >= :now_utc AND (CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END) = 'pending')::int )::int AS upcoming ${baseWhere}`,
-                { replacements: { aid: targetAgentId, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
-            );
+    const [countResult]: any[] = await db.sequelize.query(
+      `SELECT COUNT(id)::int AS total FROM public.leads WHERE agent_id = :agentId AND deleted_at IS NULL`,
+      { replacements: { agentId }, type: QueryTypes.SELECT }
+    );
+    const total = Number(countResult?.total || 0);
 
-            const byTypeToday: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT t.task_type, COUNT(*)::int AS c ${baseWhere} AND t.start_at >= :start_utc AND t.start_at <= :end_utc AND CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END = 'pending' GROUP BY 1`,
-                { replacements: { aid: targetAgentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
-            );
+    const leads: any[] = await db.sequelize.query(
+      `SELECT 
+          l.id,
+          l.lead_number,
+          l.full_name,
+          l.phone,
+          l.email,
+          l.whatsapp_number,
+          l.city,
+          l.country,
+          l.lead_status,
+          l.currency,
+          l.created_at,
+          l.updated_at,
+          COALESCE(ord_summary.order_count, 0)::int AS order_count,
+          COALESCE(ord_summary.total_order_amount, 0)::float AS total_order_amount,
+          ord_summary.latest_order_status,
+          ord_summary.latest_order_number
+       FROM public.leads l
+       LEFT JOIN LATERAL (
+          SELECT 
+              COUNT(o.id) AS order_count,
+              SUM(o.grand_total) AS total_order_amount,
+              (SELECT order_status FROM public.lead_orders WHERE lead_id = l.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1) AS latest_order_status,
+              (SELECT order_number FROM public.lead_orders WHERE lead_id = l.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1) AS latest_order_number
+          FROM public.lead_orders o
+          WHERE o.lead_id = l.id AND o.deleted_at IS NULL
+       ) ord_summary ON true
+       WHERE l.agent_id = :agentId AND l.deleted_at IS NULL
+       ORDER BY l.created_at DESC
+       LIMIT :pageSize OFFSET :offset`,
+      {
+        replacements: { agentId, pageSize, offset },
+        type: QueryTypes.SELECT,
+      }
+    );
 
-            const lastNDaysRows: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT (t.start_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date AS day_est, COUNT(*)::int AS c ${baseWhere} AND t.start_at >= :start_utc AND t.start_at <= :end_utc GROUP BY 1 ORDER BY 1 ASC`,
-                { replacements: { aid: targetAgentId, start_utc: rangeStartUTC, end_utc: rangeEndUTC }, type: QueryTypes.SELECT }
-            );
+    return res.status(200).json({
+      success: true,
+      message: "Assigned leads queue fetched successfully",
+      data: {
+        leads,
+        pagination: {
+          page,
+          pageSize,
+          total,
+          totalPages: Math.ceil(total / pageSize) || 1,
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error("getAssignedLeadsQueue error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+  }
+};
 
-            const barMap = new Map<string, number>();
-            for (const r of lastNDaysRows) {
-                const key = DateTime.fromJSDate(new Date(r.day_est)).setZone(ZONE).toFormat(DATE_FMT);
-                barMap.set(key, r.c);
-            }
-            const tasksBar: Array<{ date: string; count: number }> = [];
-            for (let i = 0; i < windowDays; i++) {
-                const d = rangeStartEST.plus({ days: i }).toFormat(DATE_FMT);
-                tasksBar.push({ date: d, count: barMap.get(d) ?? 0 });
-            }
+// ==========================================
+// 8. API: SEARCH LEADS FOR DASHBOARD
+// GET /api/v1/managelead/leads/search/dashboard
+// ==========================================
+export const searchLeadsForDashboard = async (req: Request, res: Response) => {
+  try {
+    const query = (req.query.q as string) || "";
+    const phoneQuery = (req.query.phone as string) || "";
+    const emailQuery = (req.query.email as string) || "";
 
-            const statusTodayRows: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END AS status, COUNT(*)::int AS count ${baseWhere} AND t.start_at >= :start_utc AND t.start_at <= :end_utc GROUP BY 1`,
-                { replacements: { aid: targetAgentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
-            );
+    if (!query && !phoneQuery && !emailQuery) {
+      return res.status(400).json({ success: false, message: "Search query cannot be empty" });
+    }
 
-            const upcomingRows: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT t.id, t.task_type, t.subject, 'pending'::text AS status, t.start_at, l.full_name, l.id AS lead_id FROM public.lead_tasks t JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL WHERE t.deleted_at IS NULL AND t.assigned_agent_id = :aid AND t.start_at >= :now_utc AND CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END = 'pending' ORDER BY t.start_at ASC LIMIT 20`,
-                { replacements: { aid: targetAgentId, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
-            );
+    const where: string[] = ["l.deleted_at IS NULL"];
+    const repl: any = {};
 
-            const overdueRows: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT t.id, t.task_type, t.subject, 'pending'::text AS status, t.start_at, t.end_at, l.full_name, l.id AS lead_id FROM public.lead_tasks t JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL WHERE t.deleted_at IS NULL AND t.assigned_agent_id = :aid AND t.end_at < :now_utc AND CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END = 'pending' ORDER BY t.end_at DESC LIMIT 20`,
-                { replacements: { aid: targetAgentId, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
-            );
+    if (query) {
+      where.push(
+        `(l.full_name ILIKE :q_like OR l.email ILIKE :q_like OR regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g') LIKE :q_digits OR regexp_replace(COALESCE(l.whatsapp_number, ''), '\\D', '', 'g') LIKE :q_digits)`
+      );
+      repl.q_like = `%${query.trim()}%`;
+      repl.q_digits = `%${query.replace(/\D/g, "")}%`;
+    }
 
-            const doneTodayRows: any[] = await this.db_services.sequelizeWriter.query(
-                `WITH norm AS (SELECT t.id, t.lead_id, t.task_type, t.subject, t.start_at, t.updated_at, l.full_name, CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END AS s FROM public.lead_tasks t JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL WHERE t.deleted_at IS NULL AND t.assigned_agent_id = :aid), today_start_done AS (SELECT id FROM norm WHERE s = 'done' AND start_at IS NOT NULL AND start_at >= :start_utc AND start_at <= :end_utc), marked_done_today AS (SELECT id FROM norm WHERE s = 'done' AND updated_at IS NOT NULL AND updated_at >= :start_utc AND updated_at <= :end_utc), union_ids AS (SELECT id FROM today_start_done UNION SELECT id FROM marked_done_today) SELECT n.id, n.lead_id, n.task_type, n.subject, 'done'::text AS status, n.start_at, n.full_name FROM union_ids u JOIN norm n ON n.id = u.id ORDER BY COALESCE(n.start_at, n.updated_at) DESC LIMIT 20`,
-                { replacements: { aid: targetAgentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
-            );
+    if (phoneQuery) {
+      where.push(
+        `(regexp_replace(COALESCE(l.phone, ''), '\\D', '', 'g') LIKE :p_digits OR regexp_replace(COALESCE(l.whatsapp_number, ''), '\\D', '', 'g') LIKE :p_digits)`
+      );
+      repl.p_digits = `%${phoneQuery.replace(/\D/g, "")}%`;
+    }
 
-            const pendingTodayRows: any[] = await this.db_services.sequelizeWriter.query(
-                `SELECT t.id, t.lead_id, t.task_type, t.subject, 'pending'::text AS status, t.start_at, l.full_name FROM public.lead_tasks t JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL WHERE t.deleted_at IS NULL AND t.assigned_agent_id = :aid AND t.start_at >= :start_utc AND t.start_at <= :end_utc AND CASE WHEN t.status::text IN ('completed','complete','done') THEN 'done' WHEN t.status::text IN ('cancelled','canceled') THEN 'cancelled' ELSE 'pending' END = 'pending' ORDER BY t.start_at ASC LIMIT 20`,
-                { replacements: { aid: targetAgentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
-            );
+    if (emailQuery) {
+      where.push(`regexp_replace(LOWER(TRIM(l.email)), '\\s+', '', 'g') LIKE :e_like`);
+      repl.e_like = `%${emailQuery.trim().toLowerCase()}%`;
+    }
 
-            const mapList = (rows: any[]) =>
-                rows.map(r => ({
-                    id: r.id,
-                    lead_id: r.lead_id,
-                    type: r.task_type,
-                    subject: r.subject,
-                    status: r.status,
-                    start_at: r.start_at,
-                    start_at_est: toESTString(r.start_at),
-                    end_at_est: toESTString(r.end_at),
-                    start_date_est: toESTDate(r.start_at),
-                    lead_name: r.full_name,
-                }));
+    const leads = await db.sequelize.query(
+      `SELECT
+        l.id,
+        l.full_name,
+        l.email,
+        l.phone,
+        l.whatsapp_number,
+        l.created_at,
+        u.name AS agent_name
+      FROM public.leads l
+      LEFT JOIN public.system_users u ON u.id = l.agent_id
+      WHERE ${where.join(" AND ")}
+      ORDER BY l.created_at DESC
+      LIMIT 50`,
+      { replacements: repl, type: QueryTypes.SELECT }
+    );
 
-            return this.sendSuccess(
-                res,
-                {
-                    scope: { agent_id: targetAgentId, is_admin_view: isAdmin && targetAgentId !== me },
-                    cards: {
-                        today: {
-                            total: Number(pendingTodayRow?.pending_today ?? 0),
-                            pending: Number(pendingTodayRow?.pending_today ?? 0),
-                            completed: Number(completedTodayRow?.completed_today ?? 0),
-                            cancelled: Number(cancelledTodayRow?.cancelled_today ?? 0),
-                            today_est: todayStartEST.toFormat(DATE_FMT),
-                        },
-                        overdue: Number(dueRow?.overdue ?? 0),
-                        upcoming: Number(dueRow?.upcoming ?? 0),
-                        today_by_type: byTypeToday.map((x: any) => ({ type: x.task_type, count: x.c })),
-                    },
-                    series: {
-                        tasks_bar_last_n_days: tasksBar,
-                        today_status_pie: statusTodayRows.map((x: any) => ({ status: x.status, count: x.count })),
-                    },
-                    lists: {
-                        upcoming: mapList(upcomingRows),
-                        overdue: mapList(overdueRows),
-                        done_today: mapList(doneTodayRows),
-                        pending_today: mapList(pendingTodayRows),
-                    },
-                    window_days: windowDays,
-                    today_est: todayStartEST.toFormat(DATE_FMT),
-                    now_est: nowEST.toFormat(DATETIME_FMT),
-                },
-                "Agent tasks dashboard"
-            );
-        } catch (err: any) {
-            console.error("getAgentTasksDashboard error:", err);
-            if (err?.name === "ValidationError") return this.sendError(res, {}, err.errors.join(", "), 400);
-            return this.sendError(res, {}, "Internal server error", 500);
-        }
-    };
-}
+    return res.status(200).json({
+      success: true,
+      message: "Leads fetched successfully",
+      data: { leads },
+    });
+  } catch (error: any) {
+    console.error("searchLeadsForDashboard error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+  }
+};
 
-export default new AgentDashboardController();
+// ==========================================
+// 9. UNIFIED API: GET AGENT TASKS DASHBOARD
+// POST /api/v1/managelead/leads/task/agent/dashboard
+// ==========================================
+export const getAgentTasksDashboard = async (req: Request, res: Response) => {
+  try {
+    const auth = (req as any)?.user;
+    const agentId = auth?.system_user_id || auth?.id;
+    if (!agentId) {
+      return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
+    }
+
+    const now = DateTime.now();
+    const todayStart = now.startOf("day");
+    const todayEnd = now.endOf("day");
+
+    const nowUtcISO = now.toUTC().toISO({ suppressMilliseconds: true })!;
+    const todayStartUTC = todayStart.toUTC().toISO({ suppressMilliseconds: true })!;
+    const todayEndUTC = todayEnd.toUTC().toISO({ suppressMilliseconds: true })!;
+
+    const [cardCounts]: any[] = await db.sequelize.query(
+      `SELECT
+          COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc 
+                     AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') THEN 1 END)::int AS pending_today,
+          COUNT(CASE WHEN LOWER(t.status) IN ('done', 'completed', 'complete') 
+                     AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) THEN 1 END)::int AS completed_today,
+          COUNT(CASE WHEN LOWER(t.status) IN ('cancelled', 'canceled') 
+                     AND t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END)::int AS cancelled_today,
+          COUNT(CASE WHEN LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                     AND COALESCE(t.end_at, t.start_at) < :now_utc THEN 1 END)::int AS overdue,
+          COUNT(CASE WHEN LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                     AND t.start_at >= :now_utc THEN 1 END)::int AS upcoming
+       FROM public.lead_tasks t
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
+       WHERE t.deleted_at IS NULL 
+         AND t.assigned_agent_id = :agentId`,
+      {
+        replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC, now_utc: nowUtcISO },
+        type: QueryTypes.SELECT,
+      }
+    );
+
+    const byTypeRows: any[] = await db.sequelize.query(
+      `SELECT t.task_type, COUNT(t.id)::int AS count
+       FROM public.lead_tasks t
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
+       WHERE t.deleted_at IS NULL 
+         AND t.assigned_agent_id = :agentId
+         AND t.start_at >= :start_utc AND t.start_at <= :end_utc
+         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled')
+       GROUP BY t.task_type`,
+      {
+        replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC },
+        type: QueryTypes.SELECT,
+      }
+    );
+
+    const upcomingRows: any[] = await db.sequelize.query(
+      `SELECT t.id, t.task_type, t.subject, t.status, t.start_at, t.end_at, l.full_name, l.id AS lead_id 
+       FROM public.lead_tasks t 
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       WHERE t.deleted_at IS NULL 
+         AND t.assigned_agent_id = :agentId 
+         AND t.start_at >= :now_utc 
+         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+       ORDER BY t.start_at ASC 
+       LIMIT 20`,
+      { replacements: { agentId, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
+    );
+
+    const overdueRows: any[] = await db.sequelize.query(
+      `SELECT t.id, t.task_type, t.subject, t.status, t.start_at, t.end_at, l.full_name, l.id AS lead_id 
+       FROM public.lead_tasks t 
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       WHERE t.deleted_at IS NULL 
+         AND t.assigned_agent_id = :agentId 
+         AND COALESCE(t.end_at, t.start_at) < :now_utc 
+         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+       ORDER BY COALESCE(t.end_at, t.start_at) DESC 
+       LIMIT 20`,
+      { replacements: { agentId, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
+    );
+
+    const doneTodayRows: any[] = await db.sequelize.query(
+      `SELECT t.id, t.task_type, t.subject, 'done'::text AS status, t.start_at, t.end_at, l.full_name, l.id AS lead_id 
+       FROM public.lead_tasks t 
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       WHERE t.deleted_at IS NULL 
+         AND t.assigned_agent_id = :agentId 
+         AND LOWER(t.status) IN ('done', 'completed', 'complete') 
+         AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) 
+       ORDER BY COALESCE(t.updated_at, t.start_at) DESC 
+       LIMIT 20`,
+      { replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
+    );
+
+    const pendingTodayRows: any[] = await db.sequelize.query(
+      `SELECT t.id, t.task_type, t.subject, 'pending'::text AS status, t.start_at, t.end_at, l.full_name, l.id AS lead_id 
+       FROM public.lead_tasks t 
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       WHERE t.deleted_at IS NULL 
+         AND t.assigned_agent_id = :agentId 
+         AND t.start_at >= :start_utc AND t.start_at <= :end_utc 
+         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+       ORDER BY t.start_at ASC 
+       LIMIT 20`,
+      { replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
+    );
+
+    const mapList = (rows: any[]) =>
+      rows.map((r) => ({
+        id: r.id,
+        lead_id: r.lead_id,
+        type: r.task_type,
+        subject: r.subject || "Follow-up",
+        status: r.status || "pending",
+        start_at: formatDateTime(r.start_at),
+        end_at: formatDateTime(r.end_at),
+        due_date: formatDate(r.end_at ?? r.start_at),
+        lead_name: r.full_name,
+      }));
+
+    const pendingToday = Number(cardCounts?.pending_today ?? 0);
+    const completedToday = Number(cardCounts?.completed_today ?? 0);
+    const cancelledToday = Number(cardCounts?.cancelled_today ?? 0);
+
+    return res.status(200).json({
+      success: true,
+      message: "Agent tasks dashboard fetched successfully",
+      data: {
+        cards: {
+          today: {
+            total: pendingToday + completedToday,
+            pending: pendingToday,
+            completed: completedToday,
+            cancelled: cancelledToday,
+            today: todayStart.toFormat("MM-dd-yyyy"),
+          },
+          overdue: Number(cardCounts?.overdue ?? 0),
+          upcoming: Number(cardCounts?.upcoming ?? 0),
+          today_by_type: byTypeRows.map((x: any) => ({ type: x.task_type, count: x.count })),
+        },
+        lists: {
+          upcoming: mapList(upcomingRows),
+          overdue: mapList(overdueRows),
+          done_today: mapList(doneTodayRows),
+          pending_today: mapList(pendingTodayRows),
+        },
+      },
+    });
+  } catch (error: any) {
+    console.error("getAgentTasksDashboard error:", error);
+    return res.status(500).json({ success: false, message: error.message || "Internal server error" });
+  }
+};
+
+// ==========================================
+// DEFAULT EXPORT
+// ==========================================
+export default {
+  getAssignedLeadsCount,
+  getConvertedDealsCount,
+  getTotalOrdersCount,
+  getSalesRevenue,
+  getTasksTodayCount,
+  getOverdueTasksCount,
+  getAssignedLeadsQueue,
+  searchLeadsForDashboard,
+  getAgentTasksDashboard,
+};
