@@ -60,32 +60,22 @@ export const getAdminCards = async (req: Request, res: Response) => {
     const todayStartUTC = todayStart.toUTC().toISO({ suppressMilliseconds: true })!;
     const todayEndUTC = todayEnd.toUTC().toISO({ suppressMilliseconds: true })!;
 
+    // Simple, direct SELECT query for KPI counts
     const [teamCards]: any[] = await db.sequelize.query(
-      `WITH norm AS (
-          SELECT t.id, t.start_at, t.end_at, COALESCE(t.end_at, t.start_at) AS effective_due, t.updated_at, 
-                 CASE WHEN LOWER(t.status::text) IN ('completed','complete','done') THEN 'done' 
-                      WHEN LOWER(t.status::text) IN ('cancelled','canceled') THEN 'cancelled' 
-                      ELSE 'pending' 
-                 END AS s 
-          FROM public.lead_tasks t 
-          JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
-          WHERE t.deleted_at IS NULL
-      ), 
-      today_base AS (
-          SELECT id, s, effective_due FROM norm WHERE start_at >= :start_utc AND start_at <= :end_utc
-      ), 
-      done_marked_today AS (
-          SELECT id FROM norm WHERE s = 'done' AND updated_at >= :start_utc AND updated_at <= :end_utc
-      ), 
-      done_today_union AS (
-          SELECT id FROM today_base WHERE s = 'done' UNION SELECT id FROM done_marked_today
-      ) 
-      SELECT 
-          (SELECT COUNT(*) FROM today_base) AS total_today, 
-          (SELECT COUNT(*) FROM today_base WHERE s='pending' AND effective_due >= :now_utc) AS pending_today, 
-          (SELECT COUNT(*) FROM done_today_union) AS done_today, 
-          (SELECT COUNT(*) FROM today_base WHERE s='cancelled') AS cancelled_today, 
-          (SELECT COUNT(*) FROM norm WHERE effective_due < :now_utc AND s = 'pending') AS overdue_all`,
+      `SELECT
+          COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END) AS total_today,
+          COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc 
+                     AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                     AND COALESCE(t.end_at, t.start_at) >= :now_utc THEN 1 END) AS pending_today,
+          COUNT(CASE WHEN LOWER(t.status) IN ('done', 'completed', 'complete') 
+                     AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) THEN 1 END) AS done_today,
+          COUNT(CASE WHEN LOWER(t.status) IN ('cancelled', 'canceled') 
+                     AND t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END) AS cancelled_today,
+          COUNT(CASE WHEN LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                     AND COALESCE(t.end_at, t.start_at) < :now_utc THEN 1 END) AS overdue_all
+       FROM public.lead_tasks t
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
+       WHERE t.deleted_at IS NULL`,
       {
         replacements: { start_utc: todayStartUTC, end_utc: todayEndUTC, now_utc: nowUtcISO },
         type: QueryTypes.SELECT,
@@ -134,7 +124,7 @@ export const getCampaignPerformance = async (req: Request, res: Response) => {
     const fromDate = now.startOf("month").toUTC().toISO({ suppressMilliseconds: true })!;
     const toDate = now.endOf("month").toUTC().toISO({ suppressMilliseconds: true })!;
 
-    // Total leads this month
+    // 1. Total leads this month
     const [totalRow]: any[] = await db.sequelize.query(
       `SELECT COUNT(id) AS total_leads 
        FROM public.leads 
@@ -143,22 +133,16 @@ export const getCampaignPerformance = async (req: Request, res: Response) => {
     );
     const totalLeads = Number(totalRow?.total_leads || 0);
 
-    // Campaign & Lead Source Rankings
+    // 2. Simple Campaign & Lead Source Rankings
     const campaignRows: any[] = await db.sequelize.query(
       `SELECT
           COALESCE(ls.name, 'Direct / Unknown') AS source_name,
           COALESCE(c.name, 'No Campaign / Direct') AS campaign_name,
           COUNT(l.id) AS leads_count,
-          COUNT(CASE WHEN l.lead_status = 'Converted' OR ord_conv.has_order = 1 THEN 1 END) AS converted_count
+          COUNT(CASE WHEN l.lead_status = 'Converted' THEN 1 END) AS converted_count
        FROM public.leads l
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns c ON c.id = l.campaign_id
-       LEFT JOIN (
-          SELECT DISTINCT lead_id, 1 AS has_order
-          FROM public.lead_orders
-          WHERE deleted_at IS NULL
-            AND order_status IN ('Confirmed', 'Shipped', 'Delivered')
-       ) ord_conv ON ord_conv.lead_id = l.id
        WHERE l.deleted_at IS NULL
          AND l.created_at >= :fromDate AND l.created_at <= :toDate
        GROUP BY ls.name, c.name
@@ -220,72 +204,49 @@ export const getTeamTasks = async (req: Request, res: Response) => {
     const todayStartUTC = todayStart.toUTC().toISO({ suppressMilliseconds: true })!;
     const todayEndUTC = todayEnd.toUTC().toISO({ suppressMilliseconds: true })!;
 
+    // Clean, direct agent performance aggregation query
     const teamByAgent: any[] = await db.sequelize.query(
-      `WITH active_agents AS (
-          SELECT su.id, su.name 
-          FROM public.system_users su 
-          JOIN public.user_role ur ON ur.system_user_id = su.id 
-          JOIN public.roles r ON r.id = ur.role_id 
-          WHERE su.deleted_at IS NULL AND (su.is_blocked = FALSE OR su.is_blocked IS NULL) AND TRIM(LOWER(r.name)) = 'agent'
-      ), 
-      lead_counts AS (
-          SELECT l.agent_id, COUNT(*)::int AS total_assigned_leads, 
-                 SUM((l.lead_status = 'New' OR l.lead_status IS NULL)::int)::int AS new_leads, 
-                 SUM((l.lead_status = 'Converted')::int)::int AS converted_leads 
-          FROM public.leads l 
-          WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL 
+      `SELECT
+          su.id AS agent_id,
+          su.name AS agent_name,
+          COALESCE(lc.total_assigned_leads, 0) AS total_assigned_leads,
+          COALESCE(lc.new_leads, 0) AS new_leads,
+          COALESCE(lc.converted_leads, 0) AS converted_leads,
+          COALESCE(tc.total_today, 0) AS total_today,
+          COALESCE(tc.done_today, 0) AS done_today,
+          COALESCE(tc.pending_today, 0) AS pending_today,
+          COALESCE(tc.overdue, 0) AS overdue
+       FROM public.system_users su
+       JOIN public.user_role ur ON ur.system_user_id = su.id
+       JOIN public.roles r ON r.id = ur.role_id AND TRIM(LOWER(r.name)) = 'agent'
+       LEFT JOIN (
+          SELECT 
+              l.agent_id,
+              COUNT(l.id)::int AS total_assigned_leads,
+              COUNT(CASE WHEN l.lead_status = 'New' OR l.lead_status IS NULL THEN 1 END)::int AS new_leads,
+              COUNT(CASE WHEN l.lead_status = 'Converted' THEN 1 END)::int AS converted_leads
+          FROM public.leads l
+          WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL
           GROUP BY l.agent_id
-      ), 
-      norm AS (
-          SELECT t.id, t.assigned_agent_id, t.start_at, t.end_at, COALESCE(t.end_at, t.start_at) AS effective_due, t.updated_at, 
-                 CASE WHEN LOWER(t.status::text) IN ('completed','complete','done') THEN 'done' 
-                      WHEN LOWER(t.status::text) IN ('cancelled','canceled') THEN 'cancelled' 
-                      ELSE 'pending' 
-                 END AS s 
-          FROM public.lead_tasks t 
-          JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
-          WHERE t.deleted_at IS NULL
-      ), 
-      today_base AS (
-          SELECT assigned_agent_id, id, s, effective_due FROM norm WHERE start_at >= :start_utc AND start_at <= :end_utc
-      ), 
-      done_marked_today AS (
-          SELECT assigned_agent_id, id FROM norm WHERE s = 'done' AND updated_at >= :start_utc AND updated_at <= :end_utc
-      ), 
-      done_today_union AS (
-          SELECT assigned_agent_id, id FROM today_base WHERE s='done' UNION SELECT assigned_agent_id, id FROM done_marked_today
-      ), 
-      overdue_now AS (
-          SELECT assigned_agent_id, COUNT(*)::int AS overdue 
-          FROM norm 
-          WHERE effective_due < :now_utc AND s = 'pending' 
-          GROUP BY assigned_agent_id
-      ), 
-      today_counts AS (
-          SELECT tb.assigned_agent_id, COUNT(*)::int AS total_today, 
-                 SUM((tb.s='pending' AND tb.effective_due >= :now_utc)::int)::int AS pending_today 
-          FROM today_base tb 
-          GROUP BY tb.assigned_agent_id
-      ), 
-      done_counts AS (
-          SELECT assigned_agent_id, COUNT(*)::int AS done_today 
-          FROM done_today_union 
-          GROUP BY assigned_agent_id
-      ) 
-      SELECT aa.id AS agent_id, aa.name AS agent_name, 
-             COALESCE(lc.total_assigned_leads, 0) AS total_assigned_leads, 
-             COALESCE(lc.new_leads, 0) AS new_leads, 
-             COALESCE(lc.converted_leads, 0) AS converted_leads, 
-             COALESCE(tc.total_today, 0) AS total_today, 
-             COALESCE(dc.done_today, 0) AS done_today, 
-             COALESCE(tc.pending_today, 0) AS pending_today, 
-             COALESCE(onow.overdue, 0) AS overdue 
-      FROM active_agents aa 
-      LEFT JOIN lead_counts lc ON CAST(lc.agent_id AS TEXT) = CAST(aa.id AS TEXT) 
-      LEFT JOIN today_counts tc ON CAST(tc.assigned_agent_id AS TEXT) = CAST(aa.id AS TEXT) 
-      LEFT JOIN done_counts dc ON CAST(dc.assigned_agent_id AS TEXT) = CAST(aa.id AS TEXT) 
-      LEFT JOIN overdue_now onow ON CAST(onow.assigned_agent_id AS TEXT) = CAST(aa.id AS TEXT) 
-      ORDER BY total_assigned_leads DESC, overdue DESC, agent_name ASC`,
+       ) lc ON lc.agent_id = su.id
+       LEFT JOIN (
+          SELECT 
+              t.assigned_agent_id,
+              COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END)::int AS total_today,
+              COUNT(CASE WHEN LOWER(t.status) IN ('done', 'completed', 'complete') 
+                         AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) THEN 1 END)::int AS done_today,
+              COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc 
+                         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                         AND COALESCE(t.end_at, t.start_at) >= :now_utc THEN 1 END)::int AS pending_today,
+              COUNT(CASE WHEN LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                         AND COALESCE(t.end_at, t.start_at) < :now_utc THEN 1 END)::int AS overdue
+          FROM public.lead_tasks t
+          JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
+          WHERE t.deleted_at IS NULL AND t.assigned_agent_id IS NOT NULL
+          GROUP BY t.assigned_agent_id
+       ) tc ON tc.assigned_agent_id = su.id
+       WHERE su.deleted_at IS NULL AND (su.is_blocked = FALSE OR su.is_blocked IS NULL)
+       ORDER BY total_assigned_leads DESC, overdue DESC, agent_name ASC`,
       {
         replacements: { start_utc: todayStartUTC, end_utc: todayEndUTC, now_utc: nowUtcISO },
         type: QueryTypes.SELECT,
@@ -429,101 +390,66 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
 
     // 1. Cards
     const [teamCards]: any[] = await db.sequelize.query(
-      `WITH norm AS (
-          SELECT t.id, t.start_at, t.end_at, COALESCE(t.end_at, t.start_at) AS effective_due, t.updated_at, 
-                 CASE WHEN LOWER(t.status::text) IN ('completed','complete','done') THEN 'done' 
-                      WHEN LOWER(t.status::text) IN ('cancelled','canceled') THEN 'cancelled' 
-                      ELSE 'pending' 
-                 END AS s 
-          FROM public.lead_tasks t 
-          JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
-          WHERE t.deleted_at IS NULL
-      ), 
-      today_base AS (
-          SELECT id, s, effective_due FROM norm WHERE start_at >= :start_utc AND start_at <= :end_utc
-      ), 
-      done_marked_today AS (
-          SELECT id FROM norm WHERE s = 'done' AND updated_at >= :start_utc AND updated_at <= :end_utc
-      ), 
-      done_today_union AS (
-          SELECT id FROM today_base WHERE s = 'done' UNION SELECT id FROM done_marked_today
-      ) 
-      SELECT 
-          (SELECT COUNT(*) FROM today_base) AS total_today, 
-          (SELECT COUNT(*) FROM today_base WHERE s='pending' AND effective_due >= :now_utc) AS pending_today, 
-          (SELECT COUNT(*) FROM done_today_union) AS done_today, 
-          (SELECT COUNT(*) FROM today_base WHERE s='cancelled') AS cancelled_today, 
-          (SELECT COUNT(*) FROM norm WHERE effective_due < :now_utc AND s = 'pending') AS overdue_all`,
+      `SELECT
+          COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END) AS total_today,
+          COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc 
+                     AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                     AND COALESCE(t.end_at, t.start_at) >= :now_utc THEN 1 END) AS pending_today,
+          COUNT(CASE WHEN LOWER(t.status) IN ('done', 'completed', 'complete') 
+                     AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) THEN 1 END) AS done_today,
+          COUNT(CASE WHEN LOWER(t.status) IN ('cancelled', 'canceled') 
+                     AND t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END) AS cancelled_today,
+          COUNT(CASE WHEN LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                     AND COALESCE(t.end_at, t.start_at) < :now_utc THEN 1 END) AS overdue_all
+       FROM public.lead_tasks t
+       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
+       WHERE t.deleted_at IS NULL`,
       { replacements: { start_utc: todayStartUTC, end_utc: todayEndUTC, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
     );
 
     // 2. Team by Agent
     const teamByAgent: any[] = await db.sequelize.query(
-      `WITH active_agents AS (
-          SELECT su.id, su.name 
-          FROM public.system_users su 
-          JOIN public.user_role ur ON ur.system_user_id = su.id 
-          JOIN public.roles r ON r.id = ur.role_id 
-          WHERE su.deleted_at IS NULL AND (su.is_blocked = FALSE OR su.is_blocked IS NULL) AND TRIM(LOWER(r.name)) = 'agent'
-      ), 
-      lead_counts AS (
-          SELECT l.agent_id, COUNT(*)::int AS total_assigned_leads, 
-                 SUM((l.lead_status = 'New' OR l.lead_status IS NULL)::int)::int AS new_leads, 
-                 SUM((l.lead_status = 'Converted')::int)::int AS converted_leads 
-          FROM public.leads l 
-          WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL 
+      `SELECT
+          su.id AS agent_id,
+          su.name AS agent_name,
+          COALESCE(lc.total_assigned_leads, 0) AS total_assigned_leads,
+          COALESCE(lc.new_leads, 0) AS new_leads,
+          COALESCE(lc.converted_leads, 0) AS converted_leads,
+          COALESCE(tc.total_today, 0) AS total_today,
+          COALESCE(tc.done_today, 0) AS done_today,
+          COALESCE(tc.pending_today, 0) AS pending_today,
+          COALESCE(tc.overdue, 0) AS overdue
+       FROM public.system_users su
+       JOIN public.user_role ur ON ur.system_user_id = su.id
+       JOIN public.roles r ON r.id = ur.role_id AND TRIM(LOWER(r.name)) = 'agent'
+       LEFT JOIN (
+          SELECT 
+              l.agent_id,
+              COUNT(l.id)::int AS total_assigned_leads,
+              COUNT(CASE WHEN l.lead_status = 'New' OR l.lead_status IS NULL THEN 1 END)::int AS new_leads,
+              COUNT(CASE WHEN l.lead_status = 'Converted' THEN 1 END)::int AS converted_leads
+          FROM public.leads l
+          WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL
           GROUP BY l.agent_id
-      ), 
-      norm AS (
-          SELECT t.id, t.assigned_agent_id, t.start_at, t.end_at, COALESCE(t.end_at, t.start_at) AS effective_due, t.updated_at, 
-                 CASE WHEN LOWER(t.status::text) IN ('completed','complete','done') THEN 'done' 
-                      WHEN LOWER(t.status::text) IN ('cancelled','canceled') THEN 'cancelled' 
-                      ELSE 'pending' 
-                 END AS s 
-          FROM public.lead_tasks t 
-          JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
-          WHERE t.deleted_at IS NULL
-      ), 
-      today_base AS (
-          SELECT assigned_agent_id, id, s, effective_due FROM norm WHERE start_at >= :start_utc AND start_at <= :end_utc
-      ), 
-      done_marked_today AS (
-          SELECT assigned_agent_id, id FROM norm WHERE s = 'done' AND updated_at >= :start_utc AND updated_at <= :end_utc
-      ), 
-      done_today_union AS (
-          SELECT assigned_agent_id, id FROM today_base WHERE s='done' UNION SELECT assigned_agent_id, id FROM done_marked_today
-      ), 
-      overdue_now AS (
-          SELECT assigned_agent_id, COUNT(*)::int AS overdue 
-          FROM norm 
-          WHERE effective_due < :now_utc AND s = 'pending' 
-          GROUP BY assigned_agent_id
-      ), 
-      today_counts AS (
-          SELECT tb.assigned_agent_id, COUNT(*)::int AS total_today, 
-                 SUM((tb.s='pending' AND tb.effective_due >= :now_utc)::int)::int AS pending_today 
-          FROM today_base tb 
-          GROUP BY tb.assigned_agent_id
-      ), 
-      done_counts AS (
-          SELECT assigned_agent_id, COUNT(*)::int AS done_today 
-          FROM done_today_union 
-          GROUP BY assigned_agent_id
-      ) 
-      SELECT aa.id AS agent_id, aa.name AS agent_name, 
-             COALESCE(lc.total_assigned_leads, 0) AS total_assigned_leads, 
-             COALESCE(lc.new_leads, 0) AS new_leads, 
-             COALESCE(lc.converted_leads, 0) AS converted_leads, 
-             COALESCE(tc.total_today, 0) AS total_today, 
-             COALESCE(dc.done_today, 0) AS done_today, 
-             COALESCE(tc.pending_today, 0) AS pending_today, 
-             COALESCE(onow.overdue, 0) AS overdue 
-      FROM active_agents aa 
-      LEFT JOIN lead_counts lc ON CAST(lc.agent_id AS TEXT) = CAST(aa.id AS TEXT) 
-      LEFT JOIN today_counts tc ON CAST(tc.assigned_agent_id AS TEXT) = CAST(aa.id AS TEXT) 
-      LEFT JOIN done_counts dc ON CAST(dc.assigned_agent_id AS TEXT) = CAST(aa.id AS TEXT) 
-      LEFT JOIN overdue_now onow ON CAST(onow.assigned_agent_id AS TEXT) = CAST(aa.id AS TEXT) 
-      ORDER BY total_assigned_leads DESC, overdue DESC, agent_name ASC`,
+       ) lc ON lc.agent_id = su.id
+       LEFT JOIN (
+          SELECT 
+              t.assigned_agent_id,
+              COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END)::int AS total_today,
+              COUNT(CASE WHEN LOWER(t.status) IN ('done', 'completed', 'complete') 
+                         AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) THEN 1 END)::int AS done_today,
+              COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc 
+                         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                         AND COALESCE(t.end_at, t.start_at) >= :now_utc THEN 1 END)::int AS pending_today,
+              COUNT(CASE WHEN LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+                         AND COALESCE(t.end_at, t.start_at) < :now_utc THEN 1 END)::int AS overdue
+          FROM public.lead_tasks t
+          JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
+          WHERE t.deleted_at IS NULL AND t.assigned_agent_id IS NOT NULL
+          GROUP BY t.assigned_agent_id
+       ) tc ON tc.assigned_agent_id = su.id
+       WHERE su.deleted_at IS NULL AND (su.is_blocked = FALSE OR su.is_blocked IS NULL)
+       ORDER BY total_assigned_leads DESC, overdue DESC, agent_name ASC`,
       { replacements: { start_utc: todayStartUTC, end_utc: todayEndUTC, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
     );
 
@@ -541,16 +467,10 @@ export const getAdminDashboard = async (req: Request, res: Response) => {
           COALESCE(ls.name, 'Direct / Unknown') AS source_name,
           COALESCE(c.name, 'No Campaign / Direct') AS campaign_name,
           COUNT(l.id) AS leads_count,
-          COUNT(CASE WHEN l.lead_status = 'Converted' OR ord_conv.has_order = 1 THEN 1 END) AS converted_count
+          COUNT(CASE WHEN l.lead_status = 'Converted' THEN 1 END) AS converted_count
        FROM public.leads l
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns c ON c.id = l.campaign_id
-       LEFT JOIN (
-          SELECT DISTINCT lead_id, 1 AS has_order
-          FROM public.lead_orders
-          WHERE deleted_at IS NULL
-            AND order_status IN ('Confirmed', 'Shipped', 'Delivered')
-       ) ord_conv ON ord_conv.lead_id = l.id
        WHERE l.deleted_at IS NULL
          AND l.created_at >= :fromDateMonth AND l.created_at <= :toDateMonth
        GROUP BY ls.name, c.name
