@@ -96,9 +96,6 @@ SystemuserRouter.post("/leads/document/delete", leadDocumentController.deleteDoc
 SystemuserRouter.post("/leads/document/soft-delete", leadDocumentController.deleteDocument);
 
 /* -------------------- Lead Medicines / Order Items -------------------- */
-SystemuserRouter.post("/leads/medicines/save", leadOrderController.saveLeadMedicines);
-SystemuserRouter.post("/leads/medicines/list", leadOrderController.listLeadMedicines);
-SystemuserRouter.post("/leads/medicines/delete", leadOrderController.deleteLeadMedicine);
 SystemuserRouter.get("/leads/medicines/suggestions", leadOrderController.getMedicineSuggestions);
 
 /* -------------------- Lead Orders -------------------- */
