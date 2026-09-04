@@ -142,7 +142,7 @@ export const createLead = async (req: Request, res: Response) => {
 export const getUnassignedLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Number(req.query.limit || req.query.pageSize) || 50;
+    const limit = Number(req.query.limit || req.query.pageSize) || 150;
     const offset = (page - 1) * limit;
 
     const countResult: any[] = await db.sequelize.query(
@@ -179,7 +179,7 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
 export const getAssignedLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Number(req.query.limit || req.query.pageSize) || 50;
+    const limit = Number(req.query.limit || req.query.pageSize) || 150;
     const offset = (page - 1) * limit;
 
     const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
@@ -467,7 +467,7 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
 export const searchLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.body?.page || req.query?.page) || 1);
-    const limit = Number(req.body?.limit || req.body?.pageSize || req.query?.limit || req.query?.pageSize) || 50;
+    const limit = Number(req.body?.limit || req.body?.pageSize || req.query?.limit || req.query?.pageSize) || 150;
     const offset = (page - 1) * limit;
 
     const { q, search, full_name, email, phone, city, lead_source_id } = { ...req.query, ...req.body };
