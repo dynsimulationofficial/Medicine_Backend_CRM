@@ -10,8 +10,14 @@ import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import db from "../models";
 
 const s3Client = new S3Client({
-  region: process.env.AWS_REGION || "us-east-1",
+  region: process.env.AWS_REGION || "eu-north-1",
+  credentials: {
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID || "",
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || "",
+  },
 });
+
+const BUCKET = process.env.AWS_S3_BUCKET_NAME || "";
 
 const allowedMimeTypes = [
   "image/jpeg",
@@ -22,6 +28,7 @@ const allowedMimeTypes = [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "text/csv",
 ];
+
 
 // ==================== 1. GET ALL DOCUMENTS ====================
 export const getAllDocuments = async (req: Request, res: Response) => {
@@ -84,15 +91,15 @@ export const uploadDocument = async (req: Request, res: Response) => {
     const uploaded_by = req.body?.uploaded_by || (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
 
     const isImage = file.mimetype.startsWith("image/");
-    const fileNameClean = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
-    const key = `lead-documents/${Date.now()}_${fileNameClean}`;
+    const fileNameClean = (file.originalname || "file").replace(/[^\w.\-() ]+/g, "_");
+    const key = `lead-documents/${lead_id}/${Date.now()}-${fileNameClean}`;
 
-    if (process.env.AWS_S3_BUCKET_NAME) {
+    if (BUCKET) {
       try {
         const upload = new Upload({
           client: s3Client,
           params: {
-            Bucket: process.env.AWS_S3_BUCKET_NAME,
+            Bucket: BUCKET,
             Key: key,
             Body: file.buffer,
             ContentType: file.mimetype,
@@ -102,14 +109,14 @@ export const uploadDocument = async (req: Request, res: Response) => {
         await upload.done();
       } catch (s3Err) {
         console.warn("S3 upload fallback to local storage:", s3Err);
-        const uploadDir = path.join(process.cwd(), "uploads", "lead-documents");
+        const uploadDir = path.join(process.cwd(), "public", "uploads", "lead-documents", String(lead_id));
         if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-        fs.writeFileSync(path.join(uploadDir, path.basename(key)), file.buffer);
+        fs.writeFileSync(path.join(uploadDir, `${Date.now()}-${fileNameClean}`), file.buffer);
       }
     } else {
-      const uploadDir = path.join(process.cwd(), "uploads", "lead-documents");
+      const uploadDir = path.join(process.cwd(), "public", "uploads", "lead-documents", String(lead_id));
       if (!fs.existsSync(uploadDir)) fs.mkdirSync(uploadDir, { recursive: true });
-      fs.writeFileSync(path.join(uploadDir, path.basename(key)), file.buffer);
+      fs.writeFileSync(path.join(uploadDir, `${Date.now()}-${fileNameClean}`), file.buffer);
     }
 
     const id = uuidv4();
@@ -163,18 +170,27 @@ export const getDocumentUrl = async (req: Request, res: Response) => {
     }
 
     const doc = rows[0];
-    if (process.env.AWS_S3_BUCKET_NAME) {
-      const command = new GetObjectCommand({
-        Bucket: process.env.AWS_S3_BUCKET_NAME,
+    const isView = req.query?.view === "true" || req.body?.view === true;
+
+    if (BUCKET) {
+      const commandParams: any = {
+        Bucket: BUCKET,
         Key: doc.storage_path,
-        ResponseContentDisposition: `attachment; filename="${encodeURIComponent(doc.file_name)}"`,
-      });
+      };
+
+      // If not just viewing inline, set attachment header for immediate download
+      if (!isView) {
+        commandParams.ResponseContentDisposition = `attachment; filename="${encodeURIComponent(doc.file_name)}"`;
+      }
+
+      const command = new GetObjectCommand(commandParams);
       const signedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
       return res.status(200).json({ success: true, data: { file_name: doc.file_name, mime_type: doc.mime_type, url: signedUrl } });
     } else {
       const protocol = req.protocol || "http";
       const host = req.get("host") || "localhost:8016";
-      const absoluteUrl = `${protocol}://${host}/uploads/${doc.storage_path}`;
+      const cleanPath = doc.storage_path.startsWith("/") ? doc.storage_path : `/${doc.storage_path}`;
+      const absoluteUrl = `${protocol}://${host}${cleanPath}`;
       return res.status(200).json({ success: true, data: { file_name: doc.file_name, mime_type: doc.mime_type, url: absoluteUrl } });
     }
   } catch (error: any) {
