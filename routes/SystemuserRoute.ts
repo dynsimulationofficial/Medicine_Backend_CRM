@@ -144,10 +144,11 @@ SystemuserRouter.post("/reports/kpi", reportController.getKpiAnalytics);
 SystemuserRouter.get("/reports/kpi", reportController.getKpiAnalytics);
 
 /* -------------------- Master Medicine Catalog -------------------- */
-SystemuserRouter.post("/medicines", masterMedicineController.createMedicine);
+SystemuserRouter.post("/medicines", uploadFile.single("image"), masterMedicineController.createMedicine);
 SystemuserRouter.get("/medicines", masterMedicineController.getAllMedicines);
 SystemuserRouter.get("/medicines/:id", masterMedicineController.getMedicineById);
-SystemuserRouter.put("/medicines/:id", masterMedicineController.updateMedicine);
+SystemuserRouter.put("/medicines/:id", uploadFile.single("image"), masterMedicineController.updateMedicine);
+SystemuserRouter.post("/medicines/:id", uploadFile.single("image"), masterMedicineController.updateMedicine);
 SystemuserRouter.delete("/medicines/:id", masterMedicineController.deleteMedicine);
 
 /* -------------------- Lead Sources -------------------- */

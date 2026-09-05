@@ -3,6 +3,8 @@ import { DataTypes, Sequelize, Model, Optional } from "sequelize";
 export interface MasterMedicineAttributes {
   id: string;
   name: string;
+  description?: string | null;
+  image_url?: string | null;
   created_at?: Date;
   updated_at?: Date;
   deleted_at?: Date | null;
@@ -10,7 +12,7 @@ export interface MasterMedicineAttributes {
 
 export type MasterMedicineCreationAttributes = Optional<
   MasterMedicineAttributes,
-  "id" | "created_at" | "updated_at" | "deleted_at"
+  "id" | "description" | "image_url" | "created_at" | "updated_at" | "deleted_at"
 >;
 
 export const initMasterMedicineModel = (sequelize: Sequelize) => {
@@ -20,6 +22,8 @@ export const initMasterMedicineModel = (sequelize: Sequelize) => {
   {
     public id!: string;
     public name!: string;
+    public description!: string | null;
+    public image_url!: string | null;
     public created_at!: Date;
     public updated_at!: Date;
     public deleted_at!: Date | null;
@@ -35,6 +39,14 @@ export const initMasterMedicineModel = (sequelize: Sequelize) => {
       name: {
         type: DataTypes.STRING(255),
         allowNull: false,
+      },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      image_url: {
+        type: DataTypes.TEXT,
+        allowNull: true,
       },
       created_at: {
         type: DataTypes.DATE,
