@@ -113,7 +113,6 @@ SystemuserRouter.post("/leads/orders/update-status", leadOrderController.updateO
 
 /* -------------------- Dashboards -------------------- */
 SystemuserRouter.post("/leads/task/agent/dashboard", agentDashboardController.getAgentTasksDashboard);
-SystemuserRouter.get("/leads/task/agent/dashboard", agentDashboardController.getAgentTasksDashboard);
 SystemuserRouter.post("/leads/agent/dashboard/assigned-leads-count", agentDashboardController.getAssignedLeadsCount);
 SystemuserRouter.get("/leads/agent/dashboard/assigned-leads-count", agentDashboardController.getAssignedLeadsCount);
 SystemuserRouter.post("/leads/agent/dashboard/converted-deals-count", agentDashboardController.getConvertedDealsCount);
