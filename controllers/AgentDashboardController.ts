@@ -4,17 +4,17 @@ import { DateTime } from "luxon";
 import db from "../models";
 
 // ==========================================
-// 🕒 DATE FORMAT HELPERS
+// 🕒 DATE FORMAT HELPERS (IST)
 // ==========================================
 const formatDate = (d: any): string | null => {
   if (!d) return null;
-  const dt = DateTime.fromJSDate(new Date(d));
+  const dt = DateTime.fromJSDate(new Date(d)).setZone("Asia/Kolkata");
   return dt.isValid ? dt.toFormat("MM-dd-yyyy") : null;
 };
 
 const formatDateTime = (d: any): string | null => {
   if (!d) return null;
-  const dt = DateTime.fromJSDate(new Date(d));
+  const dt = DateTime.fromJSDate(new Date(d)).setZone("Asia/Kolkata");
   return dt.isValid ? dt.toFormat("MM-dd-yyyy hh:mm a") : null;
 };
 
@@ -165,20 +165,23 @@ export const getTasksTodayCount = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
     }
 
-    const now = DateTime.now();
-    const todayStartUTC = now.startOf("day").toUTC().toISO({ suppressMilliseconds: true })!;
-    const todayEndUTC = now.endOf("day").toUTC().toISO({ suppressMilliseconds: true })!;
+    const now = DateTime.now().setZone("Asia/Kolkata");
+    const todayStart = now.startOf("day");
+    const todayEnd = now.endOf("day");
+    const todayStartUTC = todayStart.toUTC().toISO({ suppressMilliseconds: true })!;
+    const todayEndUTC = todayEnd.toUTC().toISO({ suppressMilliseconds: true })!;
 
     const [row]: any[] = await db.sequelize.query(
       `SELECT
           COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END)::int AS total_today,
           COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc 
-                     AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') THEN 1 END)::int AS pending_today,
-          COUNT(CASE WHEN LOWER(t.status) IN ('done', 'completed', 'complete') 
+                     AND LOWER(t.status::text) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') THEN 1 END)::int AS pending_today,
+          COUNT(CASE WHEN LOWER(t.status::text) IN ('done', 'completed', 'complete') 
                      AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) THEN 1 END)::int AS done_today
        FROM public.lead_tasks t
-       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
-       WHERE t.deleted_at IS NULL AND t.assigned_agent_id = :agentId`,
+       JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(t.lead_id AS TEXT) AND l.deleted_at IS NULL
+       WHERE t.deleted_at IS NULL 
+         AND (CAST(t.assigned_agent_id AS TEXT) = CAST(:agentId AS TEXT) OR (t.assigned_agent_id IS NULL AND CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT)))`,
       {
         replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC },
         type: QueryTypes.SELECT,
@@ -212,16 +215,17 @@ export const getOverdueTasksCount = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
     }
 
-    const nowUtcISO = DateTime.now().toUTC().toISO({ suppressMilliseconds: true })!;
+    const now = DateTime.now().setZone("Asia/Kolkata");
+    const nowUtcISO = now.toUTC().toISO({ suppressMilliseconds: true })!;
 
     const [row]: any[] = await db.sequelize.query(
       `SELECT COUNT(t.id)::int AS count 
        FROM public.lead_tasks t 
-       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(t.lead_id AS TEXT) AND l.deleted_at IS NULL 
        WHERE t.deleted_at IS NULL 
-         AND t.assigned_agent_id = :agentId 
+         AND (CAST(t.assigned_agent_id AS TEXT) = CAST(:agentId AS TEXT) OR (t.assigned_agent_id IS NULL AND CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT)))
          AND COALESCE(t.end_at, t.start_at) < :now_utc 
-         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled')`,
+         AND LOWER(t.status::text) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled')`,
       { replacements: { agentId, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
     );
 
@@ -391,7 +395,7 @@ export const getAgentTasksDashboard = async (req: Request, res: Response) => {
       return res.status(401).json({ success: false, message: "Unauthorized - Please login again" });
     }
 
-    const now = DateTime.now();
+    const now = DateTime.now().setZone("Asia/Kolkata");
     const todayStart = now.startOf("day");
     const todayEnd = now.endOf("day");
 
@@ -402,19 +406,19 @@ export const getAgentTasksDashboard = async (req: Request, res: Response) => {
     const [cardCounts]: any[] = await db.sequelize.query(
       `SELECT
           COUNT(CASE WHEN t.start_at >= :start_utc AND t.start_at <= :end_utc 
-                     AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') THEN 1 END)::int AS pending_today,
-          COUNT(CASE WHEN LOWER(t.status) IN ('done', 'completed', 'complete') 
+                     AND LOWER(t.status::text) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') THEN 1 END)::int AS pending_today,
+          COUNT(CASE WHEN LOWER(t.status::text) IN ('done', 'completed', 'complete') 
                      AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) THEN 1 END)::int AS completed_today,
-          COUNT(CASE WHEN LOWER(t.status) IN ('cancelled', 'canceled') 
+          COUNT(CASE WHEN LOWER(t.status::text) IN ('cancelled', 'canceled') 
                      AND t.start_at >= :start_utc AND t.start_at <= :end_utc THEN 1 END)::int AS cancelled_today,
-          COUNT(CASE WHEN LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+          COUNT(CASE WHEN LOWER(t.status::text) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
                      AND COALESCE(t.end_at, t.start_at) < :now_utc THEN 1 END)::int AS overdue,
-          COUNT(CASE WHEN LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+          COUNT(CASE WHEN LOWER(t.status::text) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
                      AND t.start_at >= :now_utc THEN 1 END)::int AS upcoming
        FROM public.lead_tasks t
-       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
+       JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(t.lead_id AS TEXT) AND l.deleted_at IS NULL
        WHERE t.deleted_at IS NULL 
-         AND t.assigned_agent_id = :agentId`,
+         AND (CAST(t.assigned_agent_id AS TEXT) = CAST(:agentId AS TEXT) OR (t.assigned_agent_id IS NULL AND CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT)))`,
       {
         replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC, now_utc: nowUtcISO },
         type: QueryTypes.SELECT,
@@ -424,11 +428,11 @@ export const getAgentTasksDashboard = async (req: Request, res: Response) => {
     const byTypeRows: any[] = await db.sequelize.query(
       `SELECT t.task_type, COUNT(t.id)::int AS count
        FROM public.lead_tasks t
-       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL
+       JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(t.lead_id AS TEXT) AND l.deleted_at IS NULL
        WHERE t.deleted_at IS NULL 
-         AND t.assigned_agent_id = :agentId
+         AND (CAST(t.assigned_agent_id AS TEXT) = CAST(:agentId AS TEXT) OR (t.assigned_agent_id IS NULL AND CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT)))
          AND t.start_at >= :start_utc AND t.start_at <= :end_utc
-         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled')
+         AND LOWER(t.status::text) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled')
        GROUP BY t.task_type`,
       {
         replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC },
@@ -439,52 +443,52 @@ export const getAgentTasksDashboard = async (req: Request, res: Response) => {
     const upcomingRows: any[] = await db.sequelize.query(
       `SELECT t.id, t.task_type, t.subject, t.status, t.start_at, t.end_at, l.full_name, l.id AS lead_id 
        FROM public.lead_tasks t 
-       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(t.lead_id AS TEXT) AND l.deleted_at IS NULL 
        WHERE t.deleted_at IS NULL 
-         AND t.assigned_agent_id = :agentId 
+         AND (CAST(t.assigned_agent_id AS TEXT) = CAST(:agentId AS TEXT) OR (t.assigned_agent_id IS NULL AND CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT))) 
          AND t.start_at >= :now_utc 
-         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+         AND LOWER(t.status::text) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
        ORDER BY t.start_at ASC 
-       LIMIT 20`,
+       LIMIT 50`,
       { replacements: { agentId, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
     );
 
     const overdueRows: any[] = await db.sequelize.query(
       `SELECT t.id, t.task_type, t.subject, t.status, t.start_at, t.end_at, l.full_name, l.id AS lead_id 
        FROM public.lead_tasks t 
-       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(t.lead_id AS TEXT) AND l.deleted_at IS NULL 
        WHERE t.deleted_at IS NULL 
-         AND t.assigned_agent_id = :agentId 
+         AND (CAST(t.assigned_agent_id AS TEXT) = CAST(:agentId AS TEXT) OR (t.assigned_agent_id IS NULL AND CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT))) 
          AND COALESCE(t.end_at, t.start_at) < :now_utc 
-         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+         AND LOWER(t.status::text) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
        ORDER BY COALESCE(t.end_at, t.start_at) DESC 
-       LIMIT 20`,
+       LIMIT 50`,
       { replacements: { agentId, now_utc: nowUtcISO }, type: QueryTypes.SELECT }
     );
 
     const doneTodayRows: any[] = await db.sequelize.query(
       `SELECT t.id, t.task_type, t.subject, 'done'::text AS status, t.start_at, t.end_at, l.full_name, l.id AS lead_id 
        FROM public.lead_tasks t 
-       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(t.lead_id AS TEXT) AND l.deleted_at IS NULL 
        WHERE t.deleted_at IS NULL 
-         AND t.assigned_agent_id = :agentId 
-         AND LOWER(t.status) IN ('done', 'completed', 'complete') 
+         AND (CAST(t.assigned_agent_id AS TEXT) = CAST(:agentId AS TEXT) OR (t.assigned_agent_id IS NULL AND CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT))) 
+         AND LOWER(t.status::text) IN ('done', 'completed', 'complete') 
          AND ((t.start_at >= :start_utc AND t.start_at <= :end_utc) OR (t.updated_at >= :start_utc AND t.updated_at <= :end_utc)) 
        ORDER BY COALESCE(t.updated_at, t.start_at) DESC 
-       LIMIT 20`,
+       LIMIT 50`,
       { replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
     );
 
     const pendingTodayRows: any[] = await db.sequelize.query(
       `SELECT t.id, t.task_type, t.subject, 'pending'::text AS status, t.start_at, t.end_at, l.full_name, l.id AS lead_id 
        FROM public.lead_tasks t 
-       JOIN public.leads l ON l.id = t.lead_id AND l.deleted_at IS NULL 
+       JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(t.lead_id AS TEXT) AND l.deleted_at IS NULL 
        WHERE t.deleted_at IS NULL 
-         AND t.assigned_agent_id = :agentId 
+         AND (CAST(t.assigned_agent_id AS TEXT) = CAST(:agentId AS TEXT) OR (t.assigned_agent_id IS NULL AND CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT))) 
          AND t.start_at >= :start_utc AND t.start_at <= :end_utc 
-         AND LOWER(t.status) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
+         AND LOWER(t.status::text) NOT IN ('done', 'completed', 'complete', 'cancelled', 'canceled') 
        ORDER BY t.start_at ASC 
-       LIMIT 20`,
+       LIMIT 50`,
       { replacements: { agentId, start_utc: todayStartUTC, end_utc: todayEndUTC }, type: QueryTypes.SELECT }
     );
 
