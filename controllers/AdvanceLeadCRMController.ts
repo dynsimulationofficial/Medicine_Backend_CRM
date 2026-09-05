@@ -766,11 +766,11 @@ export default class CompressCrmController extends BaseController {
         { replacements: { id: otpId }, type: QueryTypes.UPDATE }
       );
 
-      // Issue JWT with 12-hour expiry
+      // Issue JWT with 24-hour expiry
       const token = jwt.sign(
         { system_user_id, email },
         process.env.JWT_SECRET || "your_secret_key",
-        { expiresIn: "12h" }   // ⬅️ expires in 14 hours
+        { expiresIn: "24h" }   // ⬅️ expires in 24 hours
       );
 
       // Log the user login activity (Who logged in)
