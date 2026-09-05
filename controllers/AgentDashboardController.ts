@@ -127,14 +127,14 @@ export const getSalesRevenue = async (req: Request, res: Response) => {
 
     const [row]: any[] = await db.sequelize.query(
       `SELECT
-         COALESCE(SUM(CASE WHEN l.currency = 'INR' OR l.currency IS NULL THEN o.grand_total ELSE 0 END), 0)::float AS inr,
-         COALESCE(SUM(CASE WHEN l.currency = 'USD' THEN o.grand_total ELSE 0 END), 0)::float AS usd,
-         COALESCE(SUM(CASE WHEN l.currency = 'GBP' THEN o.grand_total ELSE 0 END), 0)::float AS gbp
+         COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.phone LIKE '+44%' OR l.phone LIKE '44%' OR (l.phone NOT LIKE '+1%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%UK%' OR l.country ILIKE '%United Kingdom%'))) THEN o.grand_total ELSE 0 END), 0)::float AS gbp,
+         COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND (l.phone LIKE '+1%' OR (l.phone LIKE '1%' AND LENGTH(l.phone) >= 11) OR (l.phone NOT LIKE '+44%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%USA%' OR l.country ILIKE '%United States%'))) THEN o.grand_total ELSE 0 END), 0)::float AS usd,
+         COALESCE(SUM(CASE WHEN o.order_status != 'Cancelled' AND NOT (l.phone LIKE '+44%' OR l.phone LIKE '44%' OR (l.phone NOT LIKE '+1%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%UK%' OR l.country ILIKE '%United Kingdom%'))) AND NOT (l.phone LIKE '+1%' OR (l.phone LIKE '1%' AND LENGTH(l.phone) >= 11) OR (l.phone NOT LIKE '+44%' AND l.phone NOT LIKE '+91%' AND (l.country ILIKE '%USA%' OR l.country ILIKE '%United States%'))) THEN o.grand_total ELSE 0 END), 0)::float AS inr
        FROM public.lead_orders o
-       JOIN public.leads l ON l.id = o.lead_id AND l.deleted_at IS NULL
+       JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(o.lead_id AS TEXT) AND l.deleted_at IS NULL
        WHERE o.deleted_at IS NULL 
          AND o.order_status != 'Cancelled'
-         AND (o.agent_id = :agentId OR l.agent_id = :agentId)`,
+         AND (CAST(o.agent_id AS TEXT) = CAST(:agentId AS TEXT) OR CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT))`,
       { replacements: { agentId }, type: QueryTypes.SELECT }
     );
 
