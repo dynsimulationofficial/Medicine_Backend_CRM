@@ -463,26 +463,76 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
   }
 };
 
-// ==================== 9. FILTER / SEARCH LEADS ====================
+// ==================== 9. FILTER / SEARCH ASSIGNED LEADS ====================
 export const searchLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.body?.page || req.query?.page) || 1);
     const limit = Number(req.body?.limit || req.body?.pageSize || req.query?.limit || req.query?.pageSize) || 150;
     const offset = (page - 1) * limit;
 
-    const { q, search, full_name, email, phone, city, lead_source_id } = { ...req.query, ...req.body };
-    const queryStr = (q || search || full_name || email || phone || city || "").toString().trim();
+    const {
+      q,
+      search,
+      full_name,
+      email,
+      phone,
+      lead_number,
+      city,
+      lead_source_id,
+      agent_ids,
+      agent_id,
+    } = { ...req.query, ...req.body };
 
-    let whereClause = "WHERE l.deleted_at IS NULL";
+    const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
+    const userIsAdmin = await checkIsAdmin(authUserId);
+
+    let whereClause = "WHERE l.deleted_at IS NULL AND l.agent_id IS NOT NULL";
     const replacements: any = { limit, offset };
 
-    if (queryStr) {
-      whereClause += " AND (l.full_name ILIKE :search OR l.email ILIKE :search OR l.phone ILIKE :search OR l.city ILIKE :search)";
-      replacements.search = `%${queryStr}%`;
+    // Role-based access: agents can ONLY search their own assigned leads
+    if (!userIsAdmin && authUserId) {
+      whereClause += " AND l.agent_id = :authUserId";
+      replacements.authUserId = authUserId;
+    } else {
+      // Admin filter by agent(s)
+      if (Array.isArray(agent_ids) && agent_ids.length > 0) {
+        whereClause += " AND l.agent_id = ANY(ARRAY[:agent_ids]::uuid[])";
+        replacements.agent_ids = agent_ids;
+      } else if (agent_id && String(agent_id).trim()) {
+        whereClause += " AND l.agent_id = :agent_id";
+        replacements.agent_id = String(agent_id).trim();
+      }
     }
-    if (lead_source_id) {
+
+    if (full_name && String(full_name).trim()) {
+      whereClause += " AND l.full_name ILIKE :full_name";
+      replacements.full_name = `%${String(full_name).trim()}%`;
+    }
+    if (email && String(email).trim()) {
+      whereClause += " AND l.email ILIKE :email";
+      replacements.email = `%${String(email).trim()}%`;
+    }
+    if (phone && String(phone).trim()) {
+      whereClause += " AND l.phone ILIKE :phone";
+      replacements.phone = `%${String(phone).trim()}%`;
+    }
+    if (lead_number && String(lead_number).trim()) {
+      whereClause += " AND l.lead_number ILIKE :lead_number";
+      replacements.lead_number = `%${String(lead_number).trim()}%`;
+    }
+    if (city && String(city).trim()) {
+      whereClause += " AND l.city ILIKE :city";
+      replacements.city = `%${String(city).trim()}%`;
+    }
+    if (lead_source_id && String(lead_source_id).trim()) {
       whereClause += " AND l.lead_source_id = :lead_source_id";
-      replacements.lead_source_id = lead_source_id;
+      replacements.lead_source_id = String(lead_source_id).trim();
+    }
+
+    const generalSearch = (q || search || "").toString().trim();
+    if (generalSearch) {
+      whereClause += " AND (l.full_name ILIKE :generalSearch OR l.email ILIKE :generalSearch OR l.phone ILIKE :generalSearch OR l.city ILIKE :generalSearch OR l.lead_number ILIKE :generalSearch)";
+      replacements.generalSearch = `%${generalSearch}%`;
     }
 
     const countResult: any[] = await db.sequelize.query(
@@ -514,6 +564,88 @@ export const searchLeads = async (req: Request, res: Response) => {
          FROM public.lead_orders o
          WHERE o.lead_id = l.id AND o.deleted_at IS NULL
        ) ord ON true
+       ${whereClause}
+       ORDER BY l.created_at DESC
+       LIMIT :limit OFFSET :offset`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: dataResult,
+      pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== FILTER / SEARCH UNASSIGNED LEADS ====================
+export const filterUnassignedLeads = async (req: Request, res: Response) => {
+  try {
+    const page = Math.max(1, Number(req.body?.page || req.query?.page) || 1);
+    const limit = Number(req.body?.limit || req.body?.pageSize || req.query?.limit || req.query?.pageSize) || 150;
+    const offset = (page - 1) * limit;
+
+    const {
+      q,
+      search,
+      full_name,
+      email,
+      phone,
+      lead_number,
+      city,
+      lead_source_id,
+    } = { ...req.query, ...req.body };
+
+    let whereClause = "WHERE l.deleted_at IS NULL AND l.agent_id IS NULL";
+    const replacements: any = { limit, offset };
+
+    if (full_name && String(full_name).trim()) {
+      whereClause += " AND l.full_name ILIKE :full_name";
+      replacements.full_name = `%${String(full_name).trim()}%`;
+    }
+    if (email && String(email).trim()) {
+      whereClause += " AND l.email ILIKE :email";
+      replacements.email = `%${String(email).trim()}%`;
+    }
+    if (phone && String(phone).trim()) {
+      whereClause += " AND l.phone ILIKE :phone";
+      replacements.phone = `%${String(phone).trim()}%`;
+    }
+    if (lead_number && String(lead_number).trim()) {
+      whereClause += " AND l.lead_number ILIKE :lead_number";
+      replacements.lead_number = `%${String(lead_number).trim()}%`;
+    }
+    if (city && String(city).trim()) {
+      whereClause += " AND l.city ILIKE :city";
+      replacements.city = `%${String(city).trim()}%`;
+    }
+    if (lead_source_id && String(lead_source_id).trim()) {
+      whereClause += " AND l.lead_source_id = :lead_source_id";
+      replacements.lead_source_id = String(lead_source_id).trim();
+    }
+
+    const generalSearch = (q || search || "").toString().trim();
+    if (generalSearch) {
+      whereClause += " AND (l.full_name ILIKE :generalSearch OR l.email ILIKE :generalSearch OR l.phone ILIKE :generalSearch OR l.city ILIKE :generalSearch OR l.lead_number ILIKE :generalSearch)";
+      replacements.generalSearch = `%${generalSearch}%`;
+    }
+
+    const countResult: any[] = await db.sequelize.query(
+      `SELECT COUNT(*) as total FROM public.leads l ${whereClause}`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+    const total = parseInt(countResult[0]?.total || "0");
+
+    const dataResult: any[] = await db.sequelize.query(
+      `SELECT
+         l.*,
+         ls.name AS lead_source_name,
+         camp.name AS campaign_name
+       FROM public.leads l
+       LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
+       LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
        ${whereClause}
        ORDER BY l.created_at DESC
        LIMIT :limit OFFSET :offset`,
@@ -691,6 +823,7 @@ export default {
   updateLead,
   assignLeadToAgent,
   searchLeads,
+  filterUnassignedLeads,
   softDeleteLeads,
   getLeadSources,
   bulkUploadFromFile,
