@@ -3,6 +3,9 @@ import { DataTypes, Sequelize, Model, Optional } from "sequelize";
 export interface MasterMedicineAttributes {
   id: string;
   name: string;
+  generic_name?: string | null;
+  packing?: string | null;
+  price?: number | null;
   description?: string | null;
   image_url?: string | null;
   created_at?: Date;
@@ -12,7 +15,7 @@ export interface MasterMedicineAttributes {
 
 export type MasterMedicineCreationAttributes = Optional<
   MasterMedicineAttributes,
-  "id" | "description" | "image_url" | "created_at" | "updated_at" | "deleted_at"
+  "id" | "generic_name" | "packing" | "price" | "description" | "image_url" | "created_at" | "updated_at" | "deleted_at"
 >;
 
 export const initMasterMedicineModel = (sequelize: Sequelize) => {
@@ -22,6 +25,9 @@ export const initMasterMedicineModel = (sequelize: Sequelize) => {
   {
     public id!: string;
     public name!: string;
+    public generic_name!: string | null;
+    public packing!: string | null;
+    public price!: number | null;
     public description!: string | null;
     public image_url!: string | null;
     public created_at!: Date;
@@ -39,6 +45,19 @@ export const initMasterMedicineModel = (sequelize: Sequelize) => {
       name: {
         type: DataTypes.STRING(255),
         allowNull: false,
+      },
+      generic_name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      packing: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+      price: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+        defaultValue: 0.00,
       },
       description: {
         type: DataTypes.TEXT,
