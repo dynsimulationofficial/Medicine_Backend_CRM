@@ -86,6 +86,29 @@ export const createLead = async (req: Request, res: Response) => {
     const id = uuidv4();
     const now = new Date();
 
+    // Auto-detect country and currency from phone if not explicitly provided
+    let detectedCountry = validatedData.country || null;
+    let detectedCurrency = validatedData.currency || null;
+    if (validatedData.phone) {
+      const cleanP = validatedData.phone.replace(/[\s\-\(\)]/g, "");
+      if (cleanP.startsWith("+91") || cleanP.startsWith("0091") || (cleanP.startsWith("91") && cleanP.length === 12)) {
+        if (!detectedCountry) detectedCountry = "India";
+        if (!detectedCurrency) detectedCurrency = "INR";
+      } else if (cleanP.startsWith("+44") || cleanP.startsWith("0044") || (cleanP.startsWith("44") && cleanP.length >= 12)) {
+        if (!detectedCountry) detectedCountry = "UK";
+        if (!detectedCurrency) detectedCurrency = "GBP";
+      } else if (cleanP.startsWith("+1") || cleanP.startsWith("001") || (cleanP.startsWith("1") && cleanP.length === 11)) {
+        if (!detectedCountry) detectedCountry = "USA";
+        if (!detectedCurrency) detectedCurrency = "USD";
+      }
+    }
+    if (detectedCountry && !detectedCurrency) {
+      const cLow = detectedCountry.toLowerCase();
+      if (cLow === "india" || cLow === "in") detectedCurrency = "INR";
+      else if (cLow === "uk" || cLow === "united kingdom" || cLow === "gb") detectedCurrency = "GBP";
+      else if (cLow === "usa" || cLow === "us" || cLow === "united states") detectedCurrency = "USD";
+    }
+
     const query = `
       INSERT INTO public.leads (
         id, full_name, email, phone, whatsapp_number,
@@ -113,14 +136,14 @@ export const createLead = async (req: Request, res: Response) => {
         city: validatedData.city || null,
         state: validatedData.state || null,
         postal_code: validatedData.postal_code || null,
-        country: validatedData.country || null,
+        country: detectedCountry,
         lead_score: validatedData.lead_score || 0,
         lead_quality: validatedData.lead_quality || null,
         best_time_to_call: validatedData.best_time_to_call || null,
         agent_id: validatedData.agent_id || null,
         lead_source_id: validatedData.lead_source_id || null,
         campaign_id: validatedData.campaign_id || null,
-        currency: validatedData.currency || "USD",
+        currency: detectedCurrency || "USD",
         lead_status: validatedData.lead_status || "New",
         note: validatedData.note || null,
         created_at: now,

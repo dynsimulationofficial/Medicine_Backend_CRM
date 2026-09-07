@@ -21,7 +21,7 @@ const leadOrderSchema = yup.object({
       yup.object({
         id: yup.string().uuid("Invalid item ID").optional(),
         medicine_name: yup.string().trim().required("Medicine name is required"),
-        unit: yup.string().trim().default("Strip"),
+        unit: yup.string().trim().nullable().optional().default(""),
         quantity: yup.number().integer().min(1, "Quantity must be at least 1").required("Quantity is required"),
         rate: yup.number().min(0, "Rate cannot be negative").required("Rate is required"),
       })
@@ -68,7 +68,7 @@ export const createOrder = async (req: Request, res: Response) => {
       grandTotal += totalPrice;
       computedItems.push({
         medicine_name: item.medicine_name.trim(),
-        unit: item.unit || "Strip",
+        unit: item.unit ? item.unit.trim() : "",
         quantity: qty,
         rate,
         total_price: totalPrice,
@@ -319,7 +319,7 @@ export const updateOrder = async (req: Request, res: Response) => {
         sumTotal += totalPrice;
         computedItems.push({
           medicine_name: item.medicine_name.trim(),
-          unit: item.unit || "Strip",
+          unit: item.unit ? item.unit.trim() : "",
           quantity: qty,
           rate,
           total_price: totalPrice,
@@ -448,7 +448,7 @@ export const getMedicineSuggestions = async (req: Request, res: Response) => {
     }
 
     const dbMeds: any[] = await db.sequelize.query(
-      `SELECT name AS medicine_name, generic_name, COALESCE(packing, 'Strip')::varchar AS unit, COALESCE(price, 0)::numeric AS rate
+      `SELECT name AS medicine_name, generic_name, COALESCE(packing, '')::varchar AS unit, COALESCE(price, 0)::numeric AS rate
          FROM public.master_medicines
         ${whereClause}
         ORDER BY LOWER(TRIM(name)) ASC
