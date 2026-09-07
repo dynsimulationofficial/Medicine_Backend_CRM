@@ -139,7 +139,7 @@ export const createMedicine = async (req: Request, res: Response) => {
 export const getAllMedicines = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Number(req.query.limit || req.query.pageSize) || 50;
+    const limit = Number(req.query.limit || req.query.pageSize) || 100;
     const offset = (page - 1) * limit;
     const search = (req.query.search || req.query.q || "").toString().trim();
 
