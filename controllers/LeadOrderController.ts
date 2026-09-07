@@ -443,12 +443,12 @@ export const getMedicineSuggestions = async (req: Request, res: Response) => {
     const repl: Record<string, any> = {};
     let whereClause = "WHERE deleted_at IS NULL AND name IS NOT NULL AND TRIM(name) != ''";
     if (query) {
-      whereClause += " AND name ILIKE :q";
+      whereClause += " AND (name ILIKE :q OR generic_name ILIKE :q)";
       repl.q = `%${query}%`;
     }
 
     const dbMeds: any[] = await db.sequelize.query(
-      `SELECT name AS medicine_name, 'Strip'::varchar AS unit, 0::numeric AS rate
+      `SELECT name AS medicine_name, generic_name, COALESCE(packing, 'Strip')::varchar AS unit, COALESCE(price, 0)::numeric AS rate
          FROM public.master_medicines
         ${whereClause}
         ORDER BY LOWER(TRIM(name)) ASC
