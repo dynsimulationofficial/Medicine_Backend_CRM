@@ -46,7 +46,6 @@ const medicineSchema = yup.object({
   generic_name: yup.string().trim().nullable().optional().max(255),
   packing: yup.string().trim().nullable().optional().max(100),
   price: yup.number().typeError("Price must be a valid number").nullable().optional().min(0),
-  description: yup.string().nullable().optional(),
 });
 
 // ==================== 1. CREATE MEDICINE ====================
@@ -60,7 +59,6 @@ export const createMedicine = async (req: Request, res: Response) => {
       req.body?.price !== undefined && req.body?.price !== "" && req.body?.price !== null && !isNaN(Number(req.body.price))
         ? Number(req.body.price)
         : 0.0;
-    const description = req.body?.description?.trim() || null;
 
     // Check duplicate
     const dupRows: any[] = await db.sequelize.query(
@@ -113,13 +111,13 @@ export const createMedicine = async (req: Request, res: Response) => {
     const now = new Date();
 
     const query = `
-      INSERT INTO public.master_medicines (id, name, generic_name, packing, price, description, image_url, created_at, updated_at)
-      VALUES (:id, :name, :generic_name, :packing, :price, :description, :image_url, :created_at, :updated_at)
+      INSERT INTO public.master_medicines (id, name, generic_name, packing, price, image_url, created_at, updated_at)
+      VALUES (:id, :name, :generic_name, :packing, :price, :image_url, :created_at, :updated_at)
       RETURNING *
     `;
 
     const result: any[] = await db.sequelize.query(query, {
-      replacements: { id, name, generic_name, packing, price, description, image_url: imageUrl, created_at: now, updated_at: now },
+      replacements: { id, name, generic_name, packing, price, image_url: imageUrl, created_at: now, updated_at: now },
       type: QueryTypes.SELECT,
     });
 
@@ -160,7 +158,7 @@ export const getAllMedicines = async (req: Request, res: Response) => {
     const total = parseInt(countResult[0]?.total || "0");
 
     const dataResult: any[] = await db.sequelize.query(
-      `SELECT id, name, generic_name, packing, price, description, image_url, created_at, updated_at
+      `SELECT id, name, generic_name, packing, price, image_url, created_at, updated_at
        FROM public.master_medicines
        ${whereClause}
        ORDER BY created_at DESC
@@ -195,7 +193,7 @@ export const getMedicineById = async (req: Request, res: Response) => {
     }
 
     const result: any[] = await db.sequelize.query(
-      `SELECT id, name, generic_name, packing, price, description, image_url, created_at, updated_at FROM public.master_medicines WHERE id = :id AND deleted_at IS NULL LIMIT 1`,
+      `SELECT id, name, generic_name, packing, price, image_url, created_at, updated_at FROM public.master_medicines WHERE id = :id AND deleted_at IS NULL LIMIT 1`,
       { replacements: { id }, type: QueryTypes.SELECT }
     );
 
@@ -232,7 +230,6 @@ export const updateMedicine = async (req: Request, res: Response) => {
           ? Number(req.body.price)
           : 0.0
         : undefined;
-    const description = req.body?.description !== undefined ? (req.body.description?.trim() || null) : undefined;
     const now = new Date();
 
     // Check if new image uploaded
@@ -287,11 +284,6 @@ export const updateMedicine = async (req: Request, res: Response) => {
     if (price !== undefined) {
       setClauses.push("price = :price");
       replacements.price = price;
-    }
-
-    if (description !== undefined) {
-      setClauses.push("description = :description");
-      replacements.description = description;
     }
 
     if (newImageUrl !== undefined) {

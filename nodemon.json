@@ -1,0 +1,20 @@
+{
+  "watch": [
+    "controllers",
+    "models",
+    "routes",
+    "service",
+    "database",
+    "middleware",
+    "index.ts"
+  ],
+  "ext": "ts,json",
+  "ignore": [
+    "logs/*",
+    "dist/*",
+    "public/*",
+    "uploads/*",
+    "node_modules/*"
+  ],
+  "exec": "ts-node index.ts"
+}
