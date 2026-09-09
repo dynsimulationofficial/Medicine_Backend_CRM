@@ -43,7 +43,7 @@ services:
 
     environment:
       NODE_ENV: production
-      MANAGE_LEAD_PORT: 8017
+      MEDICINE_CRM_PORT: 8017
 
     ports:
       - "127.0.0.1:8017:8017"
