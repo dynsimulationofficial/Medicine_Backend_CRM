@@ -1,4 +1,4 @@
-name: medicine-staging
+name: medicine-production
 
 services:
   production-db:
