@@ -18,7 +18,7 @@ const port = Number(process.env.MEDICINE_CRM_PORT) || 8017;
 // Sentry setup
 Sentry.init({
   dsn: process.env.SENTRY_DSN,
-  serverName: "Medicine CRM Backend Staging",
+  serverName: "Medicine CRM Backend Production",
   profilesSampleRate: 1.0,
 });
 
@@ -41,7 +41,7 @@ app.use("/uploads", express.static(path.join(process.cwd(), "uploads")));
 app.use("/api/v1/managelead", SystemuserRouter);
 
 app.get("/", (_req: Request, res: Response) => {
-  res.send("medicine-crm-backend-staging server is running.");
+  res.send("medicine-crm-backend-production server is running.");
 });
 // Initialize server
 async function startServer() {
