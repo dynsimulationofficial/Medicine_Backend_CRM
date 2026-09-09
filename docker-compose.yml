@@ -5,17 +5,22 @@ services:
     container_name: medicine-db-production
     image: postgres:14
     restart: always
+
     env_file:
       - path: .env
         required: false
+
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-medicine_production_db}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+
     ports:
       - "127.0.0.1:5660:5432"
+
     volumes:
       - medicine_production_pgdata:/var/lib/postgresql/data
+
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
       interval: 5s
@@ -24,22 +29,29 @@ services:
 
   production-backend:
     container_name: medicine-backend-production
+
     build:
       context: .
       dockerfile: Dockerfile
+
     image: medicine-backend-production:latest
     restart: unless-stopped
+
     env_file:
       - path: .env
         required: false
+
     environment:
       NODE_ENV: production
       MANAGE_LEAD_PORT: 8017
+
     ports:
       - "127.0.0.1:8017:8017"
+
     depends_on:
-      db:
+      production-db:
         condition: service_healthy
+
     volumes:
       - medicine_production_uploads:/usr/src/app/uploads
       - ./config:/usr/src/app/config
@@ -47,5 +59,6 @@ services:
 volumes:
   medicine_production_pgdata:
     name: medicine_production_pgdata
+
   medicine_production_uploads:
     name: medicine_production_uploads
