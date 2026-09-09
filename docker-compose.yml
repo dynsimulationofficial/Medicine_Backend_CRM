@@ -13,7 +13,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "127.0.0.1:5630:5432"
+      - "127.0.0.1:5660:5432"
     volumes:
       - medicine_production_pgdata:/var/lib/postgresql/data
     healthcheck:
