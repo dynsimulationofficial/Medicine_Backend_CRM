@@ -33,5 +33,5 @@ COPY --from=builder /usr/src/app/start.sh ./start.sh
 # Make start script executable
 RUN chmod +x ./start.sh
 
-EXPOSE 8016
+EXPOSE 8017
 CMD ["./start.sh"]

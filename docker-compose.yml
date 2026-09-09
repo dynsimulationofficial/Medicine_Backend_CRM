@@ -1,51 +1,51 @@
 name: medicine-staging
 
 services:
-  db:
-    container_name: medicine-db-staging
+  production-db:
+    container_name: medicine-db-production
     image: postgres:14
     restart: always
     env_file:
       - path: .env
         required: false
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-medicine_staging_db}
+      POSTGRES_DB: ${POSTGRES_DB:-medicine_production_db}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
       - "127.0.0.1:5630:5432"
     volumes:
-      - medicine_staging_pgdata:/var/lib/postgresql/data
+      - medicine_production_pgdata:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  backend:
-    container_name: medicine-backend-staging
+  production-backend:
+    container_name: medicine-backend-production
     build:
       context: .
       dockerfile: Dockerfile
-    image: medicine-backend-staging:latest
+    image: medicine-backend-production:latest
     restart: unless-stopped
     env_file:
       - path: .env
         required: false
     environment:
-      NODE_ENV: staging
-      MANAGE_LEAD_PORT: 8016
+      NODE_ENV: production
+      MANAGE_LEAD_PORT: 8017
     ports:
-      - "127.0.0.1:8016:8016"
+      - "127.0.0.1:8017:8017"
     depends_on:
       db:
         condition: service_healthy
     volumes:
-      - medicine_staging_uploads:/usr/src/app/uploads
+      - medicine_production_uploads:/usr/src/app/uploads
       - ./config:/usr/src/app/config
 
 volumes:
-  medicine_staging_pgdata:
-    name: medicine_staging_pgdata
-  medicine_staging_uploads:
-    name: medicine_staging_uploads
+  medicine_production_pgdata:
+    name: medicine_production_pgdata
+  medicine_production_uploads:
+    name: medicine_production_uploads

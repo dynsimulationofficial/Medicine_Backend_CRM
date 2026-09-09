@@ -188,7 +188,7 @@ export const getDocumentUrl = async (req: Request, res: Response) => {
       return res.status(200).json({ success: true, data: { file_name: doc.file_name, mime_type: doc.mime_type, url: signedUrl } });
     } else {
       const protocol = req.protocol || "http";
-      const host = req.get("host") || "localhost:8016";
+      const host = req.get("host") || "localhost:8017";
       const cleanPath = doc.storage_path.startsWith("/") ? doc.storage_path : `/${doc.storage_path}`;
       const absoluteUrl = `${protocol}://${host}${cleanPath}`;
       return res.status(200).json({ success: true, data: { file_name: doc.file_name, mime_type: doc.mime_type, url: absoluteUrl } });

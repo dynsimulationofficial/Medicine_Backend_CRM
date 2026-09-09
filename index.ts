@@ -13,7 +13,7 @@ dotenv.config();
 console.log("🛠️ MEDICINE_CRM_PORT =", process.env.MEDICINE_CRM_PORT);
 
 const app: Express = express();
-const port = Number(process.env.MEDICINE_CRM_PORT) || 8016;
+const port = Number(process.env.MEDICINE_CRM_PORT) || 8017;
 
 // Sentry setup
 Sentry.init({
