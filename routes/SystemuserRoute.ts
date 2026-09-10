@@ -85,6 +85,7 @@ SystemuserRouter.post("/leads/tasks/soft-delete", leadTaskController.deleteTask)
 SystemuserRouter.post("/leads/documents/list", leadDocumentController.getAllDocuments);
 SystemuserRouter.post("/leads/documents/upload", uploadFile.single("file"), leadDocumentController.uploadDocument);
 SystemuserRouter.post("/leads/bulk/upload", uploadFile.single("file"), leadController.bulkUploadFromFile);
+SystemuserRouter.get("/leads/bulk/sample", leadController.downloadSampleLeadExcel);
 SystemuserRouter.post("/leads/documents/download", leadDocumentController.getDocumentUrl);
 SystemuserRouter.post("/leads/documents/geturl", leadDocumentController.getDocumentUrl);
 SystemuserRouter.post("/leads/documents/edit", leadDocumentController.updateDocument);

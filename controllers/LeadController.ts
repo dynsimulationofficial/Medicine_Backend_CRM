@@ -65,6 +65,38 @@ const checkIsAdmin = async (userId: string | null): Promise<boolean> => {
   }
 };
 
+export const detectCountryAndCurrency = (
+  phone?: string | null,
+  country?: string | null,
+  currency?: string | null
+): { country: string | null; currency: string } => {
+  let detectedCountry = country ? country.trim() : null;
+  let detectedCurrency = currency ? currency.trim().toUpperCase() : null;
+
+  if (phone) {
+    const cleanP = phone.replace(/[\s\-\(\)]/g, "");
+    if (cleanP.startsWith("+91") || cleanP.startsWith("0091") || (cleanP.startsWith("91") && cleanP.length === 12)) {
+      if (!detectedCountry) detectedCountry = "India";
+      if (!detectedCurrency) detectedCurrency = "INR";
+    } else if (cleanP.startsWith("+44") || cleanP.startsWith("0044") || (cleanP.startsWith("44") && cleanP.length >= 12)) {
+      if (!detectedCountry) detectedCountry = "UK";
+      if (!detectedCurrency) detectedCurrency = "GBP";
+    } else if (cleanP.startsWith("+1") || cleanP.startsWith("001") || (cleanP.startsWith("1") && cleanP.length === 11)) {
+      if (!detectedCountry) detectedCountry = "USA";
+      if (!detectedCurrency) detectedCurrency = "USD";
+    }
+  }
+
+  if (detectedCountry && !detectedCurrency) {
+    const cLow = detectedCountry.toLowerCase();
+    if (cLow === "india" || cLow === "in") detectedCurrency = "INR";
+    else if (cLow === "uk" || cLow === "united kingdom" || cLow === "gb") detectedCurrency = "GBP";
+    else if (cLow === "usa" || cLow === "us" || cLow === "united states") detectedCurrency = "USD";
+  }
+
+  return { country: detectedCountry, currency: detectedCurrency || "USD" };
+};
+
 // ==================== 1. CREATE LEAD ====================
 export const createLead = async (req: Request, res: Response) => {
   try {
@@ -87,27 +119,11 @@ export const createLead = async (req: Request, res: Response) => {
     const now = new Date();
 
     // Auto-detect country and currency from phone if not explicitly provided
-    let detectedCountry = validatedData.country || null;
-    let detectedCurrency = validatedData.currency || null;
-    if (validatedData.phone) {
-      const cleanP = validatedData.phone.replace(/[\s\-\(\)]/g, "");
-      if (cleanP.startsWith("+91") || cleanP.startsWith("0091") || (cleanP.startsWith("91") && cleanP.length === 12)) {
-        if (!detectedCountry) detectedCountry = "India";
-        if (!detectedCurrency) detectedCurrency = "INR";
-      } else if (cleanP.startsWith("+44") || cleanP.startsWith("0044") || (cleanP.startsWith("44") && cleanP.length >= 12)) {
-        if (!detectedCountry) detectedCountry = "UK";
-        if (!detectedCurrency) detectedCurrency = "GBP";
-      } else if (cleanP.startsWith("+1") || cleanP.startsWith("001") || (cleanP.startsWith("1") && cleanP.length === 11)) {
-        if (!detectedCountry) detectedCountry = "USA";
-        if (!detectedCurrency) detectedCurrency = "USD";
-      }
-    }
-    if (detectedCountry && !detectedCurrency) {
-      const cLow = detectedCountry.toLowerCase();
-      if (cLow === "india" || cLow === "in") detectedCurrency = "INR";
-      else if (cLow === "uk" || cLow === "united kingdom" || cLow === "gb") detectedCurrency = "GBP";
-      else if (cLow === "usa" || cLow === "us" || cLow === "united states") detectedCurrency = "USD";
-    }
+    const { country: detectedCountry, currency: detectedCurrency } = detectCountryAndCurrency(
+      validatedData.phone,
+      validatedData.country,
+      validatedData.currency
+    );
 
     const query = `
       INSERT INTO public.leads (
@@ -386,11 +402,26 @@ export const updateLead = async (req: Request, res: Response) => {
 // ==================== 6. DELETE / SOFT DELETE LEADS ====================
 export const softDeleteLeads = async (req: Request, res: Response) => {
   try {
-    const { lead_ids, id } = req.body;
-    const ids: string[] = lead_ids || (id ? [id] : []);
+    const rawIds =
+      req.body.lead_ids ||
+      req.body.ids ||
+      req.body.lead_id ||
+      req.body.id ||
+      req.query.lead_id ||
+      req.query.id ||
+      req.params.id;
+
+    let ids: string[] = [];
+    if (Array.isArray(rawIds)) {
+      ids = rawIds.map(String).filter(Boolean);
+    } else if (typeof rawIds === "string" && rawIds.trim()) {
+      ids = rawIds.includes(",")
+        ? rawIds.split(",").map((s) => s.trim()).filter(Boolean)
+        : [rawIds.trim()];
+    }
 
     if (!ids.length) {
-      return res.status(400).json({ success: false, message: "Lead ID(s) required" });
+      return res.status(400).json({ success: false, message: "Lead ID(s) required", msg: "Lead ID(s) required" });
     }
 
     await db.sequelize.query(
@@ -398,9 +429,13 @@ export const softDeleteLeads = async (req: Request, res: Response) => {
       { replacements: { ids }, type: QueryTypes.UPDATE }
     );
 
-    return res.status(200).json({ success: true, message: "Lead(s) deleted successfully" });
+    return res.status(200).json({
+      success: true,
+      message: "Lead(s) deleted successfully",
+      msg: "Successfully Deleted",
+    });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message, msg: error.message });
   }
 };
 
@@ -742,6 +777,8 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "No Excel file uploaded" });
     }
 
+    const { lead_source_id, campaign_id, agent_id } = req.body;
+
     const workbook = XLSX.read(file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const rawRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
@@ -751,34 +788,116 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
     }
 
     let inserted = 0;
+    let skipped = 0;
+    let duplicateFound = false;
     const now = new Date();
+    const seenPhonesInSheet = new Set<string>();
+    const seenEmailsInSheet = new Set<string>();
 
-    for (const row of rawRows) {
-      const full_name = row["Full Name"] || row["name"] || row["Name"] || "";
-      const phone = String(row["Phone"] || row["phone"] || row["Mobile"] || "").trim();
-      const email = String(row["Email"] || row["email"] || "").trim().toLowerCase();
+    for (let i = 0; i < rawRows.length; i++) {
+      const row = rawRows[i];
 
-      if (!full_name || !phone) continue;
+      const full_name = String(
+        row["Full Name"] ||
+        row["full_name"] ||
+        row["FullName"] ||
+        row["Name"] ||
+        row["name"] ||
+        row["Client Name"] ||
+        row["Customer Name"] ||
+        ""
+      ).trim();
+
+      const phone = String(
+        row["Phone"] ||
+        row["phone"] ||
+        row["Mobile"] ||
+        row["mobile"] ||
+        row["Phone Number"] ||
+        row["Contact"] ||
+        row["Contact Number"] ||
+        ""
+      ).trim();
+
+      const email = String(
+        row["Email"] ||
+        row["email"] ||
+        row["Email ID"] ||
+        row["E-mail"] ||
+        ""
+      ).trim().toLowerCase();
+
+      if (!full_name || !phone) {
+        skipped++;
+        continue;
+      }
+
+      const phoneClean = phone.replace(/(?!^\+)[^0-9]/g, "");
+      const phoneDigits = phoneClean.replace(/\D/g, "");
+
+      if (phoneDigits.length < 5) {
+        skipped++;
+        continue;
+      }
+
+      // Check duplicates in current file
+      if (seenPhonesInSheet.has(phoneDigits) || (email && seenEmailsInSheet.has(email))) {
+        skipped++;
+        duplicateFound = true;
+        continue;
+      }
+
+      // Check duplicate phone or email in database
+      const existing: any[] = await db.sequelize.query(
+        `SELECT id FROM public.leads WHERE deleted_at IS NULL AND (REGEXP_REPLACE(phone, '\\D', '', 'g') = :phoneDigits ${email ? 'OR LOWER(email) = :email' : ''}) LIMIT 1`,
+        { replacements: { phoneDigits, email }, type: QueryTypes.SELECT }
+      );
+
+      if (existing.length > 0) {
+        skipped++;
+        duplicateFound = true;
+        continue;
+      }
+
+      seenPhonesInSheet.add(phoneDigits);
+      if (email) seenEmailsInSheet.add(email);
+
+      const rawCountry = row["Country"] || row["country"] || null;
+      const { country: detectedCountry, currency: detectedCurrency } = detectCountryAndCurrency(phone, rawCountry, null);
 
       const id = uuidv4();
+      const whatsapp_number = row["WhatsApp Number"] || row["WhatsApp"] || row["whatsapp"] || row["whatsapp_number"] || null;
+      const address_line1 = row["Address"] || row["address"] || row["Address Line 1"] || row["address_line1"] || null;
+      const city = row["City"] || row["city"] || null;
+      const state = row["State"] || row["state"] || null;
+      const postal_code = row["Postal Code"] || row["postal_code"] || row["Zip Code"] || row["Zip"] || row["Pincode"] || null;
+      const note = row["Note"] || row["note"] || row["Remarks"] || row["remarks"] || null;
+
       await db.sequelize.query(
         `INSERT INTO public.leads (
-           id, full_name, email, phone, address_line1, city, state, country,
-           lead_status, currency, created_at, updated_at
+           id, full_name, email, phone, whatsapp_number, address_line1, city, state, postal_code, country,
+           lead_source_id, campaign_id, agent_id, lead_status, currency, note, created_at, updated_at
          ) VALUES (
-           :id, :full_name, :email, :phone, :address_line1, :city, :state, :country,
-           'New', 'USD', :created_at, :updated_at
+           :id, :full_name, :email, :phone, :whatsapp_number, :address_line1, :city, :state, :postal_code, :country,
+           :lead_source_id, :campaign_id, :agent_id, 'New', :currency, :note, :created_at, :updated_at
          )`,
         {
           replacements: {
             id,
             full_name,
-            email: email || `${phone}@placeholder.com`,
+            email: email || `${phoneDigits || Date.now()}@placeholder.com`,
             phone,
-            address_line1: row["Address"] || row["address"] || null,
-            city: row["City"] || row["city"] || null,
-            state: row["State"] || row["state"] || null,
-            country: row["Country"] || row["country"] || null,
+            whatsapp_number,
+            address_line1,
+            city,
+            state,
+            postal_code,
+            country: detectedCountry,
+            lead_source_id: lead_source_id || null,
+            campaign_id: campaign_id || null,
+            agent_id: agent_id || null,
+            currency: detectedCurrency || "USD",
+            note,
             created_at: now,
             updated_at: now,
           },
@@ -788,7 +907,61 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
       inserted++;
     }
 
-    return res.status(200).json({ success: true, message: `Successfully imported ${inserted} leads` });
+    if (inserted === 0) {
+      const errorMsg = duplicateFound
+        ? "Lead already exists (Phone number or Email ID already exists)"
+        : "No leads imported. Please check your Excel file.";
+      return res.status(400).json({
+        success: false,
+        message: errorMsg,
+        data: { inserted: 0, skipped },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully imported ${inserted} leads${skipped > 0 ? " (Some leads skipped: Phone number or Email ID already exists)" : ""}!`,
+      data: { inserted, skipped },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== 14. DOWNLOAD SAMPLE EXCEL TEMPLATE ====================
+export const downloadSampleLeadExcel = async (req: Request, res: Response) => {
+  try {
+    const sampleData = [
+      {
+        "Full Name": "Rahul Sharma",
+        "Phone": "+919876543210",
+        "Email": "rahul.sharma@example.com",
+      },
+      {
+        "Full Name": "John Smith",
+        "Phone": "+14155552671",
+        "Email": "john.smith@example.com",
+      },
+      {
+        "Full Name": "David Wilson",
+        "Phone": "+447911123456",
+        "Email": "david.wilson@example.co.uk",
+      },
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    worksheet["!cols"] = [
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 30 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Leads_Template");
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader("Content-Disposition", 'attachment; filename="sample_leads_template.xlsx"');
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return res.send(buffer);
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -850,5 +1023,6 @@ export default {
   softDeleteLeads,
   getLeadSources,
   bulkUploadFromFile,
+  downloadSampleLeadExcel,
   getAssignedLeadNotifications,
 };
