@@ -868,6 +868,7 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
       const id = uuidv4();
       const whatsapp_number = row["WhatsApp Number"] || row["WhatsApp"] || row["whatsapp"] || row["whatsapp_number"] || null;
       const address_line1 = row["Address"] || row["address"] || row["Address Line 1"] || row["address_line1"] || null;
+      const address_line2 = row["Address Line 2"] || row["address_line2"] || row["Address 2"] || row["address2"] || null;
       const city = row["City"] || row["city"] || null;
       const state = row["State"] || row["state"] || null;
       const postal_code = row["Postal Code"] || row["postal_code"] || row["Zip Code"] || row["Zip"] || row["Pincode"] || null;
@@ -875,10 +876,10 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
 
       await db.sequelize.query(
         `INSERT INTO public.leads (
-           id, full_name, email, phone, whatsapp_number, address_line1, city, state, postal_code, country,
+           id, full_name, email, phone, whatsapp_number, address_line1, address_line2, city, state, postal_code, country,
            lead_source_id, campaign_id, agent_id, lead_status, currency, note, created_at, updated_at
          ) VALUES (
-           :id, :full_name, :email, :phone, :whatsapp_number, :address_line1, :city, :state, :postal_code, :country,
+           :id, :full_name, :email, :phone, :whatsapp_number, :address_line1, :address_line2, :city, :state, :postal_code, :country,
            :lead_source_id, :campaign_id, :agent_id, 'New', :currency, :note, :created_at, :updated_at
          )`,
         {
@@ -889,6 +890,7 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
             phone,
             whatsapp_number,
             address_line1,
+            address_line2,
             city,
             state,
             postal_code,
