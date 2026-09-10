@@ -785,6 +785,7 @@ export default class CompressCrmController extends BaseController {
         console.error("Error saving login activity:", error);
       });
 
+      let userRoleName = "Agent";
       // 🔎 Check if user is an agent and send alert email to Admin
       try {
         const [roleRow] = (await this.db_services.sequelizeWriter.query(
@@ -797,7 +798,7 @@ export default class CompressCrmController extends BaseController {
           { replacements: { system_user_id }, type: QueryTypes.SELECT }
         )) as any[];
 
-        const userRoleName = roleRow?.role_name || "Agent";
+        userRoleName = roleRow?.role_name || "Agent";
         const isAgent = String(userRoleName).trim().toLowerCase() === "agent" || (await this.isActiveAgent(system_user_id));
 
         if (isAgent) {
@@ -822,7 +823,9 @@ export default class CompressCrmController extends BaseController {
         { 
           token, 
           system_user_id,
-          name: userName
+          name: userName,
+          role: userRoleName,
+          role_name: userRoleName,
         },
         "Login successful"
       );
