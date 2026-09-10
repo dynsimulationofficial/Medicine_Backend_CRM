@@ -1,0 +1,119 @@
+export interface InitiateCallParams {
+  calleeNumber: string;
+  callerNumber?: string;
+  agentId?: string;
+}
+
+export class CloudTalkService {
+  private apiId: string;
+  private apiSecret: string;
+  private defaultCallerNumber: string;
+  private defaultAgentId: string;
+  private baseUrl = "https://my.cloudtalk.io/api";
+
+  constructor() {
+    this.apiId = process.env.CLOUDTALK_API_ID || "22Y7ST4CCOCMQQQ5T2BYH";
+    this.apiSecret = process.env.CLOUDTALK_API_SECRET || "wjmPHw36tL81z0+d!IK563siFJQFGt2rJpcW3RXf5h";
+    this.defaultCallerNumber = process.env.CLOUDTALK_CALLER_NUMBER || "+12393290248";
+    this.defaultAgentId = process.env.CLOUDTALK_AGENT_ID || "588998";
+  }
+
+  private getAuthHeader(): string {
+    const credentials = `${this.apiId}:${this.apiSecret}`;
+    return `Basic ${Buffer.from(credentials).toString("base64")}`;
+  }
+
+  /**
+   * Initiate an outbound call via CloudTalk REST API
+   */
+  public async makeCall(params: InitiateCallParams): Promise<any> {
+    const callerNumber = params.callerNumber || this.defaultCallerNumber;
+    const agentId = params.agentId || this.defaultAgentId;
+    const normalizedCallee = params.calleeNumber.startsWith("+")
+      ? params.calleeNumber
+      : `+${params.calleeNumber.replace(/\D/g, "")}`;
+
+    const payload = {
+      callee_number: normalizedCallee,
+      caller_id: callerNumber,
+      agent_id: agentId,
+    };
+
+    try {
+      const response = await fetch(`${this.baseUrl}/calls/create.json`, {
+        method: "POST",
+        headers: {
+          Authorization: this.getAuthHeader(),
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = (await response.json()) as any;
+      if (!response.ok) {
+        console.warn("CloudTalk makeCall response not ok:", data);
+        // Fallback info for client dialer
+        return {
+          success: false,
+          status: response.status,
+          message: data?.message || data?.responseData?.message || "Failed to trigger automated call",
+          dialLink: `cloudtalk://dial/${encodeURIComponent(normalizedCallee)}`,
+          fallbackTel: `tel:${encodeURIComponent(normalizedCallee)}`,
+        };
+      }
+
+      return {
+        success: true,
+        data,
+        dialLink: `cloudtalk://dial/${encodeURIComponent(normalizedCallee)}`,
+        fallbackTel: `tel:${encodeURIComponent(normalizedCallee)}`,
+      };
+    } catch (error: any) {
+      console.error("CloudTalk makeCall error:", error);
+      return {
+        success: false,
+        message: error.message,
+        dialLink: `cloudtalk://dial/${encodeURIComponent(normalizedCallee)}`,
+        fallbackTel: `tel:${encodeURIComponent(normalizedCallee)}`,
+      };
+    }
+  }
+
+  /**
+   * Fetch call details by call ID
+   */
+  public async getCallDetails(callId: string): Promise<any> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calls/show/${callId}.json`, {
+        headers: {
+          Authorization: this.getAuthHeader(),
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) return null;
+      const json = (await response.json()) as any;
+      return json?.responseData?.data || json?.responseData || null;
+    } catch (error) {
+      console.error("CloudTalk getCallDetails error:", error);
+      return null;
+    }
+  }
+
+  /**
+   * Helper to format seconds to human-readable string (e.g. 2m 45s)
+   */
+  public formatDuration(seconds: number): string {
+    if (!seconds || seconds <= 0) return "0s";
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    if (mins > 0) {
+      return `${mins}m ${secs}s`;
+    }
+    return `${secs}s`;
+  }
+}
+
+export const cloudTalkService = new CloudTalkService();
+export default cloudTalkService;

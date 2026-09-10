@@ -14,6 +14,7 @@ import leadController from "../controllers/LeadController";
 import UserManagementController from "../controllers/UserManagementController";
 import reportController from "../controllers/ReportController";
 import trackingController from "../controllers/TrackingController";
+import cloudTalkController from "../controllers/CloudTalkController";
 import { uploadFile } from "../multerconfig";
 import { requireAuth } from "../middleware/auth";
 
@@ -22,10 +23,11 @@ export const SystemuserRouter = express.Router();
 const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
 
-/* ==================== 1. PUBLIC AUTH ROUTES ==================== */
+/* ==================== 1. PUBLIC AUTH & WEBHOOK ROUTES ==================== */
 SystemuserRouter.post("/sendotp", systemuserController.loginRequestOtp);
 SystemuserRouter.post("/login", systemuserController.verifyOtp);
 SystemuserRouter.post("/logout", systemuserController.logout);
+SystemuserRouter.post("/cloudtalk/webhook", cloudTalkController.handleWebhook);
 
 /* ==================== 2. GLOBAL AUTH MIDDLEWARE (All routes below require authentication) ==================== */
 SystemuserRouter.use(requireAuth);
@@ -181,5 +183,8 @@ SystemuserRouter.post("/campaigns/delete", campaignController.deleteCampaign);
 SystemuserRouter.post("/tracking/sync", trackingController.syncTracking);
 SystemuserRouter.post("/tracking/history", trackingController.getTrackingHistory);
 SystemuserRouter.get("/tracking/history/:order_id", trackingController.getTrackingHistory);
+
+/* -------------------- CloudTalk Telephony / VoIP -------------------- */
+SystemuserRouter.post("/cloudtalk/call", cloudTalkController.initiateClickToCall);
 
 export default SystemuserRouter;

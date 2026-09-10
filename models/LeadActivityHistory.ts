@@ -6,6 +6,9 @@ export interface LeadActivityHistoryAttributes {
   agent_id?: string | null;
   disposition_id: string;
   conversation: string;
+  recording_url?: string | null;
+  duration_seconds?: number | null;
+  call_id?: string | null;
   occurred_at: Date;
   created_at?: Date;
   updated_at?: Date;
@@ -17,6 +20,9 @@ export type LeadActivityHistoryCreationAttributes = Optional<
   LeadActivityHistoryAttributes,
   | "id"
   | "agent_id"
+  | "recording_url"
+  | "duration_seconds"
+  | "call_id"
   | "occurred_at"
   | "created_at"
   | "updated_at"
@@ -37,6 +43,9 @@ export const initLeadActivityHistoryModel = (sequelize: Sequelize) => {
     public agent_id!: string | null;
     public disposition_id!: string;
     public conversation!: string;
+    public recording_url!: string | null;
+    public duration_seconds!: number | null;
+    public call_id!: string | null;
     public occurred_at!: Date;
     public created_at!: Date;
     public updated_at!: Date;
@@ -66,6 +75,18 @@ export const initLeadActivityHistoryModel = (sequelize: Sequelize) => {
       conversation: {
         type: DataTypes.TEXT,
         allowNull: false,
+      },
+      recording_url: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      duration_seconds: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      call_id: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
       },
       occurred_at: {
         type: DataTypes.DATE,
