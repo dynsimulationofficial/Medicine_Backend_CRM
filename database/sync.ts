@@ -89,6 +89,7 @@ export async function seedInitialData() {
       BLANK_CALL: "9e2b8a76-d9ed-46c8-8a56-3de9fdaafc7f",
       VOICE_MAIL_FULL: "6f4a283f-3086-442d-b5fb-52c5f82c1c4e",
       VOICE_MAIL_NOT_SET: "ea8fddbc-83f0-4495-83d6-c68f12a7fd5e",
+      DND: "c28b5e4a-9e12-4c28-98e3-0d6e2e5b7b01",
       OTHERS: "d7524d2d-57e6-48aa-bcb2-3506fee8a3b4",
     } as const;
 
@@ -102,6 +103,7 @@ export async function seedInitialData() {
       { id: DISPOSITION_IDS.BLANK_CALL, name: "Blank Call", description: "Blank call encountered", is_active: true },
       { id: DISPOSITION_IDS.VOICE_MAIL_FULL, name: "Voice Mail Full", description: "Lead's voicemail box is full", is_active: true },
       { id: DISPOSITION_IDS.VOICE_MAIL_NOT_SET, name: "Voice Mail Not Set", description: "Lead has not set up voicemail", is_active: true },
+      { id: DISPOSITION_IDS.DND, name: "DND", description: "Do Not Disturb", is_active: true },
       { id: DISPOSITION_IDS.OTHERS, name: "Others", description: "Other disposition", is_active: true },
     ];
 
