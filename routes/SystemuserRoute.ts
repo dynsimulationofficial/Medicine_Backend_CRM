@@ -7,7 +7,7 @@ import leadOrderController from "../controllers/LeadOrderController";
 import leadDocumentController from "../controllers/LeadDocumentController";
 import leadTaskController from "../controllers/LeadTaskController";
 import leadActivityHistoryController from "../controllers/LeadActivityHistoryController";
-import express from "express";
+import express, { Request, Response } from "express";
 import CompressCrmController from "../controllers/AdvanceLeadCRMController";
 import UserActivityController from "../controllers/UserActivityController";
 import leadController from "../controllers/LeadController";
