@@ -15,6 +15,7 @@ import UserManagementController from "../controllers/UserManagementController";
 import reportController from "../controllers/ReportController";
 import trackingController from "../controllers/TrackingController";
 import cloudTalkController from "../controllers/CloudTalkController";
+import autoDialerController from "../controllers/AutoDialerController";
 import { uploadFile } from "../multerconfig";
 import { requireAuth } from "../middleware/auth";
 
@@ -106,7 +107,7 @@ SystemuserRouter.get("/leads/medicines/suggestions", leadOrderController.getMedi
 /* -------------------- Lead Orders -------------------- */
 SystemuserRouter.post("/leads/orders/create", leadOrderController.createOrder);
 SystemuserRouter.post("/leads/orders/update", leadOrderController.updateOrder);
-SystemuserRouter.post("/leads/orders/save", (req, res) => {
+SystemuserRouter.post("/leads/orders/save", (req: Request, res: Response) => {
   if (req.body?.id || req.body?.order_id) {
     return leadOrderController.updateOrder(req, res);
   }
@@ -187,5 +188,10 @@ SystemuserRouter.get("/tracking/history/:order_id", trackingController.getTracki
 
 /* -------------------- CloudTalk Telephony / VoIP -------------------- */
 SystemuserRouter.post("/cloudtalk/call", cloudTalkController.initiateClickToCall);
+
+/* -------------------- Auto-Dialer Queue & Controller -------------------- */
+SystemuserRouter.get("/leads/dialer/queue", autoDialerController.getDialerQueue);
+SystemuserRouter.post("/leads/dialer/call-next", autoDialerController.callNextLead);
+SystemuserRouter.post("/leads/dialer/quick-disposition", autoDialerController.saveQuickDisposition);
 
 export default SystemuserRouter;
