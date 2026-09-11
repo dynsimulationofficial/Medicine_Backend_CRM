@@ -69,7 +69,7 @@ export const detectCountryAndCurrency = (
   phone?: string | null,
   country?: string | null,
   currency?: string | null
-): { country: string | null; currency: string } => {
+): { country: string; currency: string } => {
   let detectedCountry = country ? country.trim() : null;
   let detectedCurrency = currency ? currency.trim().toUpperCase() : null;
 
@@ -81,7 +81,7 @@ export const detectCountryAndCurrency = (
     } else if (cleanP.startsWith("+44") || cleanP.startsWith("0044") || (cleanP.startsWith("44") && cleanP.length >= 12)) {
       if (!detectedCountry) detectedCountry = "UK";
       if (!detectedCurrency) detectedCurrency = "GBP";
-    } else if (cleanP.startsWith("+1") || cleanP.startsWith("001") || (cleanP.startsWith("1") && cleanP.length === 11)) {
+    } else if (cleanP.startsWith("+1") || cleanP.startsWith("001") || (cleanP.startsWith("1") && cleanP.length === 11) || cleanP.length === 10) {
       if (!detectedCountry) detectedCountry = "USA";
       if (!detectedCurrency) detectedCurrency = "USD";
     }
@@ -94,7 +94,7 @@ export const detectCountryAndCurrency = (
     else if (cLow === "usa" || cLow === "us" || cLow === "united states") detectedCurrency = "USD";
   }
 
-  return { country: detectedCountry, currency: detectedCurrency || "USD" };
+  return { country: detectedCountry || "USA", currency: detectedCurrency || "USD" };
 };
 
 // ==================== 1. CREATE LEAD ====================
@@ -850,7 +850,7 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
 
     const workbook = XLSX.read(file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
-    const rawRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    const rawRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: false, defval: "" });
 
     if (!rawRows.length) {
       return res.status(400).json({ success: false, message: "Excel sheet is empty" });
@@ -877,7 +877,7 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
         ""
       ).trim();
 
-      const phone = String(
+      const rawPhone = String(
         row["Phone"] ||
         row["phone"] ||
         row["Mobile"] ||
@@ -896,13 +896,12 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
         ""
       ).trim().toLowerCase();
 
-      if (!full_name || !phone) {
+      if (!full_name || !rawPhone) {
         skipped++;
         continue;
       }
 
-      const phoneClean = phone.replace(/(?!^\+)[^0-9]/g, "");
-      const phoneDigits = phoneClean.replace(/\D/g, "");
+      const phoneDigits = rawPhone.replace(/\D/g, "");
 
       if (phoneDigits.length < 5) {
         skipped++;
@@ -914,6 +913,18 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
         skipped++;
         duplicateFound = true;
         continue;
+      }
+
+      // Ensure exact country code format: +1 for USA 10-digit / 11-digit numbers
+      let phone = rawPhone.replace(/[^\d+]/g, ""); // keep + and digits
+      if (!phone.startsWith("+")) {
+        if (phoneDigits.length === 11 && phoneDigits.startsWith("1")) {
+          phone = `+${phoneDigits}`;
+        } else if (phoneDigits.length === 10) {
+          phone = `+1${phoneDigits}`;
+        } else {
+          phone = `+${phoneDigits}`;
+        }
       }
 
       // Check duplicate phone or email in database
