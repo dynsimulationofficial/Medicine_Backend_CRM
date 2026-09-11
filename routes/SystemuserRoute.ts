@@ -65,6 +65,7 @@ SystemuserRouter.post("/leads/unassigned/filter", leadController.filterUnassigne
 SystemuserRouter.get("/allagents", leadController.getAllAgents);
 SystemuserRouter.get("/leadsources", leadController.getLeadSources);
 SystemuserRouter.get("/leads/random", leadController.getNextUnassignedLead);
+SystemuserRouter.get("/leads/assigned/next", leadController.getNextAssignedLead);
 
 /* -------------------- Lead Activity -------------------- */
 SystemuserRouter.post("/leads/activities/create", leadActivityHistoryController.createActivity);

@@ -769,6 +769,75 @@ export const getNextUnassignedLead = async (req: Request, res: Response) => {
   }
 };
 
+// ==================== 12.1. GET NEXT ASSIGNED LEAD ====================
+export const getNextAssignedLead = async (req: Request, res: Response) => {
+  try {
+    const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
+    const currentLeadId = (req.query.current_lead_id as string) || (req.query.lead_id as string) || null;
+    const userIsAdmin = await checkIsAdmin(authUserId);
+    const agentId = (req.query.agent_id as string) || (!userIsAdmin && authUserId ? authUserId : null);
+
+    if (!agentId) {
+      return res.status(400).json({ success: false, message: "Agent ID is required" });
+    }
+
+    let nextLead: any = null;
+    let isLoop = false;
+
+    if (currentLeadId) {
+      const currentRows: any[] = await db.sequelize.query(
+        `SELECT id, created_at FROM public.leads WHERE id = :currentLeadId AND deleted_at IS NULL LIMIT 1`,
+        { replacements: { currentLeadId }, type: QueryTypes.SELECT }
+      );
+
+      if (currentRows.length > 0) {
+        const currentCreatedAt = currentRows[0].created_at;
+        // Find next assigned lead down the list (created_at < current OR same created_at with id < current)
+        const nextRows: any[] = await db.sequelize.query(
+          `SELECT * FROM public.leads 
+           WHERE agent_id = :agentId 
+             AND deleted_at IS NULL 
+             AND (created_at < :currentCreatedAt OR (created_at = :currentCreatedAt AND id < :currentLeadId))
+           ORDER BY created_at DESC, id DESC 
+           LIMIT 1`,
+          { replacements: { agentId, currentCreatedAt, currentLeadId }, type: QueryTypes.SELECT }
+        );
+
+        if (nextRows.length > 0) {
+          nextLead = nextRows[0];
+          isLoop = false;
+        }
+      }
+    }
+
+    // If reached the end or no currentLeadId provided, loop back to the first assigned lead (newest on top)
+    if (!nextLead) {
+      const firstRows: any[] = await db.sequelize.query(
+        `SELECT * FROM public.leads 
+         WHERE agent_id = :agentId 
+           AND deleted_at IS NULL 
+           ${currentLeadId ? "AND id != :currentLeadId" : ""}
+         ORDER BY created_at DESC, id DESC 
+         LIMIT 1`,
+        { replacements: { agentId, currentLeadId }, type: QueryTypes.SELECT }
+      );
+
+      if (firstRows.length > 0) {
+        nextLead = firstRows[0];
+        isLoop = Boolean(currentLeadId);
+      }
+    }
+
+    if (!nextLead) {
+      return res.status(200).json({ success: true, data: null, message: "No other assigned leads found" });
+    }
+
+    return res.status(200).json({ success: true, data: nextLead, is_loop: isLoop });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ==================== 13. BULK UPLOAD FROM FILE ====================
 export const bulkUploadFromFile = async (req: Request, res: Response) => {
   try {
@@ -1017,6 +1086,7 @@ export default {
   bulkAssignLeads,
   getUnassignedLeads,
   getNextUnassignedLead,
+  getNextAssignedLead,
   getAllAgents,
   updateLead,
   assignLeadToAgent,
