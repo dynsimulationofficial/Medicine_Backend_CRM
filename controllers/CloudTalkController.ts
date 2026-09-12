@@ -78,13 +78,25 @@ export const initiateClickToCall = async (req: Request, res: Response) => {
       }
     }
 
+    // Extract Call ID from CloudTalk response
+    const callId =
+      callResult.callId ||
+      String(
+        callResult.data?.responseData?.data?.id ||
+        callResult.data?.responseData?.id ||
+        callResult.data?.data?.id ||
+        callResult.data?.id ||
+        ""
+      ).trim();
+    const recordingUrl = callId ? `/cloudtalk/recordings/${callId}` : null;
+
     // Initial activity log (only on successful call dispatch)
     const activityId = uuidv4();
     await db.sequelize.query(
       `INSERT INTO public.lead_activity_history (
-         id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at, updated_at
+         id, lead_id, agent_id, disposition_id, conversation, call_id, recording_url, occurred_at, created_at, updated_at
        ) VALUES (
-         :id, :lead_id, :agent_id, :disposition_id, :conversation, NOW(), NOW(), NOW()
+         :id, :lead_id, :agent_id, :disposition_id, :conversation, :call_id, :recording_url, NOW(), NOW(), NOW()
        )`,
       {
         replacements: {
@@ -93,6 +105,8 @@ export const initiateClickToCall = async (req: Request, res: Response) => {
           agent_id: resolvedAgentId,
           disposition_id: dispositionId,
           conversation: `Outbound Call initiated to ${targetPhone} via CloudTalk`,
+          call_id: callId || null,
+          recording_url: recordingUrl,
         },
         type: QueryTypes.INSERT,
       }
@@ -107,6 +121,8 @@ export const initiateClickToCall = async (req: Request, res: Response) => {
         dialLink: callResult.dialLink,
         fallbackTel: callResult.fallbackTel,
         activity_id: activityId,
+        call_id: callId || null,
+        recording_url: recordingUrl,
         cloudtalk: callResult,
       },
     });
@@ -246,7 +262,65 @@ export const handleWebhook = async (req: Request, res: Response) => {
   }
 };
 
+// ==================== 3. STREAM CALL RECORDING AUDIO ====================
+export const streamRecording = async (req: Request, res: Response) => {
+  try {
+    const { callId } = req.params;
+    if (!callId) {
+      return res.status(400).json({ success: false, message: "Call ID is required" });
+    }
+
+    const recordingData = await cloudTalkService.getRecording(callId);
+    if (!recordingData.ok || !recordingData.buffer) {
+      return res.status(recordingData.status || 404).json({
+        success: false,
+        message: recordingData.message || "Recording not found or not ready yet",
+      });
+    }
+
+    const totalSize = recordingData.buffer.length;
+    const range = req.headers.range;
+
+    // Support HTTP Range requests for smooth audio seeking in browser player
+    if (range) {
+      const parts = range.replace(/bytes=/, "").split("-");
+      const start = parseInt(parts[0], 10);
+      const end = parts[1] ? parseInt(parts[1], 10) : totalSize - 1;
+
+      if (start >= totalSize || end >= totalSize) {
+        res.setHeader("Content-Range", `bytes */${totalSize}`);
+        return res.status(416).send("Requested range not satisfiable");
+      }
+
+      const chunkSize = end - start + 1;
+      res.writeHead(206, {
+        "Content-Range": `bytes ${start}-${end}/${totalSize}`,
+        "Accept-Ranges": "bytes",
+        "Content-Length": chunkSize,
+        "Content-Type": recordingData.contentType || "audio/wav",
+        "Cache-Control": "public, max-age=86400",
+      });
+      return res.end(recordingData.buffer.subarray(start, end + 1));
+    }
+
+    res.setHeader("Content-Type", recordingData.contentType || "audio/wav");
+    res.setHeader("Content-Length", totalSize);
+    res.setHeader("Accept-Ranges", "bytes");
+    res.setHeader("Content-Disposition", `inline; filename="call_${callId}.wav"`);
+    res.setHeader("Cache-Control", "public, max-age=86400");
+
+    return res.status(200).send(recordingData.buffer);
+  } catch (error: any) {
+    console.error("streamRecording error:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message || "Failed to stream recording",
+    });
+  }
+};
+
 export default {
   initiateClickToCall,
   handleWebhook,
+  streamRecording,
 };

@@ -202,6 +202,18 @@ async function ensureTrackingLogsTable(sequelize: Sequelize) {
   `);
 }
 
+async function ensureLeadActivityHistoryColumns(sequelize: Sequelize) {
+  await sequelize.query(`
+    ALTER TABLE public.lead_activity_history
+      ADD COLUMN IF NOT EXISTS recording_url text NULL,
+      ADD COLUMN IF NOT EXISTS duration_seconds integer NULL,
+      ADD COLUMN IF NOT EXISTS call_id varchar(100) NULL;
+
+    CREATE INDEX IF NOT EXISTS idx_activity_call_id
+      ON public.lead_activity_history (call_id);
+  `);
+}
+
 export async function syncDatabase(sequelize: Sequelize) {
   try {
     console.log("🔄 Syncing database...");
@@ -212,10 +224,11 @@ export async function syncDatabase(sequelize: Sequelize) {
     // 2) Sync models (creates missing tables)
     await sequelize.sync();
 
-    // 3) Ensure new columns/index/FK exist for system_users and leads
+    // 3) Ensure new columns/index/FK exist for system_users, leads, and activity history
     await ensureSystemUsersBlockColumns(sequelize);
     await ensureMedicineColumns(sequelize);
     await ensureTrackingLogsTable(sequelize);
+    await ensureLeadActivityHistoryColumns(sequelize);
 
     console.log("✅ Tables are in sync");
 

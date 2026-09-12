@@ -188,6 +188,7 @@ SystemuserRouter.get("/tracking/history/:order_id", trackingController.getTracki
 
 /* -------------------- CloudTalk Telephony / VoIP -------------------- */
 SystemuserRouter.post("/cloudtalk/call", cloudTalkController.initiateClickToCall);
+SystemuserRouter.get("/cloudtalk/recordings/:callId", cloudTalkController.streamRecording);
 
 /* -------------------- Auto-Dialer Queue & Controller -------------------- */
 SystemuserRouter.get("/leads/dialer/queue", autoDialerController.getDialerQueue);

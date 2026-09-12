@@ -63,7 +63,7 @@ export const getAllActivities = async (req: Request, res: Response) => {
          d.name AS disposition,
          ah.disposition_id,
          ah.conversation,
-         ah.recording_url,
+         COALESCE(ah.recording_url, CASE WHEN ah.call_id IS NOT NULL AND TRIM(ah.call_id) != '' THEN CONCAT('/cloudtalk/recordings/', ah.call_id) ELSE NULL END) AS recording_url,
          ah.duration_seconds,
          ah.call_id,
          ah.occurred_at,

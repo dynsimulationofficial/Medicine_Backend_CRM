@@ -63,9 +63,18 @@ export class CloudTalkService {
         };
       }
 
+      const callId = String(
+        data?.responseData?.data?.id ||
+        data?.responseData?.id ||
+        data?.data?.id ||
+        data?.id ||
+        ""
+      ).trim();
+
       return {
         success: true,
         data,
+        callId: callId || undefined,
         dialLink: `cloudtalk://dial/${encodeURIComponent(normalizedCallee)}`,
         fallbackTel: `tel:${encodeURIComponent(normalizedCallee)}`,
       };
@@ -98,6 +107,46 @@ export class CloudTalkService {
     } catch (error) {
       console.error("CloudTalk getCallDetails error:", error);
       return null;
+    }
+  }
+
+  /**
+   * Fetch call audio recording binary from CloudTalk API
+   */
+  public async getRecording(callId: string): Promise<{
+    ok: boolean;
+    status: number;
+    contentType?: string;
+    buffer?: Buffer;
+    message?: string;
+  }> {
+    try {
+      const response = await fetch(`${this.baseUrl}/calls/recording/${callId}.json`, {
+        headers: {
+          Authorization: this.getAuthHeader(),
+        },
+      });
+
+      if (!response.ok) {
+        let msg = "Recording not found or not ready yet";
+        try {
+          const json = (await response.json()) as any;
+          msg = json?.responseData?.message || json?.message || msg;
+        } catch {}
+        return { ok: false, status: response.status, message: msg };
+      }
+
+      const arrayBuffer = await response.arrayBuffer();
+      const buffer = Buffer.from(arrayBuffer);
+      return {
+        ok: true,
+        status: 200,
+        contentType: response.headers.get("content-type") || "audio/wav",
+        buffer,
+      };
+    } catch (error: any) {
+      console.error("CloudTalk getRecording error:", error);
+      return { ok: false, status: 500, message: error.message };
     }
   }
 

@@ -225,13 +225,25 @@ export class AutoDialerController {
         }
       }
 
+      // Extract Call ID from CloudTalk response
+      const callId =
+        callResult.callId ||
+        String(
+          callResult.data?.responseData?.data?.id ||
+          callResult.data?.responseData?.id ||
+          callResult.data?.data?.id ||
+          callResult.data?.id ||
+          ""
+        ).trim();
+      const recordingUrl = callId ? `/cloudtalk/recordings/${callId}` : null;
+
       // Initial activity log entry for this automated call
       const activityId = uuidv4();
       await db.sequelize.query(
         `INSERT INTO public.lead_activity_history (
-           id, lead_id, agent_id, disposition_id, conversation, occurred_at, created_at, updated_at
+           id, lead_id, agent_id, disposition_id, conversation, call_id, recording_url, occurred_at, created_at, updated_at
          ) VALUES (
-           :id, :lead_id, :agent_id, :disposition_id, :conversation, NOW(), NOW(), NOW()
+           :id, :lead_id, :agent_id, :disposition_id, :conversation, :call_id, :recording_url, NOW(), NOW(), NOW()
          )`,
         {
           replacements: {
@@ -240,6 +252,8 @@ export class AutoDialerController {
             agent_id: resolvedAgentId,
             disposition_id: dispositionId,
             conversation: `Auto-Dialer Outbound Call to ${targetPhone} via CloudTalk`,
+            call_id: callId || null,
+            recording_url: recordingUrl,
           },
           type: QueryTypes.INSERT,
         }
@@ -256,6 +270,8 @@ export class AutoDialerController {
           dialLink: callResult.dialLink,
           fallbackTel: callResult.fallbackTel,
           activity_id: activityId,
+          call_id: callId || null,
+          recording_url: recordingUrl,
           cloudtalk: callResult,
         },
       });
