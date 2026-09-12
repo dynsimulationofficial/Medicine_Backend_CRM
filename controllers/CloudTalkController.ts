@@ -90,28 +90,6 @@ export const initiateClickToCall = async (req: Request, res: Response) => {
       ).trim();
     const recordingUrl = callId ? `/cloudtalk/recordings/${callId}` : null;
 
-    // Initial activity log (only on successful call dispatch)
-    const activityId = uuidv4();
-    await db.sequelize.query(
-      `INSERT INTO public.lead_activity_history (
-         id, lead_id, agent_id, disposition_id, conversation, call_id, recording_url, occurred_at, created_at, updated_at
-       ) VALUES (
-         :id, :lead_id, :agent_id, :disposition_id, :conversation, :call_id, :recording_url, NOW(), NOW(), NOW()
-       )`,
-      {
-        replacements: {
-          id: activityId,
-          lead_id: lead.id,
-          agent_id: resolvedAgentId,
-          disposition_id: dispositionId,
-          conversation: `Outbound Call initiated to ${targetPhone} via CloudTalk`,
-          call_id: callId || null,
-          recording_url: recordingUrl,
-        },
-        type: QueryTypes.INSERT,
-      }
-    );
-
     return res.status(200).json({
       success: true,
       message: `Calling ${lead.full_name || targetPhone}...`,
@@ -120,7 +98,6 @@ export const initiateClickToCall = async (req: Request, res: Response) => {
         phone: targetPhone,
         dialLink: callResult.dialLink,
         fallbackTel: callResult.fallbackTel,
-        activity_id: activityId,
         call_id: callId || null,
         recording_url: recordingUrl,
         cloudtalk: callResult,

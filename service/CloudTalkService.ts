@@ -162,6 +162,61 @@ export class CloudTalkService {
     }
     return `${secs}s`;
   }
+
+  /**
+   * Find recent call recordings for a target phone number
+   */
+  public async getRecentRecordingsForPhone(phone: string, limit = 25): Promise<Array<{
+    callId: string;
+    durationSeconds: number;
+    startedAt: string;
+    recordingUrl: string;
+  }>> {
+    try {
+      const cleanPhone = phone.replace(/\D/g, "");
+      if (cleanPhone.length < 7) return [];
+      const searchTail = cleanPhone.slice(-10); // match last 10 digits
+
+      const response = await fetch(`${this.baseUrl}/calls/index.json?limit=${limit}`, {
+        headers: {
+          Authorization: this.getAuthHeader(),
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) return [];
+      const json = (await response.json()) as any;
+      const calls: any[] = json?.responseData?.data || [];
+
+      const matchedRecordings: Array<{
+        callId: string;
+        durationSeconds: number;
+        startedAt: string;
+        recordingUrl: string;
+      }> = [];
+
+      for (const item of calls) {
+        const cdr = item.Cdr || item;
+        const external = String(cdr.public_external || cdr.caller || cdr.callee || "").replace(/\D/g, "");
+        const recorded = Boolean(cdr.recorded);
+        const callId = String(cdr.id || "");
+
+        if (callId && recorded && external.includes(searchTail)) {
+          matchedRecordings.push({
+            callId,
+            durationSeconds: Number(cdr.talking_time || cdr.billsec || 0),
+            startedAt: cdr.started_at,
+            recordingUrl: `/cloudtalk/recordings/${callId}`,
+          });
+        }
+      }
+
+      return matchedRecordings;
+    } catch (err) {
+      console.error("getRecentRecordingsForPhone error:", err);
+      return [];
+    }
+  }
 }
 
 export const cloudTalkService = new CloudTalkService();

@@ -777,12 +777,16 @@ export const getNextAssignedLead = async (req: Request, res: Response) => {
     const userIsAdmin = await checkIsAdmin(authUserId);
     const agentId = (req.query.agent_id as string) || (!userIsAdmin && authUserId ? authUserId : null);
 
-    if (!agentId) {
-      return res.status(400).json({ success: false, message: "Agent ID is required" });
-    }
-
     let nextLead: any = null;
     let isLoop = false;
+
+    // Filter by agent if specified, or if non-admin agent logged in
+    const agentFilter = agentId
+      ? `AND l.agent_id = :agentId`
+      : authUserId && !userIsAdmin
+      ? `AND l.agent_id = :authUserId`
+      : ``;
+    const replacements: any = { agentId, authUserId, currentLeadId };
 
     if (currentLeadId) {
       const currentRows: any[] = await db.sequelize.query(
@@ -792,15 +796,16 @@ export const getNextAssignedLead = async (req: Request, res: Response) => {
 
       if (currentRows.length > 0) {
         const currentCreatedAt = currentRows[0].created_at;
+        replacements.currentCreatedAt = currentCreatedAt;
         // Find next assigned lead down the list (created_at < current OR same created_at with id < current)
         const nextRows: any[] = await db.sequelize.query(
-          `SELECT * FROM public.leads 
-           WHERE agent_id = :agentId 
-             AND deleted_at IS NULL 
-             AND (created_at < :currentCreatedAt OR (created_at = :currentCreatedAt AND id < :currentLeadId))
-           ORDER BY created_at DESC, id DESC 
+          `SELECT l.* FROM public.leads l
+           WHERE l.deleted_at IS NULL 
+             ${agentFilter}
+             AND (l.created_at < :currentCreatedAt OR (l.created_at = :currentCreatedAt AND l.id < :currentLeadId))
+           ORDER BY l.created_at DESC, l.id DESC 
            LIMIT 1`,
-          { replacements: { agentId, currentCreatedAt, currentLeadId }, type: QueryTypes.SELECT }
+          { replacements, type: QueryTypes.SELECT }
         );
 
         if (nextRows.length > 0) {
@@ -813,13 +818,13 @@ export const getNextAssignedLead = async (req: Request, res: Response) => {
     // If reached the end or no currentLeadId provided, loop back to the first assigned lead (newest on top)
     if (!nextLead) {
       const firstRows: any[] = await db.sequelize.query(
-        `SELECT * FROM public.leads 
-         WHERE agent_id = :agentId 
-           AND deleted_at IS NULL 
-           ${currentLeadId ? "AND id != :currentLeadId" : ""}
-         ORDER BY created_at DESC, id DESC 
+        `SELECT l.* FROM public.leads l
+         WHERE l.deleted_at IS NULL 
+           ${agentFilter}
+           ${currentLeadId ? "AND l.id != :currentLeadId" : ""}
+         ORDER BY l.created_at DESC, l.id DESC 
          LIMIT 1`,
-        { replacements: { agentId, currentLeadId }, type: QueryTypes.SELECT }
+        { replacements, type: QueryTypes.SELECT }
       );
 
       if (firstRows.length > 0) {

@@ -29,6 +29,7 @@ SystemuserRouter.post("/sendotp", systemuserController.loginRequestOtp);
 SystemuserRouter.post("/login", systemuserController.verifyOtp);
 SystemuserRouter.post("/logout", systemuserController.logout);
 SystemuserRouter.post("/cloudtalk/webhook", cloudTalkController.handleWebhook);
+SystemuserRouter.get("/cloudtalk/recordings/:callId", cloudTalkController.streamRecording);
 
 /* ==================== 2. GLOBAL AUTH MIDDLEWARE (All routes below require authentication) ==================== */
 SystemuserRouter.use(requireAuth);
@@ -188,7 +189,6 @@ SystemuserRouter.get("/tracking/history/:order_id", trackingController.getTracki
 
 /* -------------------- CloudTalk Telephony / VoIP -------------------- */
 SystemuserRouter.post("/cloudtalk/call", cloudTalkController.initiateClickToCall);
-SystemuserRouter.get("/cloudtalk/recordings/:callId", cloudTalkController.streamRecording);
 
 /* -------------------- Auto-Dialer Queue & Controller -------------------- */
 SystemuserRouter.get("/leads/dialer/queue", autoDialerController.getDialerQueue);
