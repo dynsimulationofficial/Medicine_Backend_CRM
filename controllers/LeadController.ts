@@ -986,6 +986,82 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
           type: QueryTypes.INSERT,
         }
       );
+
+      // Optional: Auto-create order if Product is present in the row
+      const rawProduct = (
+        row["Product"] ||
+        row["product"] ||
+        row["Medicine"] ||
+        row["medicine"] ||
+        row["Medicine Name"] ||
+        row["medicine_name"] ||
+        ""
+      )
+        .toString()
+        .trim();
+
+      if (rawProduct) {
+        const rawQuantity = row["Quantity"] || row["quantity"] || row["Qty"] || row["qty"];
+        const rawPrice =
+          row["Price"] ||
+          row["price"] ||
+          row["Amount"] ||
+          row["amount"] ||
+          row["Total Price"] ||
+          row["total_price"];
+
+        const quantity = Math.max(1, parseInt(String(rawQuantity || "1").replace(/\D/g, "")) || 1);
+        const price = parseFloat(String(rawPrice || "0").replace(/[^\d.]/g, "")) || 0;
+
+        const orderId = uuidv4();
+        const orderItemId = uuidv4();
+
+        // 1. Insert into lead_orders
+        await db.sequelize.query(
+          `INSERT INTO public.lead_orders (
+             id, lead_id, agent_id, total_items, grand_total,
+             order_status, payment_status, payment_mode, order_notes, created_at, updated_at
+           ) VALUES (
+             :orderId, :leadId, :agentId, 1, :grandTotal,
+             'Delivered', 'Paid', 'Prepaid', 'Previous purchase imported via bulk upload', :createdAt, :updatedAt
+           )`,
+          {
+            replacements: {
+              orderId,
+              leadId: id,
+              agentId: agent_id || null,
+              grandTotal: price,
+              createdAt: now,
+              updatedAt: now,
+            },
+            type: QueryTypes.INSERT,
+          }
+        );
+
+        // 2. Insert into lead_order_items (Direct mapping, no division)
+        await db.sequelize.query(
+          `INSERT INTO public.lead_order_items (
+             id, order_id, lead_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at
+           ) VALUES (
+             :itemId, :orderId, :leadId, :medicineName, 'Pcs', :quantity, :rate, :totalPrice, :createdAt, :updatedAt
+           )`,
+          {
+            replacements: {
+              itemId: orderItemId,
+              orderId,
+              leadId: id,
+              medicineName: rawProduct,
+              quantity,
+              rate: price,
+              totalPrice: price,
+              createdAt: now,
+              updatedAt: now,
+            },
+            type: QueryTypes.INSERT,
+          }
+        );
+      }
+
       inserted++;
     }
 
@@ -1015,19 +1091,43 @@ export const downloadSampleLeadExcel = async (req: Request, res: Response) => {
   try {
     const sampleData = [
       {
-        "Full Name": "Rahul Sharma",
-        "Phone": "+919876543210",
-        "Email": "rahul.sharma@example.com",
+        "Full Name": "Ronald E Wilcox",
+        "Phone": "+16027692922",
+        "Email": "ronwilcox@cox.net",
+        "Address Line 1": "120 W ALMERIA RD",
+        "Address Line 2": "Suite 100",
+        "City": "Phoenix",
+        "State": "AZ",
+        "Zip Code": "85003-1139",
+        "Product": "Cenforce 100mg",
+        "Quantity": 2,
+        "Price": 100,
       },
       {
         "Full Name": "John Smith",
         "Phone": "+14155552671",
         "Email": "john.smith@example.com",
+        "Address Line 1": "742 Evergreen Terrace",
+        "Address Line 2": "Apt 4B",
+        "City": "Springfield",
+        "State": "OR",
+        "Zip Code": "97477",
+        "Product": "Modafinil 200mg",
+        "Quantity": 1,
+        "Price": 120,
       },
       {
         "Full Name": "David Wilson",
         "Phone": "+447911123456",
         "Email": "david.wilson@example.co.uk",
+        "Address Line 1": "10 Downing Street",
+        "Address Line 2": "Westminster",
+        "City": "London",
+        "State": "Greater London",
+        "Zip Code": "SW1A 2AA",
+        "Product": "Kamagra Oral Jelly",
+        "Quantity": 5,
+        "Price": 150,
       },
     ];
 
@@ -1036,6 +1136,14 @@ export const downloadSampleLeadExcel = async (req: Request, res: Response) => {
       { wch: 20 },
       { wch: 18 },
       { wch: 30 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 10 },
+      { wch: 15 },
+      { wch: 22 },
+      { wch: 10 },
+      { wch: 12 },
     ];
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, "Leads_Template");
