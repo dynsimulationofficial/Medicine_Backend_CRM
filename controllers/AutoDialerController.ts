@@ -13,6 +13,7 @@ export class AutoDialerController {
     phone?: string;
     is_connected?: boolean;
     timestamp: number;
+    campaign_id?: string | null;
   } | null = null;
 
   public activeParallelCampaign: {
@@ -188,7 +189,7 @@ export class AutoDialerController {
 
       // Fetch lead details
       const [lead]: any[] = await db.sequelize.query(
-        `SELECT id, lead_number, full_name, phone, whatsapp_number, agent_id, lead_status 
+        `SELECT id, lead_number, full_name, phone, whatsapp_number, agent_id, lead_status, campaign_id 
          FROM public.leads 
          WHERE id = :lead_id AND deleted_at IS NULL 
          LIMIT 1`,
@@ -271,6 +272,7 @@ export class AutoDialerController {
         phone: targetPhone,
         is_connected: true,
         timestamp: Date.now(),
+        campaign_id: lead.campaign_id || null,
       };
 
       return res.status(200).json({
@@ -719,6 +721,7 @@ export class AutoDialerController {
                 phone: matchedLead.phone || liveCall.phone,
                 is_connected: true,
                 timestamp: Date.now(),
+                campaign_id: matchedLead.campaign_id || null,
               };
             }
           }
