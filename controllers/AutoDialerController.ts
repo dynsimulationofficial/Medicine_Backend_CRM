@@ -643,6 +643,32 @@ export class AutoDialerController {
       data: this.activeCall,
     });
   };
+
+  /**
+   * 8. GET /leads/dialer/call-status
+   * Checks real-time status of the current active call via CloudTalk API
+   */
+  public checkCallStatus = async (req: Request, res: Response) => {
+    try {
+      const callId = req.query.call_id as string | undefined;
+      const status = await cloudTalkService.getLatestCallStatus(callId);
+
+      // If answered, mark activeCall as connected
+      if (status.isAnswered && this.activeCall) {
+        this.activeCall.is_connected = true;
+      }
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          ...status,
+          activeCall: this.activeCall,
+        },
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  };
 }
 
 export const autoDialerController = new AutoDialerController();

@@ -194,6 +194,7 @@ SystemuserRouter.post("/cloudtalk/call", cloudTalkController.initiateClickToCall
 SystemuserRouter.get("/leads/dialer/queue", autoDialerController.getDialerQueue);
 SystemuserRouter.post("/leads/dialer/call-next", autoDialerController.callNextLead);
 SystemuserRouter.post("/leads/dialer/call-connected", autoDialerController.markCallConnected);
+SystemuserRouter.get("/leads/dialer/call-status", autoDialerController.checkCallStatus);
 SystemuserRouter.post("/leads/dialer/quick-disposition", autoDialerController.saveQuickDisposition);
 SystemuserRouter.post("/leads/dialer/auto-skip-timeout", autoDialerController.autoSkipTimeout);
 SystemuserRouter.get("/leads/dialer/campaign-stats", autoDialerController.getCampaignDialerStats);

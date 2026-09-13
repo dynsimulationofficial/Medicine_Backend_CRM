@@ -90,6 +90,55 @@ export class CloudTalkService {
   }
 
   /**
+   * Fetch latest call status from CloudTalk to check if call is answered / ended
+   */
+  public async getLatestCallStatus(callId?: string): Promise<{
+    callId?: string;
+    isAnswered: boolean;
+    isEnded: boolean;
+    talkingTime: number;
+    cdr?: any;
+  }> {
+    try {
+      const url = callId
+        ? `${this.baseUrl}/calls/index.json?id=${encodeURIComponent(callId)}`
+        : `${this.baseUrl}/calls/index.json?limit=1`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: this.getAuthHeader(),
+          Accept: "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        return { isAnswered: false, isEnded: false, talkingTime: 0 };
+      }
+
+      const json = (await response.json()) as any;
+      const cdr = json?.responseData?.data?.[0]?.Cdr;
+      if (!cdr) {
+        return { isAnswered: false, isEnded: false, talkingTime: 0 };
+      }
+
+      const isAnswered = !!cdr.answered_at;
+      const isEnded = !!cdr.ended_at;
+      const talkingTime = Number(cdr.talking_time || cdr.billsec || 0);
+
+      return {
+        callId: cdr.id,
+        isAnswered,
+        isEnded,
+        talkingTime,
+        cdr,
+      };
+    } catch (error) {
+      console.error("CloudTalk getLatestCallStatus error:", error);
+      return { isAnswered: false, isEnded: false, talkingTime: 0 };
+    }
+  }
+
+  /**
    * Fetch call details by call ID
    */
   public async getCallDetails(callId: string): Promise<any> {
