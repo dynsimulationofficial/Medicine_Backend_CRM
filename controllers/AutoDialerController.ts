@@ -775,9 +775,9 @@ export class AutoDialerController {
         this.activeCall.is_connected = true;
       }
 
-      // If call has ended in CloudTalk or disposition saved, mark completion
-      const isCompleted = Boolean(dispositionSaved || status.isEnded);
-      if (isCompleted && this.activeCall) {
+      // Only mark completed if disposition was saved by the agent, or if an answered conversation ended
+      const isCompleted = Boolean(dispositionSaved || (status.isAnswered && status.isEnded));
+      if (dispositionSaved && this.activeCall) {
         this.activeCall = null;
       }
 
