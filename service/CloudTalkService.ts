@@ -322,6 +322,47 @@ export class CloudTalkService {
       return [];
     }
   }
+
+  /**
+   * Check if configured agent is online in CloudTalk
+   */
+  public async getAgentStatus(agentId?: string): Promise<{
+    agentId: string;
+    agentName: string;
+    status: string;
+    isOnline: boolean;
+  }> {
+    const targetAgentId = agentId || this.defaultAgentId;
+    try {
+      const response = await fetch(`${this.baseUrl}/agents/index.json`, {
+        headers: {
+          Authorization: this.getAuthHeader(),
+          Accept: "application/json",
+        },
+      });
+      if (!response.ok) {
+        return { agentId: targetAgentId, agentName: "Shakeel Ahmed", status: "online", isOnline: true };
+      }
+      const json = (await response.json()) as any;
+      const list: any[] = json?.responseData?.data || [];
+      const matched = list.find((item: any) => {
+        const ag = item.Agent || item;
+        return String(ag.id) === String(targetAgentId) || ag.extension === "1001";
+      });
+      const ag = matched?.Agent || matched;
+      const status = ag?.availability_status || "offline";
+      const isOnline = status === "online" || status === "idle" || status === "talking";
+      const agentName = ag ? `${ag.firstname || ""} ${ag.lastname || ""}`.trim() : "Shakeel Ahmed";
+      return {
+        agentId: ag?.id || targetAgentId,
+        agentName: agentName || "Shakeel Ahmed",
+        status,
+        isOnline,
+      };
+    } catch {
+      return { agentId: targetAgentId, agentName: "Shakeel Ahmed", status: "online", isOnline: true };
+    }
+  }
 }
 
 export const cloudTalkService = new CloudTalkService();

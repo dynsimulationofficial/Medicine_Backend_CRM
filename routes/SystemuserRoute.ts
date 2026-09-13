@@ -200,6 +200,7 @@ SystemuserRouter.post("/leads/dialer/quick-disposition", autoDialerController.sa
 SystemuserRouter.post("/leads/dialer/auto-skip-timeout", autoDialerController.autoSkipTimeout);
 SystemuserRouter.get("/leads/dialer/campaign-stats", autoDialerController.getCampaignDialerStats);
 SystemuserRouter.get("/leads/dialer/active-call", autoDialerController.getActiveCall);
+SystemuserRouter.get("/leads/dialer/agent-status", autoDialerController.getAgentStatus);
 
 export default SystemuserRouter;
 
