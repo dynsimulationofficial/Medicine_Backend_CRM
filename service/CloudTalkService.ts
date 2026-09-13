@@ -363,6 +363,220 @@ export class CloudTalkService {
       return { agentId: targetAgentId, agentName: "Shakeel Ahmed", status: "online", isOnline: true };
     }
   }
+
+  /**
+   * Get or create a tag for campaign membership
+   */
+  public async getOrCreateTag(name: string): Promise<number> {
+    try {
+      const res = await fetch(`${this.baseUrl}/tags/index.json`, {
+        headers: {
+          Authorization: this.getAuthHeader(),
+          Accept: "application/json",
+        },
+      });
+      const data = (await res.json()) as any;
+      const list: any[] = data?.responseData?.data || [];
+      const found = list.find((t: any) => t.Tag?.name === name);
+      if (found?.Tag?.id) {
+        return Number(found.Tag.id);
+      }
+
+      const addRes = await fetch(`${this.baseUrl}/tags/add.json`, {
+        method: "PUT",
+        headers: {
+          Authorization: this.getAuthHeader(),
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ name }),
+      });
+      const addData = (await addRes.json()) as any;
+      return Number(addData?.responseData?.data?.id);
+    } catch (err) {
+      console.error("getOrCreateTag error:", err);
+      return 0;
+    }
+  }
+
+  /**
+   * Sync campaign leads to CloudTalk with campaign tag
+   */
+  public async syncLeadsToCloudTalk(
+    tagName: string,
+    leads: Array<{ name: string; phone: string }>
+  ): Promise<void> {
+    for (const lead of leads) {
+      if (!lead.phone) continue;
+      const rawDigits = lead.phone.replace(/\D/g, "");
+      let normalized = lead.phone.trim();
+      if (!normalized.startsWith("+")) {
+        normalized = rawDigits.length === 10 ? `+91${rawDigits}` : `+${rawDigits}`;
+      }
+
+      try {
+        await fetch(`${this.baseUrl}/contacts/add.json`, {
+          method: "PUT",
+          headers: {
+            Authorization: this.getAuthHeader(),
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            name: lead.name || "Campaign Lead",
+            ContactNumber: [{ public_number: normalized }],
+            ContactsTag: [{ name: tagName }],
+          }),
+        });
+      } catch (e) {
+        console.error("syncLeadsToCloudTalk item error:", e);
+      }
+    }
+  }
+
+  /**
+   * Create or ensure an active Parallel Dialer campaign on CloudTalk
+   */
+  public async ensureParallelCampaign(
+    campaignName: string,
+    tagId: number,
+    queueGroupId = 304558,
+    agentId = 588998
+  ): Promise<{ campaignId: string }> {
+    try {
+      // 1. Check existing campaigns on dialer v1 API
+      const listRes = await fetch("https://api.cloudtalk.io/v1/dialer/campaigns", {
+        headers: {
+          Authorization: this.getAuthHeader(),
+          Accept: "application/json",
+        },
+      });
+      const listJson = (await listRes.json()) as any;
+      const campaigns: any[] = listJson?.data || [];
+      let matched = campaigns.find(
+        (c: any) => c.name === campaignName && c.mode === "parallel" && c.status !== "deleted"
+      );
+
+      let campaignId: string = matched?.id;
+
+      if (!campaignId) {
+        // Create new parallel campaign
+        const createRes = await fetch("https://api.cloudtalk.io/v1/dialer/campaigns", {
+          method: "POST",
+          headers: {
+            Authorization: this.getAuthHeader(),
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            name: campaignName,
+            mode: "parallel",
+            calling_policy: {
+              recording: true,
+              answer_wait: 18,
+              parallel_calls: 1,
+              outbound_number_id: 113403,
+            },
+          }),
+        });
+        const createJson = (await createRes.json()) as any;
+        campaignId = String(createJson?.id || "");
+      }
+
+      if (campaignId) {
+        // Update associations: Tag + Group + Agent
+        await fetch(`https://api.cloudtalk.io/v1/dialer/campaigns/${campaignId}/associations`, {
+          method: "PUT",
+          headers: {
+            Authorization: this.getAuthHeader(),
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({
+            target_tag: [{ ref_id: Number(tagId) }],
+            queue_group: [queueGroupId],
+            agent: [agentId],
+          }),
+        });
+      }
+
+      return { campaignId };
+    } catch (err: any) {
+      console.error("ensureParallelCampaign error:", err);
+      return { campaignId: "" };
+    }
+  }
+
+  /**
+   * Set status of Parallel Dialer campaign (active or inactive)
+   */
+  public async setParallelCampaignStatus(
+    campaignId: string,
+    status: "active" | "inactive"
+  ): Promise<boolean> {
+    try {
+      const res = await fetch(`https://api.cloudtalk.io/v1/dialer/campaigns/${campaignId}`, {
+        method: "PATCH",
+        headers: {
+          Authorization: this.getAuthHeader(),
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ status }),
+      });
+      return res.ok;
+    } catch (err) {
+      console.error("setParallelCampaignStatus error:", err);
+      return false;
+    }
+  }
+
+  /**
+   * Check if CloudTalk currently has an answered live call connected to an agent
+   */
+  public async getActiveCallForAgent(targetAgentId = "588998"): Promise<{
+    phone?: string;
+    callId?: string;
+    duration?: number;
+    isTalking: boolean;
+  } | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}/calls/index.json?limit=3`, {
+        headers: {
+          Authorization: this.getAuthHeader(),
+          Accept: "application/json",
+        },
+      });
+      if (!res.ok) return null;
+      const json = (await res.json()) as any;
+      const list: any[] = json?.responseData?.data || [];
+
+      for (const item of list) {
+        const cdr = item.Cdr || item;
+        if (!cdr) continue;
+        const agentId = String(cdr.user_id || item.Agent?.id || "");
+        if (agentId !== String(targetAgentId)) continue;
+
+        const isEnded = Boolean(cdr.ended_at);
+        const external = String(cdr.public_external || cdr.callee || cdr.caller || "").trim();
+        const callStartTime = cdr.started_at ? new Date(cdr.started_at).getTime() : 0;
+        const now = Date.now();
+
+        // If call has not ended, or started within last 45s and answered
+        if (external && (!isEnded || (now - callStartTime < 45000 && Boolean(cdr.answered_at)))) {
+          return {
+            phone: external,
+            callId: String(cdr.id || ""),
+            duration: Number(cdr.talking_time || 0),
+            isTalking: !isEnded || Number(cdr.talking_time || 0) > 0,
+          };
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
 }
 
 export const cloudTalkService = new CloudTalkService();

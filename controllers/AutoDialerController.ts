@@ -15,6 +15,16 @@ export class AutoDialerController {
     timestamp: number;
   } | null = null;
 
+  public activeParallelCampaign: {
+    campaign_id: string;
+    cloudtalk_campaign_id: string;
+    tag_name: string;
+    tag_id: number;
+    total_leads: number;
+    status: string;
+    started_at: number;
+  } | null = null;
+
   /**
    * Helper to check if the current user is Admin
    */
@@ -674,11 +684,48 @@ export class AutoDialerController {
   /**
    * 7. GET /leads/dialer/active-call
    * Returns current active connected call for agent screen-pop (< 1ms, 0 DB load)
+   * In Parallel Mode, detects live answered calls delivered by CloudTalk to Shakeel
    */
   public getActiveCall = async (_req: Request, res: Response) => {
     // Expire active call after 15 minutes if not completed
     if (this.activeCall && Date.now() - this.activeCall.timestamp > 900000) {
       this.activeCall = null;
+    }
+
+    // In Parallel Zero-Waste Mode: if memory call is empty, check CloudTalk live calls for agent Shakeel
+    if (!this.activeCall) {
+      try {
+        const liveCall = await cloudTalkService.getActiveCallForAgent("588998");
+        if (liveCall && liveCall.phone) {
+          const searchTail = liveCall.phone.replace(/\D/g, "").slice(-10);
+          if (searchTail.length >= 7) {
+            const [matchedLead]: any[] = await db.sequelize.query(
+              `SELECT id, lead_number, full_name, phone, whatsapp_number, campaign_id 
+               FROM public.leads 
+               WHERE deleted_at IS NULL 
+                 AND (
+                   REGEXP_REPLACE(phone, '\\D', '', 'g') LIKE :tail 
+                   OR REGEXP_REPLACE(whatsapp_number, '\\D', '', 'g') LIKE :tail
+                 )
+               LIMIT 1`,
+              { replacements: { tail: `%${searchTail}%` }, type: QueryTypes.SELECT }
+            );
+
+            if (matchedLead) {
+              this.activeCall = {
+                lead_id: matchedLead.id,
+                lead_number: matchedLead.lead_number,
+                full_name: matchedLead.full_name,
+                phone: matchedLead.phone || liveCall.phone,
+                is_connected: true,
+                timestamp: Date.now(),
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.error("getActiveCall live check error:", err);
+      }
     }
 
     return res.status(200).json({
@@ -765,6 +812,139 @@ export class AutoDialerController {
         data: { isOnline: true, status: "unknown", agentName: "Shakeel Ahmed" },
       });
     }
+  };
+
+  /**
+   * 10. POST /leads/dialer/start-parallel
+   * Starts True Zero-Waste CloudTalk Parallel Campaign (Agent hears 0s ringing)
+   */
+  public startParallelCampaign = async (req: Request, res: Response) => {
+    try {
+      const { campaign_id } = req.body;
+      if (!campaign_id) {
+        return res.status(400).json({ success: false, message: "campaign_id is required" });
+      }
+
+      // 1. Verify agent Shakeel is Online in CloudTalk
+      const agentStatus = await cloudTalkService.getAgentStatus();
+      if (!agentStatus.isOnline) {
+        return res.status(400).json({
+          success: false,
+          isOffline: true,
+          message: `Agent ${agentStatus.agentName} is currently Offline in CloudTalk Phone app. Please ask the agent to set status to Online (Green).`,
+        });
+      }
+
+      // 2. Fetch Campaign details
+      const [campaign]: any[] = await db.sequelize.query(
+        `SELECT id, name FROM public.campaigns WHERE id = :campaign_id LIMIT 1`,
+        { replacements: { campaign_id }, type: QueryTypes.SELECT }
+      );
+      if (!campaign) {
+        return res.status(404).json({ success: false, message: "Campaign not found" });
+      }
+
+      // 3. Fetch all pending unassigned leads
+      const pendingLeads: any[] = await db.sequelize.query(
+        `SELECT id, full_name, phone, whatsapp_number 
+         FROM public.leads 
+         WHERE campaign_id = :campaign_id 
+           AND agent_id IS NULL 
+           AND LOWER(COALESCE(lead_status, 'new')) = 'new'
+           AND deleted_at IS NULL
+         ORDER BY created_at ASC`,
+        { replacements: { campaign_id }, type: QueryTypes.SELECT }
+      );
+
+      if (!pendingLeads || pendingLeads.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "No pending unassigned leads in this campaign to dial.",
+        });
+      }
+
+      // 4. Create or ensure Tag in CloudTalk for this campaign
+      const safeCampName = String(campaign.name || "Campaign").replace(/[^a-zA-Z0-9_-]/g, "_");
+      const tagName = `CRM_${safeCampName}_${String(campaign.id).substring(0, 8)}`;
+      const tagId = await cloudTalkService.getOrCreateTag(tagName);
+
+      // 5. Sync pending leads to CloudTalk with this Tag
+      const contactList = pendingLeads.map((l: any) => ({
+        name: l.full_name || "Lead",
+        phone: l.phone || l.whatsapp_number,
+      }));
+      await cloudTalkService.syncLeadsToCloudTalk(tagName, contactList);
+
+      // 6. Ensure CloudTalk Parallel Campaign exists with Tag + Group + Agent
+      const { campaignId: cloudTalkCampId } = await cloudTalkService.ensureParallelCampaign(
+        campaign.name,
+        tagId
+      );
+
+      // 7. Activate the CloudTalk Parallel Campaign
+      if (cloudTalkCampId) {
+        await cloudTalkService.setParallelCampaignStatus(cloudTalkCampId, "active");
+      }
+
+      this.activeParallelCampaign = {
+        campaign_id,
+        cloudtalk_campaign_id: cloudTalkCampId,
+        tag_name: tagName,
+        tag_id: tagId,
+        total_leads: pendingLeads.length,
+        status: "active",
+        started_at: Date.now(),
+      };
+
+      return res.status(200).json({
+        success: true,
+        message: `Zero-Waste Parallel Campaign started! CloudTalk will dial in background and connect to Shakeel only when customer answers.`,
+        data: this.activeParallelCampaign,
+      });
+    } catch (err: any) {
+      console.error("startParallelCampaign error:", err);
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+  /**
+   * 11. POST /leads/dialer/stop-parallel
+   * Stops/pauses the active CloudTalk Parallel Campaign
+   */
+  public stopParallelCampaign = async (req: Request, res: Response) => {
+    try {
+      const { cloudtalk_campaign_id } = req.body;
+      const targetCampId = cloudtalk_campaign_id || this.activeParallelCampaign?.cloudtalk_campaign_id;
+
+      if (targetCampId) {
+        await cloudTalkService.setParallelCampaignStatus(targetCampId, "inactive");
+      }
+
+      this.activeParallelCampaign = null;
+      this.activeCall = null;
+
+      return res.status(200).json({
+        success: true,
+        message: "Parallel campaign stopped/paused successfully.",
+      });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+  /**
+   * 12. GET /leads/dialer/parallel-status
+   * Returns live status of active parallel campaign
+   */
+  public getParallelCampaignStatus = async (req: Request, res: Response) => {
+    const { campaign_id } = req.query as any;
+    const isCurrent =
+      !campaign_id || (this.activeParallelCampaign && this.activeParallelCampaign.campaign_id === campaign_id);
+
+    return res.status(200).json({
+      success: true,
+      data: isCurrent ? this.activeParallelCampaign : null,
+    });
   };
 }
 

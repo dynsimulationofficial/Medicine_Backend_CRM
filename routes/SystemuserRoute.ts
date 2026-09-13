@@ -201,6 +201,9 @@ SystemuserRouter.post("/leads/dialer/auto-skip-timeout", autoDialerController.au
 SystemuserRouter.get("/leads/dialer/campaign-stats", autoDialerController.getCampaignDialerStats);
 SystemuserRouter.get("/leads/dialer/active-call", autoDialerController.getActiveCall);
 SystemuserRouter.get("/leads/dialer/agent-status", autoDialerController.getAgentStatus);
+SystemuserRouter.post("/leads/dialer/start-parallel", autoDialerController.startParallelCampaign);
+SystemuserRouter.post("/leads/dialer/stop-parallel", autoDialerController.stopParallelCampaign);
+SystemuserRouter.get("/leads/dialer/parallel-status", autoDialerController.getParallelCampaignStatus);
 
 export default SystemuserRouter;
 
