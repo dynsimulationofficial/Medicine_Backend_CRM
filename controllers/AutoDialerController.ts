@@ -638,6 +638,14 @@ export class AutoDialerController {
       this.activeCall = null;
     }
 
+    // Only return active call for agent screen-pop once customer has answered!
+    if (this.activeCall && !this.activeCall.is_connected) {
+      return res.status(200).json({
+        success: true,
+        data: null,
+      });
+    }
+
     return res.status(200).json({
       success: true,
       data: this.activeCall,
