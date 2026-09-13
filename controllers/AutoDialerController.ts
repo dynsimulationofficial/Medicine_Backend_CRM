@@ -247,13 +247,13 @@ export class AutoDialerController {
         ).trim();
       const recordingUrl = callId ? `/cloudtalk/recordings/${callId}` : null;
 
-      // Track active call in memory as 'dialing' (is_connected: false) until customer actually answers
+      // Track active call in memory for instantaneous agent screen-pop
       this.activeCall = {
         lead_id: lead.id,
         lead_number: lead.lead_number,
         full_name: lead.full_name,
         phone: targetPhone,
-        is_connected: false,
+        is_connected: true,
         timestamp: Date.now(),
       };
 
@@ -670,17 +670,9 @@ export class AutoDialerController {
    * Returns current active connected call for agent screen-pop (< 1ms, 0 DB load)
    */
   public getActiveCall = async (_req: Request, res: Response) => {
-    // Expire active call after 120 seconds
-    if (this.activeCall && Date.now() - this.activeCall.timestamp > 120000) {
+    // Expire active call after 15 minutes if not completed
+    if (this.activeCall && Date.now() - this.activeCall.timestamp > 900000) {
       this.activeCall = null;
-    }
-
-    // Only return active call for agent screen-pop once customer has answered!
-    if (this.activeCall && !this.activeCall.is_connected) {
-      return res.status(200).json({
-        success: true,
-        data: null,
-      });
     }
 
     return res.status(200).json({
