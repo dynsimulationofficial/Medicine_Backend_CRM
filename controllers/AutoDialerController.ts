@@ -638,14 +638,6 @@ export class AutoDialerController {
       this.activeCall = null;
     }
 
-    // Only return if the call is actually answered/connected
-    if (!this.activeCall || !this.activeCall.is_connected) {
-      return res.status(200).json({
-        success: true,
-        data: null,
-      });
-    }
-
     return res.status(200).json({
       success: true,
       data: this.activeCall,
