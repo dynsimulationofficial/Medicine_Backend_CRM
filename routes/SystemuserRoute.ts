@@ -76,6 +76,7 @@ SystemuserRouter.post("/leads/update/activity", leadActivityHistoryController.up
 SystemuserRouter.post("/leads/activities/delete", leadActivityHistoryController.deleteActivity);
 SystemuserRouter.post("/leads/activities/soft-delete", leadActivityHistoryController.deleteActivity);
 SystemuserRouter.get("/leads/dispositions/all", leadActivityHistoryController.getAllDispositions);
+SystemuserRouter.get("/leads/dispositions", leadActivityHistoryController.getAllDispositions);
 
 /* -------------------- Lead Tasks -------------------- */
 SystemuserRouter.post("/leads/tasks/create", leadTaskController.createTask);
