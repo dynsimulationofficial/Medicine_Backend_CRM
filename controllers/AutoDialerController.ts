@@ -247,13 +247,13 @@ export class AutoDialerController {
         ).trim();
       const recordingUrl = callId ? `/cloudtalk/recordings/${callId}` : null;
 
-      // Track active call in memory as 'dialing' (is_connected: false) until customer actually answers
+      // Track active call in memory for instantaneous agent screen-pop
       this.activeCall = {
         lead_id: lead.id,
         lead_number: lead.lead_number,
         full_name: lead.full_name,
         phone: targetPhone,
-        is_connected: false,
+        is_connected: true,
         timestamp: Date.now(),
       };
 
@@ -665,17 +665,9 @@ export class AutoDialerController {
    * Returns current active connected call for agent screen-pop (< 1ms, 0 DB load)
    */
   public getActiveCall = async (_req: Request, res: Response) => {
-    // Expire active call after 90 seconds
-    if (this.activeCall && Date.now() - this.activeCall.timestamp > 90000) {
+    // Expire active call after 120 seconds
+    if (this.activeCall && Date.now() - this.activeCall.timestamp > 120000) {
       this.activeCall = null;
-    }
-
-    // Only return active call for agent screen-pop once customer has answered!
-    if (this.activeCall && !this.activeCall.is_connected) {
-      return res.status(200).json({
-        success: true,
-        data: null,
-      });
     }
 
     return res.status(200).json({
@@ -686,13 +678,14 @@ export class AutoDialerController {
 
   /**
    * 8. GET /leads/dialer/call-status
-   * Checks real-time status of the current active call via CloudTalk API
+   * Checks real-time status of the current active call via CloudTalk API & activity history
    */
   public checkCallStatus = async (req: Request, res: Response) => {
     try {
       const callId = req.query.call_id as string | undefined;
       const phone = (req.query.phone as string | undefined) || this.activeCall?.phone;
       const since = req.query.since ? Number(req.query.since) : this.activeCall?.timestamp;
+      const targetLeadId = (req.query.lead_id as string) || this.activeCall?.lead_id;
 
       const status = await cloudTalkService.getLatestCallStatus({
         callId,
@@ -700,13 +693,33 @@ export class AutoDialerController {
         since,
       });
 
-      // If answered, mark activeCall as connected
+      // Check if disposition / activity was saved by the agent for this lead
+      let dispositionSaved = false;
+      if (targetLeadId) {
+        const [recentAct]: any[] = await db.sequelize.query(
+          `SELECT id FROM public.lead_activity_history 
+           WHERE lead_id = :targetLeadId 
+             AND created_at >= :sinceDate 
+           LIMIT 1`,
+          {
+            replacements: {
+              targetLeadId,
+              sinceDate: new Date((this.activeCall?.timestamp || Date.now()) - 10000),
+            },
+            type: QueryTypes.SELECT,
+          }
+        );
+        if (recentAct) dispositionSaved = true;
+      }
+
+      // If answered in CloudTalk, mark activeCall as connected
       if (status.isAnswered && this.activeCall) {
         this.activeCall.is_connected = true;
       }
 
-      // If call has ended, clear activeCall so agent screen pop cleans up
-      if (status.isEnded && this.activeCall) {
+      // If call has ended in CloudTalk or disposition saved, mark completion
+      const isCompleted = Boolean(dispositionSaved || status.isEnded);
+      if (isCompleted && this.activeCall) {
         this.activeCall = null;
       }
 
@@ -714,6 +727,8 @@ export class AutoDialerController {
         success: true,
         data: {
           ...status,
+          dispositionSaved,
+          isCompleted,
           activeCall: this.activeCall,
         },
       });
