@@ -73,8 +73,8 @@ export class AutoDialerController {
           replacements.idList = idList;
         }
       } else {
-        // If agent (non-admin), only show leads assigned to this agent
-        if (!isAdmin && authUserId) {
+        // If agent (non-admin), only show leads assigned to this agent (unless browsing a campaign queue)
+        if (!isAdmin && authUserId && !campaign_id) {
           whereConditions.push(`l.agent_id = :authUserId`);
           replacements.authUserId = authUserId;
         }
@@ -519,6 +519,241 @@ export class AutoDialerController {
       return res.status(500).json({
         success: false,
         message: error.message || "Failed to update disposition",
+      });
+    }
+  };
+
+  /**
+   * 3.1 POST /leads/dialer/save-and-advance
+   * Saves disposition outcome and notes for the finished call, and immediately dials
+   * the NEXT lead in the campaign/queue in ONE atomic server-side operation.
+   * Eliminates client-side multi-step race conditions across Admin and Agent PCs.
+   */
+  public saveAndAdvance = async (req: Request, res: Response) => {
+    try {
+      const {
+        lead_id,
+        disposition_id,
+        conversation,
+        lead_status,
+        campaign_id,
+        call_id,
+        recording_url,
+        duration_seconds,
+        activity_id,
+      } = req.body;
+
+      if (!lead_id) {
+        return res.status(400).json({ success: false, message: "lead_id is required" });
+      }
+
+      const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
+
+      // 1. Fetch current lead details from DB
+      const [currentLeadRow]: any[] = await db.sequelize.query(
+        `SELECT id, lead_number, full_name, phone, whatsapp_number, campaign_id, agent_id, lead_status
+         FROM public.leads 
+         WHERE id = :lead_id AND deleted_at IS NULL 
+         LIMIT 1`,
+        { replacements: { lead_id }, type: QueryTypes.SELECT }
+      );
+
+      if (!currentLeadRow) {
+        return res.status(404).json({ success: false, message: "Lead not found" });
+      }
+
+      const resolvedCampaignId = campaign_id || currentLeadRow.campaign_id || null;
+
+      // 2. Validate agent_id against system_users foreign key
+      let validAgentId: string | null = null;
+      if (authUserId) {
+        const [user]: any[] = await db.sequelize.query(
+          `SELECT id FROM public.system_users WHERE id = :authUserId LIMIT 1`,
+          { replacements: { authUserId }, type: QueryTypes.SELECT }
+        );
+        if (user) validAgentId = user.id;
+      }
+
+      // 3. Resolve disposition
+      let finalDispId = disposition_id;
+      if (!finalDispId) {
+        const [dispRow]: any[] = await db.sequelize.query(
+          `SELECT id FROM public.lead_dispositions WHERE name ILIKE '%Phone Conversation%' LIMIT 1`,
+          { type: QueryTypes.SELECT }
+        );
+        finalDispId = dispRow?.id || "fbc5af04-3f2c-41d1-8b65-7c65e84b95a1";
+      }
+
+      // 4. Save Activity History
+      let finalCallId = call_id || null;
+      let finalRecordingUrl = recording_url || (finalCallId ? "/cloudtalk/recordings/" + finalCallId : null);
+      let finalDuration = duration_seconds ? Number(duration_seconds) : null;
+
+      if (activity_id) {
+        await db.sequelize.query(
+          `UPDATE public.lead_activity_history 
+           SET disposition_id = COALESCE(:finalDispId, disposition_id),
+               conversation = COALESCE(:conversation, conversation),
+               call_id = COALESCE(:finalCallId, call_id),
+               recording_url = COALESCE(:finalRecordingUrl, recording_url),
+               duration_seconds = COALESCE(:finalDuration, duration_seconds),
+               updated_at = NOW()
+           WHERE id = :activity_id`,
+          {
+            replacements: {
+              activity_id,
+              finalDispId,
+              conversation: conversation || null,
+              finalCallId,
+              finalRecordingUrl,
+              finalDuration,
+            },
+            type: QueryTypes.UPDATE,
+          }
+        );
+      } else {
+        await db.sequelize.query(
+          `INSERT INTO public.lead_activity_history (
+             id, lead_id, agent_id, disposition_id, conversation, call_id, recording_url, duration_seconds, occurred_at, created_at, updated_at
+           ) VALUES (
+             :id, :lead_id, :agent_id, :disposition_id, :conversation, :call_id, :recording_url, :duration_seconds, NOW(), NOW(), NOW()
+           )`,
+          {
+            replacements: {
+              id: uuidv4(),
+              lead_id,
+              agent_id: validAgentId,
+              disposition_id: finalDispId,
+              conversation: conversation || "Auto-dialer call wrap-up note",
+              call_id: finalCallId,
+              recording_url: finalRecordingUrl,
+              duration_seconds: finalDuration,
+            },
+            type: QueryTypes.INSERT,
+          }
+        );
+      }
+
+      // 5. Update Current Lead Status & Agent
+      await db.sequelize.query(
+        `UPDATE public.leads 
+         SET agent_id = COALESCE(:agent_id, agent_id),
+             lead_status = COALESCE(:lead_status, 'Contacted'),
+             updated_at = NOW() 
+         WHERE id = :lead_id`,
+        {
+          replacements: {
+            lead_id,
+            agent_id: validAgentId,
+            lead_status: lead_status || "Contacted",
+          },
+          type: QueryTypes.UPDATE,
+        }
+      );
+
+      // 6. Find NEXT pending lead in queue
+      let nextLead: any = null;
+
+      if (resolvedCampaignId) {
+        // Find next pending uncalled lead in this campaign
+        const [nextRow]: any[] = await db.sequelize.query(
+          `SELECT id, lead_number, full_name, phone, whatsapp_number, email, city, state, country, note, campaign_id
+           FROM public.leads
+           WHERE campaign_id = :campaign_id
+             AND id != :lead_id
+             AND agent_id IS NULL
+             AND LOWER(COALESCE(lead_status, 'new')) = 'new'
+             AND deleted_at IS NULL
+             AND (phone IS NOT NULL AND TRIM(phone) != '')
+           ORDER BY created_at ASC
+           LIMIT 1`,
+          { replacements: { campaign_id: resolvedCampaignId, lead_id }, type: QueryTypes.SELECT }
+        );
+        nextLead = nextRow || null;
+      } else if (validAgentId) {
+        // Individual assigned leads queue
+        const [nextRow]: any[] = await db.sequelize.query(
+          `SELECT id, lead_number, full_name, phone, whatsapp_number, email, city, state, country, note, campaign_id
+           FROM public.leads
+           WHERE agent_id = :agent_id
+             AND id != :lead_id
+             AND LOWER(COALESCE(lead_status, '')) NOT IN ('won', 'lost', 'closed', 'junk')
+             AND deleted_at IS NULL
+             AND (phone IS NOT NULL AND TRIM(phone) != '')
+           ORDER BY created_at DESC
+           LIMIT 1`,
+          { replacements: { agent_id: validAgentId, lead_id }, type: QueryTypes.SELECT }
+        );
+        nextLead = nextRow || null;
+      }
+
+      // 7. If no more leads, campaign/queue is complete
+      if (!nextLead) {
+        this.activeCall = null;
+        return res.status(200).json({
+          success: true,
+          has_next: false,
+          completed: true,
+          message: "All leads in queue have been completed!",
+        });
+      }
+
+      // 8. Next lead found: Immediately initiate CloudTalk outbound call!
+      const targetPhone = nextLead.phone || nextLead.whatsapp_number;
+      const callResult = await cloudTalkService.makeCall({
+        calleeNumber: targetPhone,
+        callerNumber: process.env.CLOUDTALK_CALLER_NUMBER || "+12393290248",
+      });
+
+      const nextCallId =
+        callResult.callId ||
+        String(
+          callResult.data?.responseData?.data?.id ||
+          callResult.data?.responseData?.id ||
+          callResult.data?.data?.id ||
+          callResult.data?.id ||
+          ""
+        ).trim();
+      const nextRecordingUrl = nextCallId ? "/cloudtalk/recordings/" + nextCallId : null;
+
+      // Update activeCall in-memory state for instant screen-pop sync across all tabs/PCs
+      this.activeCall = {
+        lead_id: nextLead.id,
+        lead_number: nextLead.lead_number,
+        full_name: nextLead.full_name,
+        phone: targetPhone,
+        is_connected: true,
+        timestamp: Date.now(),
+        campaign_id: resolvedCampaignId,
+      };
+
+      return res.status(200).json({
+        success: true,
+        has_next: true,
+        dialed: callResult.success,
+        message: "Calling next lead: " + (nextLead.full_name || targetPhone) + "...",
+        data: {
+          next_lead: {
+            id: nextLead.id,
+            lead_number: nextLead.lead_number,
+            full_name: nextLead.full_name,
+            phone: targetPhone,
+            whatsapp_number: nextLead.whatsapp_number,
+            email: nextLead.email,
+            campaign_id: resolvedCampaignId,
+            call_id: nextCallId || null,
+            recording_url: nextRecordingUrl,
+            dialLink: callResult.dialLink,
+            fallbackTel: callResult.fallbackTel,
+          },
+          cloudtalk: callResult,
+        },
+      });
+    } catch (error: any) {
+      console.error("saveAndAdvance error:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Failed to save disposition and advance to next lead",
       });
     }
   };

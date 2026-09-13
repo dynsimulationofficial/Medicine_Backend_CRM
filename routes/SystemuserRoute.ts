@@ -198,6 +198,7 @@ SystemuserRouter.post("/leads/dialer/call-next", autoDialerController.callNextLe
 SystemuserRouter.post("/leads/dialer/call-connected", autoDialerController.markCallConnected);
 SystemuserRouter.get("/leads/dialer/call-status", autoDialerController.checkCallStatus);
 SystemuserRouter.post("/leads/dialer/quick-disposition", autoDialerController.saveQuickDisposition);
+SystemuserRouter.post("/leads/dialer/save-and-advance", autoDialerController.saveAndAdvance);
 SystemuserRouter.post("/leads/dialer/auto-skip-timeout", autoDialerController.autoSkipTimeout);
 SystemuserRouter.get("/leads/dialer/campaign-stats", autoDialerController.getCampaignDialerStats);
 SystemuserRouter.get("/leads/dialer/active-call", autoDialerController.getActiveCall);
