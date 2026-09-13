@@ -181,6 +181,7 @@ SystemuserRouter.put("/campaigns/:id", campaignController.updateCampaign);
 SystemuserRouter.post("/campaigns/edit", campaignController.updateCampaign);
 SystemuserRouter.delete("/campaigns/:id", campaignController.deleteCampaign);
 SystemuserRouter.post("/campaigns/delete", campaignController.deleteCampaign);
+SystemuserRouter.post("/campaigns/:id/reset-dialer", campaignController.resetCampaignDialer);
 
 /* -------------------- Courier / Parcel Tracking (On-Demand) -------------------- */
 SystemuserRouter.post("/tracking/sync", trackingController.syncTracking);

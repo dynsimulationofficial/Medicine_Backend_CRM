@@ -81,6 +81,12 @@ export class AutoDialerController {
         if (campaign_id) {
           whereConditions.push(`l.campaign_id = :campaign_id`);
           replacements.campaign_id = campaign_id;
+
+          // Default: only fetch pending leads that have NOT been dialed / assigned yet (anti-spam)
+          const reDial = (req.query as any)?.re_dial === "true";
+          if (!reDial) {
+            whereConditions.push(`(l.agent_id IS NULL AND LOWER(COALESCE(l.lead_status, 'new')) = 'new')`);
+          }
         }
 
         // Lead source filter
