@@ -5,6 +5,16 @@ import db from "../models";
 import cloudTalkService from "../service/CloudTalkService";
 
 export class AutoDialerController {
+  // In-memory active call state for instantaneous agent screen-pop (0 DB overhead)
+  private activeCall: {
+    lead_id: string;
+    lead_number?: string;
+    full_name?: string;
+    phone?: string;
+    is_connected?: boolean;
+    timestamp: number;
+  } | null = null;
+
   /**
    * Helper to check if the current user is Admin
    */
@@ -237,6 +247,16 @@ export class AutoDialerController {
         ).trim();
       const recordingUrl = callId ? `/cloudtalk/recordings/${callId}` : null;
 
+      // Track active call in memory as 'dialing' (is_connected: false) until customer actually answers
+      this.activeCall = {
+        lead_id: lead.id,
+        lead_number: lead.lead_number,
+        full_name: lead.full_name,
+        phone: targetPhone,
+        is_connected: false,
+        timestamp: Date.now(),
+      };
+
       return res.status(200).json({
         success: true,
         message: `Auto-Dialer calling ${lead.full_name || targetPhone}...`,
@@ -447,7 +467,192 @@ export class AutoDialerController {
       });
     }
   };
+
+  /**
+   * 4. POST /leads/dialer/auto-skip-timeout
+   * Automatically logs "No Answer" disposition when a call is not answered within timeout (18s)
+   * and returns success so the dialer smoothly advances without manual clicks.
+   */
+  public autoSkipTimeout = async (req: Request, res: Response) => {
+    try {
+      const { lead_id, campaign_id } = req.body;
+      if (!lead_id) {
+        return res.status(400).json({ success: false, message: "lead_id is required" });
+      }
+      const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
+
+      // Find "No Answer" disposition ID
+      const [dispRow]: any[] = await db.sequelize.query(
+        `SELECT id FROM public.lead_dispositions WHERE name ILIKE '%No Answer%' LIMIT 1`,
+        { type: QueryTypes.SELECT }
+      );
+      const noAnswerDispId = dispRow?.id || "fbc5af04-3f2c-41d1-8b65-7c65e84b95a1";
+
+      // Log Activity with NO recording and NO duration
+      await db.sequelize.query(
+        `INSERT INTO public.lead_activity_history (
+           id, lead_id, agent_id, disposition_id, conversation, call_id, recording_url, duration_seconds, occurred_at, created_at, updated_at
+         ) VALUES (
+           :id, :lead_id, :agent_id, :disposition_id, :conversation, NULL, NULL, NULL, NOW(), NOW(), NOW()
+         )`,
+        {
+          replacements: {
+            id: uuidv4(),
+            lead_id,
+            agent_id: authUserId,
+            disposition_id: noAnswerDispId,
+            conversation: "Auto-dialer: Ring timeout / No answer (Auto-skipped)",
+          },
+          type: QueryTypes.INSERT,
+        }
+      );
+
+      // Update lead status to 'No Answer' if not won/converted/closed
+      await db.sequelize.query(
+        `UPDATE public.leads 
+         SET lead_status = COALESCE(NULLIF(lead_status, ''), 'No Answer'), updated_at = NOW() 
+         WHERE id = :lead_id AND LOWER(COALESCE(lead_status, '')) NOT IN ('won', 'converted', 'closed')`,
+        {
+          replacements: { lead_id },
+          type: QueryTypes.UPDATE,
+        }
+      );
+
+      // Clear active call since it was dropped / unanswered
+      if (this.activeCall?.lead_id === lead_id) {
+        this.activeCall = null;
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: "Lead auto-skipped due to ring timeout",
+      });
+    } catch (error: any) {
+      console.error("autoSkipTimeout error:", error);
+      return res.status(500).json({ success: false, message: error.message || "Failed to auto-skip lead" });
+    }
+  };
+
+  /**
+   * 5. POST /leads/dialer/call-connected
+   * Marks current call as answered/connected by customer, triggering screen-pop
+   */
+  public markCallConnected = async (req: Request, res: Response) => {
+    try {
+      const { lead_id } = req.body;
+      if (this.activeCall && (!lead_id || this.activeCall.lead_id === lead_id)) {
+        this.activeCall.is_connected = true;
+        this.activeCall.timestamp = Date.now();
+      } else if (lead_id) {
+        const [lead]: any[] = await db.sequelize.query(
+          `SELECT id, lead_number, full_name, phone FROM public.leads WHERE id = :lead_id LIMIT 1`,
+          { replacements: { lead_id }, type: QueryTypes.SELECT }
+        );
+        if (lead) {
+          this.activeCall = {
+            lead_id: lead.id,
+            lead_number: lead.lead_number,
+            full_name: lead.full_name,
+            phone: lead.phone,
+            is_connected: true,
+            timestamp: Date.now(),
+          };
+        }
+      }
+      return res.status(200).json({ success: true, data: this.activeCall });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+  /**
+   * 6. GET /leads/dialer/campaign-stats
+   * Returns live calling stats for a specific campaign
+   */
+  public getCampaignDialerStats = async (req: Request, res: Response) => {
+    try {
+      const { campaign_id } = req.query as any;
+      if (!campaign_id) {
+        return res.status(400).json({ success: false, message: "campaign_id is required" });
+      }
+
+      // Total leads in campaign
+      const [totalRow]: any[] = await db.sequelize.query(
+        `SELECT COUNT(*) as total FROM public.leads WHERE campaign_id = :campaign_id AND deleted_at IS NULL`,
+        { replacements: { campaign_id }, type: QueryTypes.SELECT }
+      );
+      const total = parseInt(totalRow?.total || "0");
+
+      // Leads that have at least one activity recorded
+      const [dialedRow]: any[] = await db.sequelize.query(
+        `SELECT COUNT(DISTINCT l.id) as dialed 
+         FROM public.leads l
+         JOIN public.lead_activity_history lah ON l.id = lah.lead_id
+         WHERE l.campaign_id = :campaign_id AND l.deleted_at IS NULL AND lah.deleted_at IS NULL`,
+        { replacements: { campaign_id }, type: QueryTypes.SELECT }
+      );
+      const dialed = parseInt(dialedRow?.dialed || "0");
+
+      // Connected leads (activities with duration > 0 or recording attached or interested/order status)
+      const [connectedRow]: any[] = await db.sequelize.query(
+        `SELECT COUNT(DISTINCT l.id) as connected
+         FROM public.leads l
+         JOIN public.lead_activity_history lah ON l.id = lah.lead_id
+         LEFT JOIN public.lead_dispositions ld ON lah.disposition_id = ld.id
+         WHERE l.campaign_id = :campaign_id 
+           AND l.deleted_at IS NULL 
+           AND lah.deleted_at IS NULL
+           AND (lah.duration_seconds > 0 OR lah.recording_url IS NOT NULL OR LOWER(COALESCE(ld.name, '')) NOT IN ('no answer', 'busy', 'ringing', 'switch off', 'switched off', 'not reachable', 'wrong number', 'dnd'))`,
+        { replacements: { campaign_id }, type: QueryTypes.SELECT }
+      );
+      const connected = parseInt(connectedRow?.connected || "0");
+
+      // Dropped / No answer count
+      const dropped = Math.max(0, dialed - connected);
+      const pending = Math.max(0, total - dialed);
+
+      return res.status(200).json({
+        success: true,
+        data: {
+          campaign_id,
+          total,
+          dialed,
+          connected,
+          dropped,
+          pending,
+        },
+      });
+    } catch (error: any) {
+      console.error("getCampaignDialerStats error:", error);
+      return res.status(500).json({ success: false, message: error.message || "Failed to fetch stats" });
+    }
+  };
+
+  /**
+   * 7. GET /leads/dialer/active-call
+   * Returns current active connected call for agent screen-pop (< 1ms, 0 DB load)
+   */
+  public getActiveCall = async (_req: Request, res: Response) => {
+    // Expire active call after 90 seconds
+    if (this.activeCall && Date.now() - this.activeCall.timestamp > 90000) {
+      this.activeCall = null;
+    }
+
+    // Only return if the call is actually answered/connected
+    if (!this.activeCall || !this.activeCall.is_connected) {
+      return res.status(200).json({
+        success: true,
+        data: null,
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      data: this.activeCall,
+    });
+  };
 }
 
 export const autoDialerController = new AutoDialerController();
 export default autoDialerController;
+

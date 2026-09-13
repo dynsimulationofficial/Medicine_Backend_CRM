@@ -89,7 +89,8 @@ export const getAllCampaigns = async (req: Request, res: Response) => {
          c.lead_source_id,
          c.created_at,
          c.updated_at,
-         ls.name as lead_source_name
+         ls.name as lead_source_name,
+         (SELECT COUNT(*) FROM public.leads l WHERE l.campaign_id = c.id AND l.deleted_at IS NULL) as total_leads
        FROM public.campaigns c
        LEFT JOIN public.lead_sources ls ON ls.id = c.lead_source_id
        ${whereClause}
