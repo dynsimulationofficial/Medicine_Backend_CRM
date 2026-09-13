@@ -442,8 +442,40 @@ export class AutoDialerController {
         );
       }
 
-      // Update lead status if provided
-      if (lead_status) {
+      // Update lead status and automatically assign lead to the agent who handled the call
+      if (authUserId) {
+        const [userExists]: any[] = await db.sequelize.query(
+          `SELECT id FROM public.system_users WHERE id = :authUserId LIMIT 1`,
+          { replacements: { authUserId }, type: QueryTypes.SELECT }
+        );
+        if (userExists) {
+          await db.sequelize.query(
+            `UPDATE public.leads 
+             SET agent_id = :authUserId,
+                 lead_status = COALESCE(:lead_status, lead_status),
+                 updated_at = NOW() 
+             WHERE id = :lead_id`,
+            {
+              replacements: {
+                lead_id,
+                authUserId,
+                lead_status: lead_status || null,
+              },
+              type: QueryTypes.UPDATE,
+            }
+          );
+        } else if (lead_status) {
+          await db.sequelize.query(
+            `UPDATE public.leads 
+             SET lead_status = :lead_status, updated_at = NOW() 
+             WHERE id = :lead_id`,
+            {
+              replacements: { lead_id, lead_status },
+              type: QueryTypes.UPDATE,
+            }
+          );
+        }
+      } else if (lead_status) {
         await db.sequelize.query(
           `UPDATE public.leads 
            SET lead_status = :lead_status, updated_at = NOW() 
@@ -659,11 +691,23 @@ export class AutoDialerController {
   public checkCallStatus = async (req: Request, res: Response) => {
     try {
       const callId = req.query.call_id as string | undefined;
-      const status = await cloudTalkService.getLatestCallStatus(callId);
+      const phone = (req.query.phone as string | undefined) || this.activeCall?.phone;
+      const since = req.query.since ? Number(req.query.since) : this.activeCall?.timestamp;
+
+      const status = await cloudTalkService.getLatestCallStatus({
+        callId,
+        phone,
+        since,
+      });
 
       // If answered, mark activeCall as connected
       if (status.isAnswered && this.activeCall) {
         this.activeCall.is_connected = true;
+      }
+
+      // If call has ended, clear activeCall so agent screen pop cleans up
+      if (status.isEnded && this.activeCall) {
+        this.activeCall = null;
       }
 
       return res.status(200).json({

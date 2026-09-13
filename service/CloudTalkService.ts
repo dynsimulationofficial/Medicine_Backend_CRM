@@ -29,9 +29,15 @@ export class CloudTalkService {
   public async makeCall(params: InitiateCallParams): Promise<any> {
     const callerNumber = params.callerNumber || this.defaultCallerNumber;
     const agentId = params.agentId || this.defaultAgentId;
-    const normalizedCallee = params.calleeNumber.startsWith("+")
-      ? params.calleeNumber
-      : `+${params.calleeNumber.replace(/\D/g, "")}`;
+    const rawDigits = params.calleeNumber.replace(/\D/g, "");
+    let normalizedCallee = params.calleeNumber.trim();
+    if (!normalizedCallee.startsWith("+")) {
+      if (rawDigits.length === 10) {
+        normalizedCallee = `+91${rawDigits}`;
+      } else {
+        normalizedCallee = `+${rawDigits}`;
+      }
+    }
 
     const payload = {
       callee_number: normalizedCallee,
@@ -90,9 +96,13 @@ export class CloudTalkService {
   }
 
   /**
-   * Fetch latest call status from CloudTalk to check if call is answered / ended
+   * Fetch latest call status from CloudTalk to check if current call is answered / ended
    */
-  public async getLatestCallStatus(callId?: string): Promise<{
+  public async getLatestCallStatus(options?: {
+    callId?: string;
+    phone?: string;
+    since?: number;
+  }): Promise<{
     callId?: string;
     isAnswered: boolean;
     isEnded: boolean;
@@ -100,9 +110,19 @@ export class CloudTalkService {
     cdr?: any;
   }> {
     try {
-      const url = callId
-        ? `${this.baseUrl}/calls/index.json?id=${encodeURIComponent(callId)}`
-        : `${this.baseUrl}/calls/index.json?limit=1`;
+      const callId = options?.callId;
+      const phone = options?.phone;
+      const since = options?.since || 0;
+
+      let url = `${this.baseUrl}/calls/index.json?limit=5`;
+      if (callId) {
+        url = `${this.baseUrl}/calls/index.json?id=${encodeURIComponent(callId)}`;
+      } else if (phone) {
+        const cleanPhone = phone.replace(/\D/g, "");
+        if (cleanPhone.length >= 7) {
+          url = `${this.baseUrl}/calls/index.json?public_external=${encodeURIComponent("+" + cleanPhone)}&limit=5`;
+        }
+      }
 
       const response = await fetch(url, {
         headers: {
@@ -116,21 +136,57 @@ export class CloudTalkService {
       }
 
       const json = (await response.json()) as any;
-      const cdr = json?.responseData?.data?.[0]?.Cdr;
-      if (!cdr) {
+      const calls: any[] = json?.responseData?.data || [];
+      if (!calls || calls.length === 0) {
         return { isAnswered: false, isEnded: false, talkingTime: 0 };
       }
 
-      const isAnswered = !!cdr.answered_at;
-      const isEnded = !!cdr.ended_at;
-      const talkingTime = Number(cdr.talking_time || cdr.billsec || 0);
+      let matchedCdr: any = null;
+      for (const item of calls) {
+        const cdr = item.Cdr || item;
+        if (!cdr) continue;
+
+        // If phone is provided, match by phone number
+        if (phone) {
+          const searchTail = phone.replace(/\D/g, "").slice(-10);
+          const external = String(cdr.public_external || cdr.caller || cdr.callee || "").replace(/\D/g, "");
+          if (!external.includes(searchTail)) {
+            continue;
+          }
+        }
+
+        // If 'since' is provided, strictly ignore any calls started before this dialing session
+        if (since > 0 && cdr.started_at) {
+          const callStartTime = new Date(cdr.started_at).getTime();
+          if (callStartTime < since - 20000) {
+            // Old call from earlier session!
+            continue;
+          }
+        }
+
+        matchedCdr = cdr;
+        break;
+      }
+
+      if (!matchedCdr) {
+        // No call in CloudTalk yet for this new dial
+        return { isAnswered: false, isEnded: false, talkingTime: 0 };
+      }
+
+      // True answered status: answered_at exists and either talking_time > 0 or not immediately ended at same second
+      const isAnswered = Boolean(
+        matchedCdr.answered_at &&
+        (Number(matchedCdr.talking_time || 0) > 0 || matchedCdr.answered_at !== matchedCdr.ended_at)
+      );
+      const isEnded = Boolean(matchedCdr.ended_at);
+      const talkingTime = Number(matchedCdr.talking_time || matchedCdr.billsec || 0);
 
       return {
-        callId: cdr.id,
+        callId: matchedCdr.id,
         isAnswered,
         isEnded,
         talkingTime,
-        cdr,
+        cdr: matchedCdr,
       };
     } catch (error) {
       console.error("CloudTalk getLatestCallStatus error:", error);

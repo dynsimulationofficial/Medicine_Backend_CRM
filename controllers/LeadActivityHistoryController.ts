@@ -88,6 +88,17 @@ export const createActivity = async (req: Request, res: Response) => {
       }
     );
 
+    // Auto-assign lead to the agent who submitted the activity
+    const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
+    if (authUserId) {
+      try {
+        await db.sequelize.query(
+          `UPDATE public.leads SET agent_id = :authUserId, updated_at = NOW() WHERE id = :lead_id`,
+          { replacements: { authUserId, lead_id: validatedData.lead_id }, type: QueryTypes.UPDATE }
+        );
+      } catch {}
+    }
+
     return res.status(201).json({ success: true, data: result[0] });
   } catch (error: any) {
     if (error.name === "ValidationError") {
