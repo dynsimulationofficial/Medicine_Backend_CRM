@@ -205,6 +205,7 @@ SystemuserRouter.get("/leads/dialer/active-call", autoDialerController.getActive
 SystemuserRouter.get("/leads/dialer/agent-status", autoDialerController.getAgentStatus);
 SystemuserRouter.post("/leads/dialer/start-parallel", autoDialerController.startParallelCampaign);
 SystemuserRouter.post("/leads/dialer/stop-parallel", autoDialerController.stopParallelCampaign);
+SystemuserRouter.post("/leads/dialer/stop", autoDialerController.stopParallelCampaign);
 SystemuserRouter.get("/leads/dialer/parallel-status", autoDialerController.getParallelCampaignStatus);
 
 export default SystemuserRouter;

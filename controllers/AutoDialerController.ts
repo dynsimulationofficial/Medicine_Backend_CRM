@@ -26,6 +26,8 @@ export class AutoDialerController {
     started_at: number;
   } | null = null;
 
+  private stoppedAt: number = 0;
+
   /**
    * Helper to check if the current user is Admin
    */
@@ -930,7 +932,8 @@ export class AutoDialerController {
     }
 
     // In Parallel Zero-Waste Mode: if memory call is empty, check CloudTalk live calls for agent Shakeel
-    if (!this.activeCall) {
+    // (Only if not explicitly stopped within the last 30 seconds)
+    if (!this.activeCall && Date.now() - this.stoppedAt > 30000) {
       try {
         const liveCall = await cloudTalkService.getActiveCallForAgent("588998");
         if (liveCall && liveCall.phone) {
@@ -1133,6 +1136,7 @@ export class AutoDialerController {
         status: "active",
         started_at: Date.now(),
       };
+      this.stoppedAt = 0;
 
       return res.status(200).json({
         success: true,
@@ -1160,10 +1164,11 @@ export class AutoDialerController {
 
       this.activeParallelCampaign = null;
       this.activeCall = null;
+      this.stoppedAt = Date.now();
 
       return res.status(200).json({
         success: true,
-        message: "Parallel campaign stopped/paused successfully.",
+        message: "Campaign calling stopped successfully.",
       });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
