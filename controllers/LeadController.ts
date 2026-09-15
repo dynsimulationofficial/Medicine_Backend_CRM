@@ -65,6 +65,38 @@ const checkIsAdmin = async (userId: string | null): Promise<boolean> => {
   }
 };
 
+export const detectCountryAndCurrency = (
+  phone?: string | null,
+  country?: string | null,
+  currency?: string | null
+): { country: string; currency: string } => {
+  let detectedCountry = country ? country.trim() : null;
+  let detectedCurrency = currency ? currency.trim().toUpperCase() : null;
+
+  if (phone) {
+    const cleanP = phone.replace(/[\s\-\(\)]/g, "");
+    if (cleanP.startsWith("+91") || cleanP.startsWith("0091") || (cleanP.startsWith("91") && cleanP.length === 12)) {
+      if (!detectedCountry) detectedCountry = "India";
+      if (!detectedCurrency) detectedCurrency = "INR";
+    } else if (cleanP.startsWith("+44") || cleanP.startsWith("0044") || (cleanP.startsWith("44") && cleanP.length >= 12)) {
+      if (!detectedCountry) detectedCountry = "UK";
+      if (!detectedCurrency) detectedCurrency = "GBP";
+    } else if (cleanP.startsWith("+1") || cleanP.startsWith("001") || (cleanP.startsWith("1") && cleanP.length === 11) || cleanP.length === 10) {
+      if (!detectedCountry) detectedCountry = "USA";
+      if (!detectedCurrency) detectedCurrency = "USD";
+    }
+  }
+
+  if (detectedCountry && !detectedCurrency) {
+    const cLow = detectedCountry.toLowerCase();
+    if (cLow === "india" || cLow === "in") detectedCurrency = "INR";
+    else if (cLow === "uk" || cLow === "united kingdom" || cLow === "gb") detectedCurrency = "GBP";
+    else if (cLow === "usa" || cLow === "us" || cLow === "united states") detectedCurrency = "USD";
+  }
+
+  return { country: detectedCountry || "USA", currency: detectedCurrency || "USD" };
+};
+
 // ==================== 1. CREATE LEAD ====================
 export const createLead = async (req: Request, res: Response) => {
   try {
@@ -87,27 +119,11 @@ export const createLead = async (req: Request, res: Response) => {
     const now = new Date();
 
     // Auto-detect country and currency from phone if not explicitly provided
-    let detectedCountry = validatedData.country || null;
-    let detectedCurrency = validatedData.currency || null;
-    if (validatedData.phone) {
-      const cleanP = validatedData.phone.replace(/[\s\-\(\)]/g, "");
-      if (cleanP.startsWith("+91") || cleanP.startsWith("0091") || (cleanP.startsWith("91") && cleanP.length === 12)) {
-        if (!detectedCountry) detectedCountry = "India";
-        if (!detectedCurrency) detectedCurrency = "INR";
-      } else if (cleanP.startsWith("+44") || cleanP.startsWith("0044") || (cleanP.startsWith("44") && cleanP.length >= 12)) {
-        if (!detectedCountry) detectedCountry = "UK";
-        if (!detectedCurrency) detectedCurrency = "GBP";
-      } else if (cleanP.startsWith("+1") || cleanP.startsWith("001") || (cleanP.startsWith("1") && cleanP.length === 11)) {
-        if (!detectedCountry) detectedCountry = "USA";
-        if (!detectedCurrency) detectedCurrency = "USD";
-      }
-    }
-    if (detectedCountry && !detectedCurrency) {
-      const cLow = detectedCountry.toLowerCase();
-      if (cLow === "india" || cLow === "in") detectedCurrency = "INR";
-      else if (cLow === "uk" || cLow === "united kingdom" || cLow === "gb") detectedCurrency = "GBP";
-      else if (cLow === "usa" || cLow === "us" || cLow === "united states") detectedCurrency = "USD";
-    }
+    const { country: detectedCountry, currency: detectedCurrency } = detectCountryAndCurrency(
+      validatedData.phone,
+      validatedData.country,
+      validatedData.currency
+    );
 
     const query = `
       INSERT INTO public.leads (
@@ -165,7 +181,7 @@ export const createLead = async (req: Request, res: Response) => {
 export const getUnassignedLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Number(req.query.limit || req.query.pageSize) || 150;
+    const limit = Number(req.query.limit || req.query.pageSize) || 500;
     const offset = (page - 1) * limit;
 
     const countResult: any[] = await db.sequelize.query(
@@ -202,7 +218,7 @@ export const getUnassignedLeads = async (req: Request, res: Response) => {
 export const getAssignedLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.query.page) || 1);
-    const limit = Number(req.query.limit || req.query.pageSize) || 150;
+    const limit = Number(req.query.limit || req.query.pageSize) || 500;
     const offset = (page - 1) * limit;
 
     const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
@@ -386,11 +402,26 @@ export const updateLead = async (req: Request, res: Response) => {
 // ==================== 6. DELETE / SOFT DELETE LEADS ====================
 export const softDeleteLeads = async (req: Request, res: Response) => {
   try {
-    const { lead_ids, id } = req.body;
-    const ids: string[] = lead_ids || (id ? [id] : []);
+    const rawIds =
+      req.body.lead_ids ||
+      req.body.ids ||
+      req.body.lead_id ||
+      req.body.id ||
+      req.query.lead_id ||
+      req.query.id ||
+      req.params.id;
+
+    let ids: string[] = [];
+    if (Array.isArray(rawIds)) {
+      ids = rawIds.map(String).filter(Boolean);
+    } else if (typeof rawIds === "string" && rawIds.trim()) {
+      ids = rawIds.includes(",")
+        ? rawIds.split(",").map((s) => s.trim()).filter(Boolean)
+        : [rawIds.trim()];
+    }
 
     if (!ids.length) {
-      return res.status(400).json({ success: false, message: "Lead ID(s) required" });
+      return res.status(400).json({ success: false, message: "Lead ID(s) required", msg: "Lead ID(s) required" });
     }
 
     await db.sequelize.query(
@@ -398,9 +429,13 @@ export const softDeleteLeads = async (req: Request, res: Response) => {
       { replacements: { ids }, type: QueryTypes.UPDATE }
     );
 
-    return res.status(200).json({ success: true, message: "Lead(s) deleted successfully" });
+    return res.status(200).json({
+      success: true,
+      message: "Lead(s) deleted successfully",
+      msg: "Successfully Deleted",
+    });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
+    return res.status(500).json({ success: false, message: error.message, msg: error.message });
   }
 };
 
@@ -490,7 +525,7 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
 export const searchLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.body?.page || req.query?.page) || 1);
-    const limit = Number(req.body?.limit || req.body?.pageSize || req.query?.limit || req.query?.pageSize) || 150;
+    const limit = Number(req.body?.limit || req.body?.pageSize || req.query?.limit || req.query?.pageSize) || 500;
     const offset = (page - 1) * limit;
 
     const {
@@ -607,7 +642,7 @@ export const searchLeads = async (req: Request, res: Response) => {
 export const filterUnassignedLeads = async (req: Request, res: Response) => {
   try {
     const page = Math.max(1, Number(req.body?.page || req.query?.page) || 1);
-    const limit = Number(req.body?.limit || req.body?.pageSize || req.query?.limit || req.query?.pageSize) || 150;
+    const limit = Number(req.body?.limit || req.body?.pageSize || req.query?.limit || req.query?.pageSize) || 500;
     const offset = (page - 1) * limit;
 
     const {
@@ -725,10 +760,84 @@ export const getNextUnassignedLead = async (req: Request, res: Response) => {
     );
 
     if (rows.length === 0) {
-      return res.status(404).json({ success: false, message: "No unassigned leads found" });
+      return res.status(200).json({ success: true, data: null, message: "No unassigned leads found" });
     }
 
     return res.status(200).json({ success: true, data: rows[0] });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== 12.1. GET NEXT ASSIGNED LEAD ====================
+export const getNextAssignedLead = async (req: Request, res: Response) => {
+  try {
+    const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
+    const currentLeadId = (req.query.current_lead_id as string) || (req.query.lead_id as string) || null;
+    const userIsAdmin = await checkIsAdmin(authUserId);
+    const agentId = (req.query.agent_id as string) || (!userIsAdmin && authUserId ? authUserId : null);
+
+    let nextLead: any = null;
+    let isLoop = false;
+
+    // Filter by agent if specified, or if non-admin agent logged in
+    const agentFilter = agentId
+      ? `AND l.agent_id = :agentId`
+      : authUserId && !userIsAdmin
+      ? `AND l.agent_id = :authUserId`
+      : ``;
+    const replacements: any = { agentId, authUserId, currentLeadId };
+
+    if (currentLeadId) {
+      const currentRows: any[] = await db.sequelize.query(
+        `SELECT id, created_at FROM public.leads WHERE id = :currentLeadId AND deleted_at IS NULL LIMIT 1`,
+        { replacements: { currentLeadId }, type: QueryTypes.SELECT }
+      );
+
+      if (currentRows.length > 0) {
+        const currentCreatedAt = currentRows[0].created_at;
+        replacements.currentCreatedAt = currentCreatedAt;
+        // Find next assigned lead down the list (created_at < current OR same created_at with id < current)
+        const nextRows: any[] = await db.sequelize.query(
+          `SELECT l.* FROM public.leads l
+           WHERE l.deleted_at IS NULL 
+             ${agentFilter}
+             AND (l.created_at < :currentCreatedAt OR (l.created_at = :currentCreatedAt AND l.id < :currentLeadId))
+           ORDER BY l.created_at DESC, l.id DESC 
+           LIMIT 1`,
+          { replacements, type: QueryTypes.SELECT }
+        );
+
+        if (nextRows.length > 0) {
+          nextLead = nextRows[0];
+          isLoop = false;
+        }
+      }
+    }
+
+    // If reached the end or no currentLeadId provided, loop back to the first assigned lead (newest on top)
+    if (!nextLead) {
+      const firstRows: any[] = await db.sequelize.query(
+        `SELECT l.* FROM public.leads l
+         WHERE l.deleted_at IS NULL 
+           ${agentFilter}
+           ${currentLeadId ? "AND l.id != :currentLeadId" : ""}
+         ORDER BY l.created_at DESC, l.id DESC 
+         LIMIT 1`,
+        { replacements, type: QueryTypes.SELECT }
+      );
+
+      if (firstRows.length > 0) {
+        nextLead = firstRows[0];
+        isLoop = Boolean(currentLeadId);
+      }
+    }
+
+    if (!nextLead) {
+      return res.status(200).json({ success: true, data: null, message: "No other assigned leads found" });
+    }
+
+    return res.status(200).json({ success: true, data: nextLead, is_loop: isLoop });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -742,53 +851,312 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
       return res.status(400).json({ success: false, message: "No Excel file uploaded" });
     }
 
+    const { lead_source_id, campaign_id, agent_id } = req.body;
+
     const workbook = XLSX.read(file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
-    const rawRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName]);
+    const rawRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: false, defval: "" });
 
     if (!rawRows.length) {
       return res.status(400).json({ success: false, message: "Excel sheet is empty" });
     }
 
     let inserted = 0;
+    let skipped = 0;
+    let duplicateFound = false;
     const now = new Date();
+    const seenPhonesInSheet = new Set<string>();
+    const seenEmailsInSheet = new Set<string>();
 
-    for (const row of rawRows) {
-      const full_name = row["Full Name"] || row["name"] || row["Name"] || "";
-      const phone = String(row["Phone"] || row["phone"] || row["Mobile"] || "").trim();
-      const email = String(row["Email"] || row["email"] || "").trim().toLowerCase();
+    for (let i = 0; i < rawRows.length; i++) {
+      const row = rawRows[i];
 
-      if (!full_name || !phone) continue;
+      const full_name = String(
+        row["Full Name"] ||
+        row["full_name"] ||
+        row["FullName"] ||
+        row["Name"] ||
+        row["name"] ||
+        row["Client Name"] ||
+        row["Customer Name"] ||
+        ""
+      ).trim();
+
+      const rawPhone = String(
+        row["Phone"] ||
+        row["phone"] ||
+        row["Mobile"] ||
+        row["mobile"] ||
+        row["Phone Number"] ||
+        row["Contact"] ||
+        row["Contact Number"] ||
+        ""
+      ).trim();
+
+      const email = String(
+        row["Email"] ||
+        row["email"] ||
+        row["Email ID"] ||
+        row["E-mail"] ||
+        ""
+      ).trim().toLowerCase();
+
+      if (!full_name || !rawPhone) {
+        skipped++;
+        continue;
+      }
+
+      const phoneDigits = rawPhone.replace(/\D/g, "");
+
+      if (phoneDigits.length < 5) {
+        skipped++;
+        continue;
+      }
+
+      // Check duplicates in current file
+      if (seenPhonesInSheet.has(phoneDigits) || (email && seenEmailsInSheet.has(email))) {
+        skipped++;
+        duplicateFound = true;
+        continue;
+      }
+
+      // Ensure exact country code format: +1 for USA 10-digit / 11-digit numbers
+      let phone = rawPhone.replace(/[^\d+]/g, ""); // keep + and digits
+      if (!phone.startsWith("+")) {
+        if (phoneDigits.length === 11 && phoneDigits.startsWith("1")) {
+          phone = `+${phoneDigits}`;
+        } else if (phoneDigits.length === 10) {
+          phone = `+1${phoneDigits}`;
+        } else {
+          phone = `+${phoneDigits}`;
+        }
+      }
+
+      // Check duplicate phone or email in database
+      const existing: any[] = await db.sequelize.query(
+        `SELECT id FROM public.leads WHERE deleted_at IS NULL AND (REGEXP_REPLACE(phone, '\\D', '', 'g') = :phoneDigits ${email ? 'OR LOWER(email) = :email' : ''}) LIMIT 1`,
+        { replacements: { phoneDigits, email }, type: QueryTypes.SELECT }
+      );
+
+      if (existing.length > 0) {
+        skipped++;
+        duplicateFound = true;
+        continue;
+      }
+
+      seenPhonesInSheet.add(phoneDigits);
+      if (email) seenEmailsInSheet.add(email);
+
+      const rawCountry = row["Country"] || row["country"] || null;
+      const { country: detectedCountry, currency: detectedCurrency } = detectCountryAndCurrency(phone, rawCountry, null);
 
       const id = uuidv4();
+      const whatsapp_number = row["WhatsApp Number"] || row["WhatsApp"] || row["whatsapp"] || row["whatsapp_number"] || null;
+      const address_line1 = row["Address"] || row["address"] || row["Address Line 1"] || row["address_line1"] || null;
+      const address_line2 = row["Address Line 2"] || row["address_line2"] || row["Address 2"] || row["address2"] || null;
+      const city = row["City"] || row["city"] || null;
+      const state = row["State"] || row["state"] || null;
+      const postal_code = row["Postal Code"] || row["postal_code"] || row["Zip Code"] || row["Zip"] || row["Pincode"] || null;
+      const note = row["Note"] || row["note"] || row["Remarks"] || row["remarks"] || null;
+
       await db.sequelize.query(
         `INSERT INTO public.leads (
-           id, full_name, email, phone, address_line1, city, state, country,
-           lead_status, currency, created_at, updated_at
+           id, full_name, email, phone, whatsapp_number, address_line1, address_line2, city, state, postal_code, country,
+           lead_source_id, campaign_id, agent_id, lead_status, currency, note, created_at, updated_at
          ) VALUES (
-           :id, :full_name, :email, :phone, :address_line1, :city, :state, :country,
-           'New', 'USD', :created_at, :updated_at
+           :id, :full_name, :email, :phone, :whatsapp_number, :address_line1, :address_line2, :city, :state, :postal_code, :country,
+           :lead_source_id, :campaign_id, :agent_id, 'New', :currency, :note, :created_at, :updated_at
          )`,
         {
           replacements: {
             id,
             full_name,
-            email: email || `${phone}@placeholder.com`,
+            email: email || `${phoneDigits || Date.now()}@placeholder.com`,
             phone,
-            address_line1: row["Address"] || row["address"] || null,
-            city: row["City"] || row["city"] || null,
-            state: row["State"] || row["state"] || null,
-            country: row["Country"] || row["country"] || null,
-            created_at: now,
-            updated_at: now,
+            whatsapp_number,
+            address_line1,
+            address_line2,
+            city,
+            state,
+            postal_code,
+            country: detectedCountry,
+            lead_source_id: lead_source_id || null,
+            campaign_id: campaign_id || null,
+            agent_id: agent_id || null,
+            currency: detectedCurrency || "USD",
+            note,
+            created_at: new Date(now.getTime() - i * 1000),
+            updated_at: new Date(now.getTime() - i * 1000),
           },
           type: QueryTypes.INSERT,
         }
       );
+
+      // Optional: Auto-create order if Product is present in the row
+      const rawProduct = (
+        row["Product"] ||
+        row["product"] ||
+        row["Medicine"] ||
+        row["medicine"] ||
+        row["Medicine Name"] ||
+        row["medicine_name"] ||
+        ""
+      )
+        .toString()
+        .trim();
+
+      if (rawProduct) {
+        const rawQuantity = row["Quantity"] || row["quantity"] || row["Qty"] || row["qty"];
+        const rawPrice =
+          row["Price"] ||
+          row["price"] ||
+          row["Amount"] ||
+          row["amount"] ||
+          row["Total Price"] ||
+          row["total_price"];
+
+        const quantity = Math.max(1, parseInt(String(rawQuantity || "1").replace(/\D/g, "")) || 1);
+        const price = parseFloat(String(rawPrice || "0").replace(/[^\d.]/g, "")) || 0;
+
+        const orderId = uuidv4();
+        const orderItemId = uuidv4();
+
+        // 1. Insert into lead_orders
+        await db.sequelize.query(
+          `INSERT INTO public.lead_orders (
+             id, lead_id, agent_id, total_items, grand_total,
+             order_status, payment_status, payment_mode, order_notes, created_at, updated_at
+           ) VALUES (
+             :orderId, :leadId, :agentId, 1, :grandTotal,
+             'Delivered', 'Paid', 'Prepaid', 'Previous purchase imported via bulk upload', :createdAt, :updatedAt
+           )`,
+          {
+            replacements: {
+              orderId,
+              leadId: id,
+              agentId: agent_id || null,
+              grandTotal: price,
+              createdAt: now,
+              updatedAt: now,
+            },
+            type: QueryTypes.INSERT,
+          }
+        );
+
+        // 2. Insert into lead_order_items (Direct mapping, no division)
+        await db.sequelize.query(
+          `INSERT INTO public.lead_order_items (
+             id, order_id, lead_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at
+           ) VALUES (
+             :itemId, :orderId, :leadId, :medicineName, 'Pcs', :quantity, :rate, :totalPrice, :createdAt, :updatedAt
+           )`,
+          {
+            replacements: {
+              itemId: orderItemId,
+              orderId,
+              leadId: id,
+              medicineName: rawProduct,
+              quantity,
+              rate: price,
+              totalPrice: price,
+              createdAt: now,
+              updatedAt: now,
+            },
+            type: QueryTypes.INSERT,
+          }
+        );
+      }
+
       inserted++;
     }
 
-    return res.status(200).json({ success: true, message: `Successfully imported ${inserted} leads` });
+    if (inserted === 0) {
+      const errorMsg = duplicateFound
+        ? "Lead already exists (Phone number or Email ID already exists)"
+        : "No leads imported. Please check your Excel file.";
+      return res.status(400).json({
+        success: false,
+        message: errorMsg,
+        data: { inserted: 0, skipped },
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: `Successfully imported ${inserted} leads${skipped > 0 ? " (Some leads skipped: Phone number or Email ID already exists)" : ""}!`,
+      data: { inserted, skipped },
+    });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== 14. DOWNLOAD SAMPLE EXCEL TEMPLATE ====================
+export const downloadSampleLeadExcel = async (req: Request, res: Response) => {
+  try {
+    const sampleData = [
+      {
+        "Full Name": "Ronald E Wilcox",
+        "Phone": "+16027692922",
+        "Email": "ronwilcox@cox.net",
+        "Address Line 1": "120 W ALMERIA RD",
+        "Address Line 2": "Suite 100",
+        "City": "Phoenix",
+        "State": "AZ",
+        "Zip Code": "85003-1139",
+        "Product": "Cenforce 100mg",
+        "Quantity": 2,
+        "Price": 100,
+      },
+      {
+        "Full Name": "John Smith",
+        "Phone": "+14155552671",
+        "Email": "john.smith@example.com",
+        "Address Line 1": "742 Evergreen Terrace",
+        "Address Line 2": "Apt 4B",
+        "City": "Springfield",
+        "State": "OR",
+        "Zip Code": "97477",
+        "Product": "Modafinil 200mg",
+        "Quantity": 1,
+        "Price": 120,
+      },
+      {
+        "Full Name": "David Wilson",
+        "Phone": "+447911123456",
+        "Email": "david.wilson@example.co.uk",
+        "Address Line 1": "10 Downing Street",
+        "Address Line 2": "Westminster",
+        "City": "London",
+        "State": "Greater London",
+        "Zip Code": "SW1A 2AA",
+        "Product": "Kamagra Oral Jelly",
+        "Quantity": 5,
+        "Price": 150,
+      },
+    ];
+
+    const worksheet = XLSX.utils.json_to_sheet(sampleData);
+    worksheet["!cols"] = [
+      { wch: 20 },
+      { wch: 18 },
+      { wch: 30 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 15 },
+      { wch: 10 },
+      { wch: 15 },
+      { wch: 22 },
+      { wch: 10 },
+      { wch: 12 },
+    ];
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Leads_Template");
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+    res.setHeader("Content-Disposition", 'attachment; filename="sample_leads_template.xlsx"');
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return res.send(buffer);
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -842,6 +1210,7 @@ export default {
   bulkAssignLeads,
   getUnassignedLeads,
   getNextUnassignedLead,
+  getNextAssignedLead,
   getAllAgents,
   updateLead,
   assignLeadToAgent,
@@ -850,5 +1219,6 @@ export default {
   softDeleteLeads,
   getLeadSources,
   bulkUploadFromFile,
+  downloadSampleLeadExcel,
   getAssignedLeadNotifications,
 };

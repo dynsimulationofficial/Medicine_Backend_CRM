@@ -7,13 +7,15 @@ import leadOrderController from "../controllers/LeadOrderController";
 import leadDocumentController from "../controllers/LeadDocumentController";
 import leadTaskController from "../controllers/LeadTaskController";
 import leadActivityHistoryController from "../controllers/LeadActivityHistoryController";
-import express from "express";
+import express, { Request, Response } from "express";
 import CompressCrmController from "../controllers/AdvanceLeadCRMController";
 import UserActivityController from "../controllers/UserActivityController";
 import leadController from "../controllers/LeadController";
 import UserManagementController from "../controllers/UserManagementController";
 import reportController from "../controllers/ReportController";
 import trackingController from "../controllers/TrackingController";
+import cloudTalkController from "../controllers/CloudTalkController";
+import autoDialerController from "../controllers/AutoDialerController";
 import { uploadFile } from "../multerconfig";
 import { requireAuth } from "../middleware/auth";
 
@@ -22,10 +24,12 @@ export const SystemuserRouter = express.Router();
 const systemuserController = new CompressCrmController();
 const userActivityController = new UserActivityController();
 
-/* ==================== 1. PUBLIC AUTH ROUTES ==================== */
+/* ==================== 1. PUBLIC AUTH & WEBHOOK ROUTES ==================== */
 SystemuserRouter.post("/sendotp", systemuserController.loginRequestOtp);
 SystemuserRouter.post("/login", systemuserController.verifyOtp);
 SystemuserRouter.post("/logout", systemuserController.logout);
+SystemuserRouter.post("/cloudtalk/webhook", cloudTalkController.handleWebhook);
+SystemuserRouter.get("/cloudtalk/recordings/:callId", cloudTalkController.streamRecording);
 
 /* ==================== 2. GLOBAL AUTH MIDDLEWARE (All routes below require authentication) ==================== */
 SystemuserRouter.use(requireAuth);
@@ -63,6 +67,7 @@ SystemuserRouter.post("/leads/unassigned/filter", leadController.filterUnassigne
 SystemuserRouter.get("/allagents", leadController.getAllAgents);
 SystemuserRouter.get("/leadsources", leadController.getLeadSources);
 SystemuserRouter.get("/leads/random", leadController.getNextUnassignedLead);
+SystemuserRouter.get("/leads/assigned/next", leadController.getNextAssignedLead);
 
 /* -------------------- Lead Activity -------------------- */
 SystemuserRouter.post("/leads/activities/create", leadActivityHistoryController.createActivity);
@@ -71,6 +76,7 @@ SystemuserRouter.post("/leads/update/activity", leadActivityHistoryController.up
 SystemuserRouter.post("/leads/activities/delete", leadActivityHistoryController.deleteActivity);
 SystemuserRouter.post("/leads/activities/soft-delete", leadActivityHistoryController.deleteActivity);
 SystemuserRouter.get("/leads/dispositions/all", leadActivityHistoryController.getAllDispositions);
+SystemuserRouter.get("/leads/dispositions", leadActivityHistoryController.getAllDispositions);
 
 /* -------------------- Lead Tasks -------------------- */
 SystemuserRouter.post("/leads/tasks/create", leadTaskController.createTask);
@@ -85,6 +91,7 @@ SystemuserRouter.post("/leads/tasks/soft-delete", leadTaskController.deleteTask)
 SystemuserRouter.post("/leads/documents/list", leadDocumentController.getAllDocuments);
 SystemuserRouter.post("/leads/documents/upload", uploadFile.single("file"), leadDocumentController.uploadDocument);
 SystemuserRouter.post("/leads/bulk/upload", uploadFile.single("file"), leadController.bulkUploadFromFile);
+SystemuserRouter.get("/leads/bulk/sample", leadController.downloadSampleLeadExcel);
 SystemuserRouter.post("/leads/documents/download", leadDocumentController.getDocumentUrl);
 SystemuserRouter.post("/leads/documents/geturl", leadDocumentController.getDocumentUrl);
 SystemuserRouter.post("/leads/documents/edit", leadDocumentController.updateDocument);
@@ -102,7 +109,7 @@ SystemuserRouter.get("/leads/medicines/suggestions", leadOrderController.getMedi
 /* -------------------- Lead Orders -------------------- */
 SystemuserRouter.post("/leads/orders/create", leadOrderController.createOrder);
 SystemuserRouter.post("/leads/orders/update", leadOrderController.updateOrder);
-SystemuserRouter.post("/leads/orders/save", (req, res) => {
+SystemuserRouter.post("/leads/orders/save", (req: Request, res: Response) => {
   if (req.body?.id || req.body?.order_id) {
     return leadOrderController.updateOrder(req, res);
   }
@@ -114,6 +121,7 @@ SystemuserRouter.post("/leads/orders/update-status", leadOrderController.updateO
 
 /* -------------------- Dashboards -------------------- */
 SystemuserRouter.post("/leads/task/agent/dashboard", agentDashboardController.getAgentTasksDashboard);
+SystemuserRouter.get("/leads/task/agent/dashboard", agentDashboardController.getAgentTasksDashboard);
 SystemuserRouter.post("/leads/agent/dashboard/assigned-leads-count", agentDashboardController.getAssignedLeadsCount);
 SystemuserRouter.get("/leads/agent/dashboard/assigned-leads-count", agentDashboardController.getAssignedLeadsCount);
 SystemuserRouter.post("/leads/agent/dashboard/converted-deals-count", agentDashboardController.getConvertedDealsCount);
@@ -174,10 +182,32 @@ SystemuserRouter.put("/campaigns/:id", campaignController.updateCampaign);
 SystemuserRouter.post("/campaigns/edit", campaignController.updateCampaign);
 SystemuserRouter.delete("/campaigns/:id", campaignController.deleteCampaign);
 SystemuserRouter.post("/campaigns/delete", campaignController.deleteCampaign);
+SystemuserRouter.post("/campaigns/:id/reset-dialer", campaignController.resetCampaignDialer);
 
 /* -------------------- Courier / Parcel Tracking (On-Demand) -------------------- */
 SystemuserRouter.post("/tracking/sync", trackingController.syncTracking);
 SystemuserRouter.post("/tracking/history", trackingController.getTrackingHistory);
 SystemuserRouter.get("/tracking/history/:order_id", trackingController.getTrackingHistory);
 
+/* -------------------- CloudTalk Telephony / VoIP -------------------- */
+SystemuserRouter.post("/cloudtalk/call", cloudTalkController.initiateClickToCall);
+
+/* -------------------- Auto-Dialer Queue & Controller -------------------- */
+SystemuserRouter.get("/leads/dialer/queue", autoDialerController.getDialerQueue);
+SystemuserRouter.post("/leads/dialer/call-next", autoDialerController.callNextLead);
+SystemuserRouter.post("/leads/dialer/call-connected", autoDialerController.markCallConnected);
+SystemuserRouter.get("/leads/dialer/call-status", autoDialerController.checkCallStatus);
+SystemuserRouter.post("/leads/dialer/quick-disposition", autoDialerController.saveQuickDisposition);
+SystemuserRouter.post("/leads/dialer/save-and-advance", autoDialerController.saveAndAdvance);
+SystemuserRouter.post("/leads/dialer/auto-skip-timeout", autoDialerController.autoSkipTimeout);
+SystemuserRouter.get("/leads/dialer/campaign-stats", autoDialerController.getCampaignDialerStats);
+SystemuserRouter.get("/leads/dialer/active-call", autoDialerController.getActiveCall);
+SystemuserRouter.get("/leads/dialer/agent-status", autoDialerController.getAgentStatus);
+SystemuserRouter.post("/leads/dialer/start-parallel", autoDialerController.startParallelCampaign);
+SystemuserRouter.post("/leads/dialer/stop-parallel", autoDialerController.stopParallelCampaign);
+SystemuserRouter.post("/leads/dialer/stop", autoDialerController.stopParallelCampaign);
+SystemuserRouter.get("/leads/dialer/parallel-status", autoDialerController.getParallelCampaignStatus);
+
 export default SystemuserRouter;
+
+

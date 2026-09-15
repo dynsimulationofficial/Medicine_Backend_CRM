@@ -253,7 +253,7 @@ export const getAssignedLeadsQueue = async (req: Request, res: Response) => {
     }
 
     const page = Math.max(1, Number(req.body?.page || req.query?.page || 1));
-    const pageSize = Math.max(1, Math.min(100, Number(req.body?.pageSize || req.query?.pageSize || 50)));
+    const pageSize = Math.max(1, Math.min(500, Number(req.body?.pageSize || req.query?.pageSize || 500)));
     const offset = (page - 1) * pageSize;
 
     const [countResult]: any[] = await db.sequelize.query(
@@ -283,10 +283,10 @@ export const getAssignedLeadsQueue = async (req: Request, res: Response) => {
        FROM public.leads l
        LEFT JOIN LATERAL (
           SELECT 
-              COUNT(o.id) AS order_count,
-              SUM(o.grand_total) AS total_order_amount,
-              (SELECT order_status FROM public.lead_orders WHERE lead_id = l.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1) AS latest_order_status,
-              (SELECT order_number FROM public.lead_orders WHERE lead_id = l.id AND deleted_at IS NULL ORDER BY created_at DESC LIMIT 1) AS latest_order_number
+              COUNT(o.id)::int AS order_count,
+              COALESCE(SUM(o.grand_total), 0)::float AS total_order_amount,
+              (ARRAY_AGG(o.order_status ORDER BY o.created_at DESC))[1] AS latest_order_status,
+              (ARRAY_AGG(o.order_number ORDER BY o.created_at DESC))[1] AS latest_order_number
           FROM public.lead_orders o
           WHERE o.lead_id = l.id AND o.deleted_at IS NULL
        ) ord_summary ON true

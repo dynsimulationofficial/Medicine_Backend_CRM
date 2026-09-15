@@ -46,6 +46,7 @@ const medicineSchema = yup.object({
   generic_name: yup.string().trim().nullable().optional().max(255),
   packing: yup.string().trim().nullable().optional().max(100),
   price: yup.number().typeError("Price must be a valid number").nullable().optional().min(0),
+  description: yup.string().trim().nullable().optional(),
 });
 
 // ==================== 1. CREATE MEDICINE ====================
@@ -55,6 +56,7 @@ export const createMedicine = async (req: Request, res: Response) => {
     const name = validatedData.name.trim();
     const generic_name = req.body?.generic_name?.toString().trim() || null;
     const packing = req.body?.packing?.toString().trim() || null;
+    const description = req.body?.description?.toString().trim() || null;
     const price =
       req.body?.price !== undefined && req.body?.price !== "" && req.body?.price !== null && !isNaN(Number(req.body.price))
         ? Number(req.body.price)
@@ -111,13 +113,13 @@ export const createMedicine = async (req: Request, res: Response) => {
     const now = new Date();
 
     const query = `
-      INSERT INTO public.master_medicines (id, name, generic_name, packing, price, image_url, created_at, updated_at)
-      VALUES (:id, :name, :generic_name, :packing, :price, :image_url, :created_at, :updated_at)
+      INSERT INTO public.master_medicines (id, name, generic_name, packing, price, description, image_url, created_at, updated_at)
+      VALUES (:id, :name, :generic_name, :packing, :price, :description, :image_url, :created_at, :updated_at)
       RETURNING *
     `;
 
     const result: any[] = await db.sequelize.query(query, {
-      replacements: { id, name, generic_name, packing, price, image_url: imageUrl, created_at: now, updated_at: now },
+      replacements: { id, name, generic_name, packing, price, description, image_url: imageUrl, created_at: now, updated_at: now },
       type: QueryTypes.SELECT,
     });
 
@@ -158,7 +160,7 @@ export const getAllMedicines = async (req: Request, res: Response) => {
     const total = parseInt(countResult[0]?.total || "0");
 
     const dataResult: any[] = await db.sequelize.query(
-      `SELECT id, name, generic_name, packing, price, image_url, created_at, updated_at
+      `SELECT id, name, generic_name, packing, price, description, image_url, created_at, updated_at
        FROM public.master_medicines
        ${whereClause}
        ORDER BY created_at DESC
@@ -193,7 +195,7 @@ export const getMedicineById = async (req: Request, res: Response) => {
     }
 
     const result: any[] = await db.sequelize.query(
-      `SELECT id, name, generic_name, packing, price, image_url, created_at, updated_at FROM public.master_medicines WHERE id = :id AND deleted_at IS NULL LIMIT 1`,
+      `SELECT id, name, generic_name, packing, price, description, image_url, created_at, updated_at FROM public.master_medicines WHERE id = :id AND deleted_at IS NULL LIMIT 1`,
       { replacements: { id }, type: QueryTypes.SELECT }
     );
 
@@ -224,6 +226,7 @@ export const updateMedicine = async (req: Request, res: Response) => {
     const name = validatedData.name.trim();
     const generic_name = req.body?.generic_name !== undefined ? (req.body.generic_name?.toString().trim() || null) : undefined;
     const packing = req.body?.packing !== undefined ? (req.body.packing?.toString().trim() || null) : undefined;
+    const description = req.body?.description !== undefined ? (req.body.description?.toString().trim() || null) : undefined;
     const price =
       req.body?.price !== undefined
         ? req.body.price !== "" && req.body.price !== null && !isNaN(Number(req.body.price))
@@ -279,6 +282,11 @@ export const updateMedicine = async (req: Request, res: Response) => {
     if (packing !== undefined) {
       setClauses.push("packing = :packing");
       replacements.packing = packing;
+    }
+
+    if (description !== undefined) {
+      setClauses.push("description = :description");
+      replacements.description = description;
     }
 
     if (price !== undefined) {

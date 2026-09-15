@@ -89,7 +89,19 @@ export const getAllCampaigns = async (req: Request, res: Response) => {
          c.lead_source_id,
          c.created_at,
          c.updated_at,
-         ls.name as lead_source_name
+         ls.name as lead_source_name,
+         (SELECT COUNT(*) FROM public.leads l WHERE l.campaign_id = c.id AND l.deleted_at IS NULL) as total_leads,
+         (SELECT COUNT(*) FROM public.leads l 
+          WHERE l.campaign_id = c.id 
+            AND l.deleted_at IS NULL 
+            AND (l.agent_id IS NOT NULL OR LOWER(COALESCE(l.lead_status, '')) NOT IN ('', 'new'))
+         ) as dialed_leads,
+         (SELECT COUNT(*) FROM public.leads l 
+          WHERE l.campaign_id = c.id 
+            AND l.deleted_at IS NULL 
+            AND l.agent_id IS NULL 
+            AND LOWER(COALESCE(l.lead_status, 'new')) = 'new'
+         ) as pending_leads
        FROM public.campaigns c
        LEFT JOIN public.lead_sources ls ON ls.id = c.lead_source_id
        ${whereClause}
@@ -240,6 +252,30 @@ export const deleteCampaign = async (req: Request, res: Response) => {
   }
 };
 
+// ==================== 7. RESET CAMPAIGN DIALER ====================
+export const resetCampaignDialer = async (req: Request, res: Response) => {
+  try {
+    const id = req.params?.id || req.body?.id;
+    if (!id) {
+      return res.status(400).json({ success: false, message: "Campaign ID is required" });
+    }
+
+    // Reset leads that were not won/converted back to 'New' so they can be re-dialed
+    await db.sequelize.query(
+      `UPDATE public.leads 
+       SET lead_status = 'New', agent_id = NULL, updated_at = NOW() 
+       WHERE campaign_id = :id 
+         AND deleted_at IS NULL 
+         AND LOWER(COALESCE(lead_status, '')) NOT IN ('won', 'converted', 'closed')`,
+      { replacements: { id }, type: QueryTypes.UPDATE }
+    );
+
+    return res.status(200).json({ success: true, message: "Campaign leads reset for re-dialing" });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ==================== DEFAULT EXPORT ====================
 export default {
   createCampaign,
@@ -248,4 +284,5 @@ export default {
   getCampaignById,
   updateCampaign,
   deleteCampaign,
+  resetCampaignDialer,
 };
