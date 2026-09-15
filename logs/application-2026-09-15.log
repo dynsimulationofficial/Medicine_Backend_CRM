@@ -1,1 +1,4 @@
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-15T10:13:26.856Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-15T10:35:48.926Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6IjRlYmNkYzQ1LTQ3NDQtNGQ5MC05MGNkLWM3N2YyNDFhMTNkYiIsImVtYWlsIjoid2FzaXF1ZWtoYW44MEBnbWFpbC5jb20iLCJpYXQiOjE3ODk0NjY1NjMsImV4cCI6MTc4OTU1Mjk2M30.YRP1F5SUJdBsUtmld6lJkilggxj_CaIxpFdR81iNOu8","timestamp":"2026-09-15T10:51:33.186Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-15T11:53:47.894Z"}

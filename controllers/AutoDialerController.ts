@@ -11,6 +11,7 @@ export class AutoDialerController {
     lead_number?: string;
     full_name?: string;
     phone?: string;
+    call_id?: string | null;
     is_connected?: boolean;
     timestamp: number;
     campaign_id?: string | null;
@@ -150,7 +151,7 @@ export class AutoDialerController {
         LEFT JOIN public.campaigns c ON l.campaign_id = c.id
         LEFT JOIN public.system_users su ON l.agent_id = su.id
         WHERE ${whereClause}
-        ORDER BY l.created_at DESC
+        ORDER BY l.created_at DESC, l.id DESC
         LIMIT ${maxLimit};
       `;
 
@@ -272,6 +273,7 @@ export class AutoDialerController {
         lead_number: lead.lead_number,
         full_name: lead.full_name,
         phone: targetPhone,
+        call_id: callId || null,
         is_connected: true,
         timestamp: Date.now(),
         campaign_id: lead.campaign_id || null,
@@ -724,6 +726,7 @@ export class AutoDialerController {
         lead_number: nextLead.lead_number,
         full_name: nextLead.full_name,
         phone: targetPhone,
+        call_id: nextCallId || null,
         is_connected: true,
         timestamp: Date.now(),
         campaign_id: resolvedCampaignId,

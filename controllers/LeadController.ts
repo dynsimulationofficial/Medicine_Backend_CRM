@@ -985,8 +985,8 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
             agent_id: agent_id || null,
             currency: detectedCurrency || "USD",
             note,
-            created_at: now,
-            updated_at: now,
+            created_at: new Date(now.getTime() - i * 1000),
+            updated_at: new Date(now.getTime() - i * 1000),
           },
           type: QueryTypes.INSERT,
         }
