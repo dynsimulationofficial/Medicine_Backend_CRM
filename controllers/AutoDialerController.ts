@@ -667,7 +667,7 @@ export class AutoDialerController {
              AND LOWER(COALESCE(lead_status, 'new')) = 'new'
              AND deleted_at IS NULL
              AND (phone IS NOT NULL AND TRIM(phone) != '')
-           ORDER BY created_at ASC
+           ORDER BY created_at DESC
            LIMIT 1`,
           { replacements: { campaign_id: resolvedCampaignId, lead_id }, type: QueryTypes.SELECT }
         );
