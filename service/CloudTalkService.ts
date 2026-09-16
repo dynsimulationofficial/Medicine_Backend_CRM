@@ -557,18 +557,16 @@ export class CloudTalkService {
         const agentId = String(cdr.user_id || item.Agent?.id || "");
         if (agentId !== String(targetAgentId)) continue;
 
-        const isEnded = Boolean(cdr.ended_at);
+        const isEnded = Boolean(cdr.ended_at) || cdr.status === "ended" || cdr.status === "completed" || cdr.status === "missed";
         const external = String(cdr.public_external || cdr.callee || cdr.caller || "").trim();
-        const callStartTime = cdr.started_at ? new Date(cdr.started_at).getTime() : 0;
-        const now = Date.now();
 
-        // If call has not ended, or started within last 45s and answered
-        if (external && (!isEnded || (now - callStartTime < 45000 && Boolean(cdr.answered_at)))) {
+        // Only return true live ongoing calls that have NOT ended
+        if (external && !isEnded) {
           return {
             phone: external,
             callId: String(cdr.id || ""),
             duration: Number(cdr.talking_time || 0),
-            isTalking: !isEnded || Number(cdr.talking_time || 0) > 0,
+            isTalking: true,
           };
         }
       }

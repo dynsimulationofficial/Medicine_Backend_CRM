@@ -28,6 +28,27 @@ export class AutoDialerController {
   } | null = null;
 
   private stoppedAt: number = 0;
+  private recentlyCompletedLeadIds: Map<string, number> = new Map();
+
+  private markLeadCompleted(leadId: string) {
+    if (!leadId) return;
+    this.recentlyCompletedLeadIds.set(leadId, Date.now());
+    const cutoff = Date.now() - 600000;
+    for (const [id, ts] of this.recentlyCompletedLeadIds.entries()) {
+      if (ts < cutoff) this.recentlyCompletedLeadIds.delete(id);
+    }
+  }
+
+  private isLeadRecentlyCompleted(leadId: string): boolean {
+    if (!leadId) return false;
+    const ts = this.recentlyCompletedLeadIds.get(leadId);
+    if (!ts) return false;
+    if (Date.now() - ts > 600000) {
+      this.recentlyCompletedLeadIds.delete(leadId);
+      return false;
+    }
+    return true;
+  }
 
   /**
    * Helper to check if the current user is Admin
@@ -509,7 +530,8 @@ export class AutoDialerController {
         );
       }
 
-      // Clear active call state since disposition is completed
+      // Mark lead completed and clear active call state
+      this.markLeadCompleted(lead_id);
       if (this.activeCall?.lead_id === lead_id) {
         this.activeCall = null;
       }
@@ -553,7 +575,10 @@ export class AutoDialerController {
 
       const authUserId = (req as any)?.user?.system_user_id || (req as any)?.user?.id || null;
 
-      // 1. Fetch current lead details from DB
+      // 1. Mark lead completed immediately to prevent resurrection
+      this.markLeadCompleted(lead_id);
+
+      // Fetch current lead details from DB
       const [currentLeadRow]: any[] = await db.sequelize.query(
         `SELECT id, lead_number, full_name, phone, whatsapp_number, campaign_id, agent_id, lead_status
          FROM public.leads 
@@ -655,8 +680,9 @@ export class AutoDialerController {
         }
       );
 
-      // 6. Find NEXT pending lead in queue
+      // 6. Find NEXT pending lead in queue (Exclude all completed leads)
       let nextLead: any = null;
+      const excludedIds = [lead_id, ...Array.from(this.recentlyCompletedLeadIds.keys())];
 
       if (resolvedCampaignId) {
         // Find next pending uncalled lead in this campaign
@@ -664,14 +690,14 @@ export class AutoDialerController {
           `SELECT id, lead_number, full_name, phone, whatsapp_number, email, city, state, country, note, campaign_id
            FROM public.leads
            WHERE campaign_id = :campaign_id
-             AND id != :lead_id
+             AND id NOT IN (:excludedIds)
              AND agent_id IS NULL
              AND LOWER(COALESCE(lead_status, 'new')) = 'new'
              AND deleted_at IS NULL
              AND (phone IS NOT NULL AND TRIM(phone) != '')
            ORDER BY created_at DESC
            LIMIT 1`,
-          { replacements: { campaign_id: resolvedCampaignId, lead_id }, type: QueryTypes.SELECT }
+          { replacements: { campaign_id: resolvedCampaignId, excludedIds }, type: QueryTypes.SELECT }
         );
         nextLead = nextRow || null;
       } else if (validAgentId) {
@@ -680,13 +706,13 @@ export class AutoDialerController {
           `SELECT id, lead_number, full_name, phone, whatsapp_number, email, city, state, country, note, campaign_id
            FROM public.leads
            WHERE agent_id = :agent_id
-             AND id != :lead_id
+             AND id NOT IN (:excludedIds)
              AND LOWER(COALESCE(lead_status, '')) NOT IN ('won', 'lost', 'closed', 'junk')
              AND deleted_at IS NULL
              AND (phone IS NOT NULL AND TRIM(phone) != '')
            ORDER BY created_at DESC
            LIMIT 1`,
-          { replacements: { agent_id: validAgentId, lead_id }, type: QueryTypes.SELECT }
+          { replacements: { agent_id: validAgentId, excludedIds }, type: QueryTypes.SELECT }
         );
         nextLead = nextRow || null;
       }
@@ -954,7 +980,7 @@ export class AutoDialerController {
               { replacements: { tail: `%${searchTail}%` }, type: QueryTypes.SELECT }
             );
 
-            if (matchedLead) {
+            if (matchedLead && !this.isLeadRecentlyCompleted(matchedLead.id)) {
               this.activeCall = {
                 lead_id: matchedLead.id,
                 lead_number: matchedLead.lead_number,
@@ -1021,7 +1047,7 @@ export class AutoDialerController {
 
       // Only mark completed if disposition was saved by the agent, or if an answered conversation ended
       const isCompleted = Boolean(dispositionSaved || (status.isAnswered && status.isEnded));
-      if (dispositionSaved && this.activeCall) {
+      if (dispositionSaved && this.activeCall && this.activeCall.lead_id === targetLeadId) {
         this.activeCall = null;
       }
 
