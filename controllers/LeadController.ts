@@ -1192,7 +1192,7 @@ export const getAssignedLeadNotifications = async (req: Request, res: Response) 
 // ==================== 15. EXPORT AGENT PERFORMANCE & SALES DATA ====================
 export const exportAgentData = async (req: Request, res: Response) => {
   try {
-    const { agent_id, from_date, to_date, lead_status } = req.query as any;
+    const { agent_id, from_date, to_date, lead_status, call_type } = req.query as any;
 
     const conditions: string[] = ["l.deleted_at IS NULL", "l.agent_id IS NOT NULL"];
     const replacements: any = {};
@@ -1217,6 +1217,12 @@ export const exportAgentData = async (req: Request, res: Response) => {
       replacements.lead_status = lead_status;
     }
 
+    if (call_type === "campaign") {
+      conditions.push("l.campaign_id IS NOT NULL");
+    } else if (call_type === "manual") {
+      conditions.push("l.campaign_id IS NULL");
+    }
+
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
 
     const rows: any[] = await db.sequelize.query(
@@ -1229,6 +1235,7 @@ export const exportAgentData = async (req: Request, res: Response) => {
          l.state,
          l.country,
          l.lead_status,
+         l.campaign_id,
          l.product AS past_product,
          l.quantity AS past_quantity,
          l.price AS past_price,
@@ -1276,11 +1283,16 @@ export const exportAgentData = async (req: Request, res: Response) => {
         ? `${r.past_product} (${r.past_quantity || 1} Pcs • ${curr}${Number(r.past_price || 0).toLocaleString()})`
         : "-";
 
+      const callingTypeFormatted = r.campaign_id
+        ? (r.campaign_name ? `Campaign (${r.campaign_name})` : "Campaign / Auto-Dialer")
+        : "Manual Call";
+
       return {
         "Agent Name": r.agent_name || "Unassigned",
         "Customer Name": r.customer_name || "-",
         "Phone": r.phone || "-",
         "Email": r.email || "-",
+        "Calling Type": callingTypeFormatted,
         "City": r.city || "-",
         "State": r.state || "-",
         "Country": r.country || "-",
@@ -1303,6 +1315,7 @@ export const exportAgentData = async (req: Request, res: Response) => {
       { wch: 22 }, // Customer Name
       { wch: 18 }, // Phone
       { wch: 28 }, // Email
+      { wch: 24 }, // Calling Type
       { wch: 15 }, // City
       { wch: 15 }, // State
       { wch: 12 }, // Country
@@ -1323,7 +1336,8 @@ export const exportAgentData = async (req: Request, res: Response) => {
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
     const safeAgentLabel = rows[0]?.agent_name ? rows[0].agent_name.replace(/[^a-zA-Z0-9]/g, "_") : "All_Agents";
-    const filename = `Agent_${safeAgentLabel}_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const callTypeSuffix = call_type === "campaign" ? "_Campaign" : call_type === "manual" ? "_Manual" : "";
+    const filename = `Agent_${safeAgentLabel}${callTypeSuffix}_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
