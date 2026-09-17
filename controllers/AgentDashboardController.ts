@@ -98,6 +98,7 @@ export const getTotalOrdersCount = async (req: Request, res: Response) => {
        FROM public.lead_orders o 
        JOIN public.leads l ON l.id = o.lead_id AND l.deleted_at IS NULL
        WHERE o.deleted_at IS NULL 
+         AND (o.order_notes IS NULL OR o.order_notes NOT ILIKE '%bulk upload%')
          AND (o.agent_id = :agentId OR l.agent_id = :agentId)`,
       { replacements: { agentId }, type: QueryTypes.SELECT }
     );
@@ -134,6 +135,7 @@ export const getSalesRevenue = async (req: Request, res: Response) => {
        JOIN public.leads l ON CAST(l.id AS TEXT) = CAST(o.lead_id AS TEXT) AND l.deleted_at IS NULL
        WHERE o.deleted_at IS NULL 
          AND o.order_status != 'Cancelled'
+         AND (o.order_notes IS NULL OR o.order_notes NOT ILIKE '%bulk upload%')
          AND (CAST(o.agent_id AS TEXT) = CAST(:agentId AS TEXT) OR CAST(l.agent_id AS TEXT) = CAST(:agentId AS TEXT))`,
       { replacements: { agentId }, type: QueryTypes.SELECT }
     );
@@ -274,6 +276,9 @@ export const getAssignedLeadsQueue = async (req: Request, res: Response) => {
           l.country,
           l.lead_status,
           l.currency,
+          l.product,
+          l.quantity,
+          l.price,
           l.created_at,
           l.updated_at,
           COALESCE(ord_summary.order_count, 0)::int AS order_count,
@@ -288,7 +293,7 @@ export const getAssignedLeadsQueue = async (req: Request, res: Response) => {
               (ARRAY_AGG(o.order_status ORDER BY o.created_at DESC))[1] AS latest_order_status,
               (ARRAY_AGG(o.order_number ORDER BY o.created_at DESC))[1] AS latest_order_number
           FROM public.lead_orders o
-          WHERE o.lead_id = l.id AND o.deleted_at IS NULL
+          WHERE o.lead_id = l.id AND o.deleted_at IS NULL AND (o.order_notes IS NULL OR o.order_notes NOT ILIKE '%bulk upload%')
        ) ord_summary ON true
        WHERE l.agent_id = :agentId AND l.deleted_at IS NULL
        ORDER BY l.created_at DESC

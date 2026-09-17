@@ -969,13 +969,48 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
       const postal_code = row["Postal Code"] || row["postal_code"] || row["Zip Code"] || row["Zip"] || row["Pincode"] || null;
       const note = row["Note"] || row["note"] || row["Remarks"] || row["remarks"] || null;
 
+      // Extract Customer's Previous Purchase (Product, Quantity, Price)
+      const rawProduct = (
+        row["Product"] ||
+        row["product"] ||
+        row["Medicine"] ||
+        row["medicine"] ||
+        row["Medicine Name"] ||
+        row["medicine_name"] ||
+        ""
+      )
+        .toString()
+        .trim();
+
+      let product: string | null = rawProduct || null;
+      let quantity: number | null = null;
+      let price: number | null = null;
+
+      if (rawProduct) {
+        const rawQuantity = row["Quantity"] || row["quantity"] || row["Qty"] || row["qty"];
+        const rawPrice =
+          row["Price"] ||
+          row["price"] ||
+          row["Amount"] ||
+          row["amount"] ||
+          row["Total Price"] ||
+          row["total_price"];
+
+        const parsedQty = parseInt(String(rawQuantity || "1").replace(/\D/g, ""), 10);
+        quantity = Number.isInteger(parsedQty) && parsedQty > 0 ? parsedQty : 1;
+
+        const cleanPriceStr = String(rawPrice || "0").replace(/[^\d.]/g, "");
+        const parsedPrice = parseFloat(cleanPriceStr);
+        price = !isNaN(parsedPrice) && parsedPrice >= 0 ? parsedPrice : 0;
+      }
+
       await db.sequelize.query(
         `INSERT INTO public.leads (
            id, full_name, email, phone, whatsapp_number, address_line1, address_line2, city, state, postal_code, country,
-           lead_source_id, campaign_id, agent_id, lead_status, currency, note, created_at, updated_at
+           lead_source_id, campaign_id, agent_id, lead_status, currency, note, product, quantity, price, created_at, updated_at
          ) VALUES (
            :id, :full_name, :email, :phone, :whatsapp_number, :address_line1, :address_line2, :city, :state, :postal_code, :country,
-           :lead_source_id, :campaign_id, :agent_id, 'New', :currency, :note, :created_at, :updated_at
+           :lead_source_id, :campaign_id, :agent_id, 'New', :currency, :note, :product, :quantity, :price, :created_at, :updated_at
          )`,
         {
           replacements: {
@@ -995,6 +1030,9 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
             agent_id: safeAgentId,
             currency: detectedCurrency || "USD",
             note,
+            product,
+            quantity,
+            price,
             created_at: new Date(now.getTime() - i * 1000),
             updated_at: new Date(now.getTime() - i * 1000),
           },
@@ -1002,87 +1040,6 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
           transaction,
         }
       );
-
-      // Optional: Auto-create order if Product is present in the row
-      const rawProduct = (
-        row["Product"] ||
-        row["product"] ||
-        row["Medicine"] ||
-        row["medicine"] ||
-        row["Medicine Name"] ||
-        row["medicine_name"] ||
-        ""
-      )
-        .toString()
-        .trim();
-
-      if (rawProduct) {
-        const rawQuantity = row["Quantity"] || row["quantity"] || row["Qty"] || row["qty"];
-        const rawPrice =
-          row["Price"] ||
-          row["price"] ||
-          row["Amount"] ||
-          row["amount"] ||
-          row["Total Price"] ||
-          row["total_price"];
-
-        const parsedQty = parseInt(String(rawQuantity || "1").replace(/\D/g, ""), 10);
-        const quantity = Number.isInteger(parsedQty) && parsedQty > 0 ? parsedQty : 1;
-
-        const cleanPriceStr = String(rawPrice || "0").replace(/[^\d.]/g, "");
-        const parsedPrice = parseFloat(cleanPriceStr);
-        const price = !isNaN(parsedPrice) && parsedPrice >= 0 ? parsedPrice : 0;
-
-        const orderId = uuidv4();
-        const orderItemId = uuidv4();
-
-        // 1. Insert into lead_orders
-        await db.sequelize.query(
-          `INSERT INTO public.lead_orders (
-             id, lead_id, agent_id, total_items, grand_total,
-             order_status, payment_status, payment_mode, order_notes, created_at, updated_at
-           ) VALUES (
-             :orderId, :leadId, :agentId, 1, :grandTotal,
-             'Delivered', 'Paid', 'Prepaid', 'Previous purchase imported via bulk upload', :createdAt, :updatedAt
-           )`,
-          {
-            replacements: {
-              orderId,
-              leadId: id,
-              agentId: safeAgentId,
-              grandTotal: price,
-              createdAt: now,
-              updatedAt: now,
-            },
-            type: QueryTypes.INSERT,
-            transaction,
-          }
-        );
-
-        // 2. Insert into lead_order_items (Direct mapping, no division)
-        await db.sequelize.query(
-          `INSERT INTO public.lead_order_items (
-             id, order_id, lead_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at
-           ) VALUES (
-             :itemId, :orderId, :leadId, :medicineName, 'Pcs', :quantity, :rate, :totalPrice, :createdAt, :updatedAt
-           )`,
-          {
-            replacements: {
-              itemId: orderItemId,
-              orderId,
-              leadId: id,
-              medicineName: rawProduct,
-              quantity,
-              rate: price,
-              totalPrice: price,
-              createdAt: now,
-              updatedAt: now,
-            },
-            type: QueryTypes.INSERT,
-            transaction,
-          }
-        );
-      }
 
       inserted++;
     }
@@ -1232,6 +1189,150 @@ export const getAssignedLeadNotifications = async (req: Request, res: Response) 
   }
 };
 
+// ==================== 15. EXPORT AGENT PERFORMANCE & SALES DATA ====================
+export const exportAgentData = async (req: Request, res: Response) => {
+  try {
+    const { agent_id, from_date, to_date, lead_status } = req.query as any;
+
+    const conditions: string[] = ["l.deleted_at IS NULL", "l.agent_id IS NOT NULL"];
+    const replacements: any = {};
+
+    if (agent_id && agent_id !== "all" && agent_id !== "All") {
+      conditions.push("l.agent_id = :agent_id");
+      replacements.agent_id = agent_id;
+    }
+
+    if (from_date) {
+      conditions.push("l.created_at >= :from_date");
+      replacements.from_date = new Date(`${from_date}T00:00:00Z`);
+    }
+
+    if (to_date) {
+      conditions.push("l.created_at <= :to_date");
+      replacements.to_date = new Date(`${to_date}T23:59:59Z`);
+    }
+
+    if (lead_status && lead_status !== "all" && lead_status !== "All") {
+      conditions.push("l.lead_status = :lead_status");
+      replacements.lead_status = lead_status;
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+
+    const rows: any[] = await db.sequelize.query(
+      `SELECT
+         l.id,
+         l.full_name AS customer_name,
+         l.phone,
+         l.email,
+         l.city,
+         l.state,
+         l.country,
+         l.lead_status,
+         l.product AS past_product,
+         l.quantity AS past_quantity,
+         l.price AS past_price,
+         l.currency,
+         l.created_at,
+         su.name AS agent_name,
+         su.email AS agent_email,
+         ls.name AS lead_source_name,
+         camp.name AS campaign_name,
+         COALESCE(ord_agg.total_orders, 0)::int AS total_orders,
+         COALESCE(ord_agg.total_sales, 0)::numeric AS total_sales,
+         ord_agg.medicines_sold,
+         ord_agg.latest_order_status,
+         ord_agg.latest_payment_status,
+         ord_agg.latest_order_number
+       FROM public.leads l
+       INNER JOIN public.system_users su ON su.id = l.agent_id
+       LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
+       LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
+       LEFT JOIN LATERAL (
+         SELECT
+           COUNT(o.id)::int AS total_orders,
+           COALESCE(SUM(o.grand_total), 0)::numeric AS total_sales,
+           (ARRAY_AGG(o.order_status ORDER BY o.created_at DESC))[1] AS latest_order_status,
+           (ARRAY_AGG(o.payment_status ORDER BY o.created_at DESC))[1] AS latest_payment_status,
+           (ARRAY_AGG(o.order_number ORDER BY o.created_at DESC))[1] AS latest_order_number,
+           STRING_AGG(DISTINCT oi.medicine_summary, ', ') AS medicines_sold
+         FROM public.lead_orders o
+         LEFT JOIN LATERAL (
+           SELECT STRING_AGG(item.medicine_name || ' (' || item.quantity || ' ' || COALESCE(item.unit, 'Pcs') || ')', ', ') AS medicine_summary
+           FROM public.lead_order_items item
+           WHERE item.order_id = o.id
+         ) oi ON true
+         WHERE o.lead_id = l.id AND o.deleted_at IS NULL AND (o.order_notes IS NULL OR o.order_notes NOT ILIKE '%bulk upload%')
+       ) ord_agg ON true
+       ${whereClause}
+       ORDER BY l.created_at DESC`,
+      { replacements, type: QueryTypes.SELECT }
+    );
+
+    const exportRows = rows.map((r) => {
+      const curr = r.currency === "INR" ? "₹" : r.currency === "GBP" ? "£" : "$";
+      const totalSalesFormatted = r.total_sales > 0 ? `${curr}${Number(r.total_sales).toLocaleString()}` : "$0";
+      const pastPurchaseFormatted = r.past_product
+        ? `${r.past_product} (${r.past_quantity || 1} Pcs • ${curr}${Number(r.past_price || 0).toLocaleString()})`
+        : "-";
+
+      return {
+        "Agent Name": r.agent_name || "Unassigned",
+        "Customer Name": r.customer_name || "-",
+        "Phone": r.phone || "-",
+        "Email": r.email || "-",
+        "City": r.city || "-",
+        "State": r.state || "-",
+        "Country": r.country || "-",
+        "Lead Status": r.lead_status || "New",
+        "Last Purchase (Pre-CRM)": pastPurchaseFormatted,
+        "Total Orders Placed": r.total_orders || 0,
+        "Medicines Sold": r.medicines_sold || (r.total_orders > 0 ? "Order Placed" : "-"),
+        "Total Sales Revenue": totalSalesFormatted,
+        "Latest Order Status": r.latest_order_status || "-",
+        "Payment Status": r.latest_payment_status || "-",
+        "Lead Source": r.lead_source_name || "-",
+        "Campaign": r.campaign_name || "-",
+        "Assigned Date": r.created_at ? new Date(r.created_at).toLocaleDateString() : "-",
+      };
+    });
+
+    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    worksheet["!cols"] = [
+      { wch: 20 }, // Agent Name
+      { wch: 22 }, // Customer Name
+      { wch: 18 }, // Phone
+      { wch: 28 }, // Email
+      { wch: 15 }, // City
+      { wch: 15 }, // State
+      { wch: 12 }, // Country
+      { wch: 15 }, // Lead Status
+      { wch: 30 }, // Last Purchase (Pre-CRM)
+      { wch: 18 }, // Total Orders Placed
+      { wch: 35 }, // Medicines Sold
+      { wch: 20 }, // Total Sales Revenue
+      { wch: 18 }, // Latest Order Status
+      { wch: 16 }, // Payment Status
+      { wch: 18 }, // Lead Source
+      { wch: 18 }, // Campaign
+      { wch: 15 }, // Assigned Date
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Agent_Sales_Report");
+    const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+
+    const safeAgentLabel = rows[0]?.agent_name ? rows[0].agent_name.replace(/[^a-zA-Z0-9]/g, "_") : "All_Agents";
+    const filename = `Agent_${safeAgentLabel}_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    return res.send(buffer);
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // ==================== DEFAULT EXPORT ====================
 export default {
   createLead,
@@ -1251,4 +1352,6 @@ export default {
   bulkUploadFromFile,
   downloadSampleLeadExcel,
   getAssignedLeadNotifications,
+  exportAgentData,
 };
+

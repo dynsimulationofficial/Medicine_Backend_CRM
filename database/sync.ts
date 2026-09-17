@@ -177,7 +177,10 @@ async function ensureMedicineColumns(sequelize: Sequelize) {
   await sequelize.query(`
     ALTER TABLE public.leads
       ADD COLUMN IF NOT EXISTS currency varchar(10) NULL DEFAULT 'USD',
-      ADD COLUMN IF NOT EXISTS lead_status varchar(50) NULL DEFAULT 'New';
+      ADD COLUMN IF NOT EXISTS lead_status varchar(50) NULL DEFAULT 'New',
+      ADD COLUMN IF NOT EXISTS product varchar(255) NULL,
+      ADD COLUMN IF NOT EXISTS quantity integer NULL DEFAULT 1,
+      ADD COLUMN IF NOT EXISTS price numeric NULL DEFAULT 0;
   `);
 }
 
