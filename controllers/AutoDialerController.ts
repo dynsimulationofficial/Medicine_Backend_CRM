@@ -567,6 +567,10 @@ export class AutoDialerController {
         recording_url,
         duration_seconds,
         activity_id,
+        advance,
+        is_campaign,
+        is_assigned_queue,
+        agent_id: clientAgentId,
       } = req.body;
 
       if (!lead_id) {
@@ -591,14 +595,17 @@ export class AutoDialerController {
         return res.status(404).json({ success: false, message: "Lead not found" });
       }
 
-      const resolvedCampaignId = campaign_id || currentLeadRow.campaign_id || null;
+      // Only associate campaign advancement if this is explicitly a campaign session
+      const isCampaignActive = Boolean(is_campaign) || Boolean(this.activeParallelCampaign);
+      const resolvedCampaignId = isCampaignActive ? (campaign_id || currentLeadRow.campaign_id || null) : null;
 
       // 2. Validate agent_id against system_users foreign key
       let validAgentId: string | null = null;
-      if (authUserId) {
+      const targetUserId = authUserId || clientAgentId || currentLeadRow.agent_id;
+      if (targetUserId) {
         const [user]: any[] = await db.sequelize.query(
-          `SELECT id FROM public.system_users WHERE id = :authUserId LIMIT 1`,
-          { replacements: { authUserId }, type: QueryTypes.SELECT }
+          `SELECT id FROM public.system_users WHERE id = :targetUserId LIMIT 1`,
+          { replacements: { targetUserId }, type: QueryTypes.SELECT }
         );
         if (user) validAgentId = user.id;
       }
@@ -680,7 +687,22 @@ export class AutoDialerController {
         }
       );
 
-      // 6. Find NEXT pending lead in queue (Exclude all completed leads)
+      // 6. Check if advancing is enabled:
+      // Either an automated Campaign (resolvedCampaignId), OR an Agent Assigned Queue (is_assigned_queue && validAgentId)
+      const isAssignedQueueActive = Boolean(is_assigned_queue) && Boolean(validAgentId);
+      const shouldAdvance = advance === true && (Boolean(resolvedCampaignId) || isAssignedQueueActive);
+
+      if (!shouldAdvance) {
+        this.activeCall = null;
+        return res.status(200).json({
+          success: true,
+          has_next: false,
+          completed: true,
+          message: "Disposition and activity saved successfully!",
+        });
+      }
+
+      // 7. Find NEXT pending lead in queue (Exclude all completed leads)
       let nextLead: any = null;
       const excludedIds = [lead_id, ...Array.from(this.recentlyCompletedLeadIds.keys())];
 
@@ -700,7 +722,7 @@ export class AutoDialerController {
           { replacements: { campaign_id: resolvedCampaignId, excludedIds }, type: QueryTypes.SELECT }
         );
         nextLead = nextRow || null;
-      } else if (validAgentId) {
+      } else if (isAssignedQueueActive) {
         // Individual assigned leads queue
         const [nextRow]: any[] = await db.sequelize.query(
           `SELECT id, lead_number, full_name, phone, whatsapp_number, email, city, state, country, note, campaign_id
