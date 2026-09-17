@@ -22,6 +22,9 @@ export interface LeadAttributes {
   note?: string | null;
   lead_status?: string | null;
   currency?: string | null;
+  product?: string | null;
+  quantity?: number | null;
+  price?: number | null;
   created_at?: Date;
   updated_at?: Date;
   deleted_at?: Date | null;
@@ -78,6 +81,9 @@ export const initLeadModel = (sequelize: Sequelize) => {
     public note!: string | null;
     public lead_status!: string | null;
     public currency!: string | null;
+    public product!: string | null;
+    public quantity!: number | null;
+    public price!: number | null;
     public created_at!: Date;
     public updated_at!: Date;
     public deleted_at!: Date | null;
@@ -129,6 +135,9 @@ export const initLeadModel = (sequelize: Sequelize) => {
         allowNull: true,
         defaultValue: "USD",
       },
+      product: { type: DataTypes.STRING(255), allowNull: true },
+      quantity: { type: DataTypes.INTEGER, allowNull: true, defaultValue: 1 },
+      price: { type: DataTypes.DECIMAL, allowNull: true, defaultValue: 0 },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,

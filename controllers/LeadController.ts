@@ -969,13 +969,48 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
       const postal_code = row["Postal Code"] || row["postal_code"] || row["Zip Code"] || row["Zip"] || row["Pincode"] || null;
       const note = row["Note"] || row["note"] || row["Remarks"] || row["remarks"] || null;
 
+      // Extract Customer's Previous Purchase (Product, Quantity, Price)
+      const rawProduct = (
+        row["Product"] ||
+        row["product"] ||
+        row["Medicine"] ||
+        row["medicine"] ||
+        row["Medicine Name"] ||
+        row["medicine_name"] ||
+        ""
+      )
+        .toString()
+        .trim();
+
+      let product: string | null = rawProduct || null;
+      let quantity: number | null = null;
+      let price: number | null = null;
+
+      if (rawProduct) {
+        const rawQuantity = row["Quantity"] || row["quantity"] || row["Qty"] || row["qty"];
+        const rawPrice =
+          row["Price"] ||
+          row["price"] ||
+          row["Amount"] ||
+          row["amount"] ||
+          row["Total Price"] ||
+          row["total_price"];
+
+        const parsedQty = parseInt(String(rawQuantity || "1").replace(/\D/g, ""), 10);
+        quantity = Number.isInteger(parsedQty) && parsedQty > 0 ? parsedQty : 1;
+
+        const cleanPriceStr = String(rawPrice || "0").replace(/[^\d.]/g, "");
+        const parsedPrice = parseFloat(cleanPriceStr);
+        price = !isNaN(parsedPrice) && parsedPrice >= 0 ? parsedPrice : 0;
+      }
+
       await db.sequelize.query(
         `INSERT INTO public.leads (
            id, full_name, email, phone, whatsapp_number, address_line1, address_line2, city, state, postal_code, country,
-           lead_source_id, campaign_id, agent_id, lead_status, currency, note, created_at, updated_at
+           lead_source_id, campaign_id, agent_id, lead_status, currency, note, product, quantity, price, created_at, updated_at
          ) VALUES (
            :id, :full_name, :email, :phone, :whatsapp_number, :address_line1, :address_line2, :city, :state, :postal_code, :country,
-           :lead_source_id, :campaign_id, :agent_id, 'New', :currency, :note, :created_at, :updated_at
+           :lead_source_id, :campaign_id, :agent_id, 'New', :currency, :note, :product, :quantity, :price, :created_at, :updated_at
          )`,
         {
           replacements: {
@@ -995,6 +1030,9 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
             agent_id: safeAgentId,
             currency: detectedCurrency || "USD",
             note,
+            product,
+            quantity,
+            price,
             created_at: new Date(now.getTime() - i * 1000),
             updated_at: new Date(now.getTime() - i * 1000),
           },
@@ -1002,87 +1040,6 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
           transaction,
         }
       );
-
-      // Optional: Auto-create order if Product is present in the row
-      const rawProduct = (
-        row["Product"] ||
-        row["product"] ||
-        row["Medicine"] ||
-        row["medicine"] ||
-        row["Medicine Name"] ||
-        row["medicine_name"] ||
-        ""
-      )
-        .toString()
-        .trim();
-
-      if (rawProduct) {
-        const rawQuantity = row["Quantity"] || row["quantity"] || row["Qty"] || row["qty"];
-        const rawPrice =
-          row["Price"] ||
-          row["price"] ||
-          row["Amount"] ||
-          row["amount"] ||
-          row["Total Price"] ||
-          row["total_price"];
-
-        const parsedQty = parseInt(String(rawQuantity || "1").replace(/\D/g, ""), 10);
-        const quantity = Number.isInteger(parsedQty) && parsedQty > 0 ? parsedQty : 1;
-
-        const cleanPriceStr = String(rawPrice || "0").replace(/[^\d.]/g, "");
-        const parsedPrice = parseFloat(cleanPriceStr);
-        const price = !isNaN(parsedPrice) && parsedPrice >= 0 ? parsedPrice : 0;
-
-        const orderId = uuidv4();
-        const orderItemId = uuidv4();
-
-        // 1. Insert into lead_orders
-        await db.sequelize.query(
-          `INSERT INTO public.lead_orders (
-             id, lead_id, agent_id, total_items, grand_total,
-             order_status, payment_status, payment_mode, order_notes, created_at, updated_at
-           ) VALUES (
-             :orderId, :leadId, :agentId, 1, :grandTotal,
-             'Delivered', 'Paid', 'Prepaid', 'Previous purchase imported via bulk upload', :createdAt, :updatedAt
-           )`,
-          {
-            replacements: {
-              orderId,
-              leadId: id,
-              agentId: safeAgentId,
-              grandTotal: price,
-              createdAt: now,
-              updatedAt: now,
-            },
-            type: QueryTypes.INSERT,
-            transaction,
-          }
-        );
-
-        // 2. Insert into lead_order_items (Direct mapping, no division)
-        await db.sequelize.query(
-          `INSERT INTO public.lead_order_items (
-             id, order_id, lead_id, medicine_name, unit, quantity, rate, total_price, created_at, updated_at
-           ) VALUES (
-             :itemId, :orderId, :leadId, :medicineName, 'Pcs', :quantity, :rate, :totalPrice, :createdAt, :updatedAt
-           )`,
-          {
-            replacements: {
-              itemId: orderItemId,
-              orderId,
-              leadId: id,
-              medicineName: rawProduct,
-              quantity,
-              rate: price,
-              totalPrice: price,
-              createdAt: now,
-              updatedAt: now,
-            },
-            type: QueryTypes.INSERT,
-            transaction,
-          }
-        );
-      }
 
       inserted++;
     }
