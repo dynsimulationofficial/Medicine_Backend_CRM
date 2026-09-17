@@ -90,29 +90,8 @@ export const initiateClickToCall = async (req: Request, res: Response) => {
       ).trim();
     const recordingUrl = callId ? `/cloudtalk/recordings/${callId}` : null;
 
-    // Save manual call activity in lead_activity_history so CRM tracks the manual call
+    // Update lead status to Contacted if still New
     try {
-      await db.sequelize.query(
-        `INSERT INTO public.lead_activity_history (
-           id, lead_id, agent_id, disposition_id, conversation, call_id, recording_url, occurred_at, created_at, updated_at
-         ) VALUES (
-           :id, :lead_id, :agent_id, :disposition_id, :conversation, :call_id, :recording_url, NOW(), NOW(), NOW()
-         )`,
-        {
-          replacements: {
-            id: uuidv4(),
-            lead_id: lead.id,
-            agent_id: resolvedAgentId,
-            disposition_id: dispositionId,
-            conversation: "Manual Outbound Call via CloudTalk",
-            call_id: callId || null,
-            recording_url: recordingUrl,
-          },
-          type: QueryTypes.INSERT,
-        }
-      );
-
-      // Update lead status to Contacted if still New
       await db.sequelize.query(
         `UPDATE public.leads 
          SET lead_status = CASE WHEN LOWER(COALESCE(lead_status, 'new')) = 'new' THEN 'Contacted' ELSE lead_status END,
@@ -128,7 +107,7 @@ export const initiateClickToCall = async (req: Request, res: Response) => {
         }
       );
     } catch (dbErr) {
-      console.error("Failed to insert manual call activity:", dbErr);
+      console.error("Failed to update lead status on call:", dbErr);
     }
 
     return res.status(200).json({
