@@ -845,6 +845,7 @@ export const getNextAssignedLead = async (req: Request, res: Response) => {
 
 // ==================== 13. BULK UPLOAD FROM FILE ====================
 export const bulkUploadFromFile = async (req: Request, res: Response) => {
+  let transaction: any = null;
   try {
     const file = req.file;
     if (!file) {
@@ -853,6 +854,12 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
 
     const { lead_source_id, campaign_id, agent_id } = req.body;
 
+    // Safe UUID validator to prevent PostgreSQL uuid syntax errors on empty strings
+    const isUuid = (val: any) => typeof val === "string" && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+    const safeSourceId = isUuid(lead_source_id) ? lead_source_id.trim() : null;
+    const safeCampaignId = isUuid(campaign_id) ? campaign_id.trim() : null;
+    const safeAgentId = isUuid(agent_id) ? agent_id.trim() : null;
+
     const workbook = XLSX.read(file.buffer, { type: "buffer" });
     const sheetName = workbook.SheetNames[0];
     const rawRows: any[] = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { raw: false, defval: "" });
@@ -860,6 +867,9 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
     if (!rawRows.length) {
       return res.status(400).json({ success: false, message: "Excel sheet is empty" });
     }
+
+    // Start DB Transaction: All-or-nothing guarantee
+    transaction = await db.sequelize.transaction();
 
     let inserted = 0;
     let skipped = 0;
@@ -932,10 +942,10 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
         }
       }
 
-      // Check duplicate phone or email in database
+      // Check duplicate phone or email in database within this transaction
       const existing: any[] = await db.sequelize.query(
         `SELECT id FROM public.leads WHERE deleted_at IS NULL AND (REGEXP_REPLACE(phone, '\\D', '', 'g') = :phoneDigits ${email ? 'OR LOWER(email) = :email' : ''}) LIMIT 1`,
-        { replacements: { phoneDigits, email }, type: QueryTypes.SELECT }
+        { replacements: { phoneDigits, email }, type: QueryTypes.SELECT, transaction }
       );
 
       if (existing.length > 0) {
@@ -980,15 +990,16 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
             state,
             postal_code,
             country: detectedCountry,
-            lead_source_id: lead_source_id || null,
-            campaign_id: campaign_id || null,
-            agent_id: agent_id || null,
+            lead_source_id: safeSourceId,
+            campaign_id: safeCampaignId,
+            agent_id: safeAgentId,
             currency: detectedCurrency || "USD",
             note,
             created_at: new Date(now.getTime() - i * 1000),
             updated_at: new Date(now.getTime() - i * 1000),
           },
           type: QueryTypes.INSERT,
+          transaction,
         }
       );
 
@@ -1015,8 +1026,12 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
           row["Total Price"] ||
           row["total_price"];
 
-        const quantity = Math.max(1, parseInt(String(rawQuantity || "1").replace(/\D/g, "")) || 1);
-        const price = parseFloat(String(rawPrice || "0").replace(/[^\d.]/g, "")) || 0;
+        const parsedQty = parseInt(String(rawQuantity || "1").replace(/\D/g, ""), 10);
+        const quantity = Number.isInteger(parsedQty) && parsedQty > 0 ? parsedQty : 1;
+
+        const cleanPriceStr = String(rawPrice || "0").replace(/[^\d.]/g, "");
+        const parsedPrice = parseFloat(cleanPriceStr);
+        const price = !isNaN(parsedPrice) && parsedPrice >= 0 ? parsedPrice : 0;
 
         const orderId = uuidv4();
         const orderItemId = uuidv4();
@@ -1034,12 +1049,13 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
             replacements: {
               orderId,
               leadId: id,
-              agentId: agent_id || null,
+              agentId: safeAgentId,
               grandTotal: price,
               createdAt: now,
               updatedAt: now,
             },
             type: QueryTypes.INSERT,
+            transaction,
           }
         );
 
@@ -1063,6 +1079,7 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
               updatedAt: now,
             },
             type: QueryTypes.INSERT,
+            transaction,
           }
         );
       }
@@ -1071,6 +1088,9 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
     }
 
     if (inserted === 0) {
+      if (transaction && !transaction.finished) {
+        await transaction.rollback();
+      }
       const errorMsg = duplicateFound
         ? "Lead already exists (Phone number or Email ID already exists)"
         : "No leads imported. Please check your Excel file.";
@@ -1081,13 +1101,23 @@ export const bulkUploadFromFile = async (req: Request, res: Response) => {
       });
     }
 
+    await transaction.commit();
+
     return res.status(200).json({
       success: true,
       message: `Successfully imported ${inserted} leads${skipped > 0 ? " (Some leads skipped: Phone number or Email ID already exists)" : ""}!`,
       data: { inserted, skipped },
     });
   } catch (error: any) {
-    return res.status(500).json({ success: false, message: error.message });
+    if (transaction && !transaction.finished) {
+      try {
+        await transaction.rollback();
+      } catch (rbErr) {
+        console.error("Rollback error:", rbErr);
+      }
+    }
+    console.error("bulkUploadFromFile error:", error);
+    return res.status(500).json({ success: false, message: error?.message || "Failed to upload leads" });
   }
 };
 
