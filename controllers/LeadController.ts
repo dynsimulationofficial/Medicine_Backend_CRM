@@ -1218,9 +1218,31 @@ export const exportAgentData = async (req: Request, res: Response) => {
     }
 
     if (call_type === "campaign") {
-      conditions.push("l.campaign_id IS NOT NULL");
+      conditions.push(`EXISTS (
+        SELECT 1 FROM public.lead_activity_history lah 
+        WHERE lah.lead_id = l.id 
+          AND lah.deleted_at IS NULL 
+          AND (lah.conversation ILIKE '%auto-dialer%' OR lah.conversation ILIKE '%campaign%')
+      )`);
     } else if (call_type === "manual") {
-      conditions.push("l.campaign_id IS NULL");
+      conditions.push(`(
+        EXISTS (
+          SELECT 1 FROM public.lead_activity_history lah 
+          WHERE lah.lead_id = l.id 
+            AND lah.deleted_at IS NULL 
+            AND lah.conversation NOT ILIKE '%auto-dialer%' 
+            AND lah.conversation NOT ILIKE '%campaign%'
+        )
+        OR (
+          LOWER(COALESCE(l.lead_status, '')) NOT IN ('', 'new')
+          AND NOT EXISTS (
+            SELECT 1 FROM public.lead_activity_history lah 
+            WHERE lah.lead_id = l.id 
+              AND lah.deleted_at IS NULL 
+              AND (lah.conversation ILIKE '%auto-dialer%' OR lah.conversation ILIKE '%campaign%')
+          )
+        )
+      )`);
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -1245,6 +1267,22 @@ export const exportAgentData = async (req: Request, res: Response) => {
          su.email AS agent_email,
          ls.name AS lead_source_name,
          camp.name AS campaign_name,
+         CASE
+           WHEN EXISTS (
+             SELECT 1 FROM public.lead_activity_history lah 
+             WHERE lah.lead_id = l.id 
+               AND lah.deleted_at IS NULL 
+               AND (lah.conversation ILIKE '%auto-dialer%' OR lah.conversation ILIKE '%campaign%')
+           ) THEN 'Campaign (Auto-Dialer)'
+           WHEN EXISTS (
+             SELECT 1 FROM public.lead_activity_history lah 
+             WHERE lah.lead_id = l.id 
+               AND lah.deleted_at IS NULL 
+               AND lah.conversation NOT ILIKE '%auto-dialer%' 
+               AND lah.conversation NOT ILIKE '%campaign%'
+           ) OR LOWER(COALESCE(l.lead_status, '')) NOT IN ('', 'new') THEN 'Manual Call'
+           ELSE 'Manual Assign'
+         END AS calling_type_label,
          COALESCE(ord_agg.total_orders, 0)::int AS total_orders,
          COALESCE(ord_agg.total_sales, 0)::numeric AS total_sales,
          ord_agg.medicines_sold,
@@ -1283,9 +1321,7 @@ export const exportAgentData = async (req: Request, res: Response) => {
         ? `${r.past_product} (${r.past_quantity || 1} Pcs • ${curr}${Number(r.past_price || 0).toLocaleString()})`
         : "-";
 
-      const callingTypeFormatted = r.campaign_id
-        ? (r.campaign_name ? `Campaign (${r.campaign_name})` : "Campaign / Auto-Dialer")
-        : "Manual Call";
+      const callingTypeFormatted = r.calling_type_label || (r.campaign_id ? "Campaign (Auto-Dialer)" : "Manual Call");
 
       return {
         "Agent Name": r.agent_name || "Unassigned",
