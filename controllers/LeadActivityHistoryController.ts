@@ -120,14 +120,14 @@ export const getAllActivities = async (req: Request, res: Response) => {
     // sync it once CloudTalk has finished processing the recording
     try {
       const [pendingActivity]: any[] = await db.sequelize.query(
-        `SELECT ah.id, ah.lead_id
+        `SELECT ah.id, ah.lead_id, ah.call_id
          FROM public.lead_activity_history ah
          JOIN public.lead_dispositions d ON d.id = ah.disposition_id
          WHERE ah.lead_id = :lead_id
            AND ah.deleted_at IS NULL
-           AND (ah.call_id IS NULL OR ah.call_id = '')
+           AND (ah.recording_url IS NULL OR ah.recording_url = '')
            AND LOWER(d.name) LIKE '%phone%'
-           AND ah.created_at >= NOW() - INTERVAL '15 minutes'
+           AND ah.created_at >= NOW() - INTERVAL '60 minutes'
          ORDER BY ah.created_at DESC
          LIMIT 1`,
         { replacements: { lead_id }, type: QueryTypes.SELECT }
@@ -140,16 +140,27 @@ export const getAllActivities = async (req: Request, res: Response) => {
         );
         const targetPhone = lead?.phone || lead?.whatsapp_number;
         if (targetPhone) {
-          const recordings = await cloudTalkService.getRecentRecordingsForPhone(targetPhone, 5);
+          const recordings = await cloudTalkService.getRecentRecordingsForPhone(targetPhone, 10);
           if (recordings.length > 0) {
             const usedRows: any[] = await db.sequelize.query(
-              `SELECT call_id FROM public.lead_activity_history WHERE call_id IS NOT NULL AND deleted_at IS NULL`,
-              { type: QueryTypes.SELECT }
+              `SELECT call_id FROM public.lead_activity_history 
+               WHERE call_id IS NOT NULL 
+                 AND recording_url IS NOT NULL 
+                 AND recording_url != '' 
+                 AND deleted_at IS NULL 
+                 AND id != :activityId`,
+              { replacements: { activityId: pendingActivity.id }, type: QueryTypes.SELECT }
             );
             const usedSet = new Set((usedRows || []).map((r: any) => String(r.call_id)));
-            const freshRec = recordings.find(
-              (r) => !usedSet.has(String(r.callId)) && r.durationSeconds > 0
-            );
+            // First try matching existing call_id if present
+            let freshRec = pendingActivity.call_id
+              ? recordings.find((r) => String(r.callId) === String(pendingActivity.call_id) && r.durationSeconds > 0)
+              : null;
+            if (!freshRec) {
+              freshRec = recordings.find(
+                (r) => !usedSet.has(String(r.callId)) && r.durationSeconds > 0
+              );
+            }
             if (freshRec) {
               await db.sequelize.query(
                 `UPDATE public.lead_activity_history
