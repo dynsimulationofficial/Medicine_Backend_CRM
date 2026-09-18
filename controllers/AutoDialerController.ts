@@ -601,15 +601,25 @@ export class AutoDialerController {
         return res.status(404).json({ success: false, message: "Lead not found" });
       }
 
-      // Only associate campaign advancement if this is explicitly an active campaign session
-      const targetCamp = campaign_id || currentLeadRow.campaign_id;
-      const isExplicitlyStopped = Boolean(targetCamp && this.stoppedCampaignIds.has(String(targetCamp)));
-      const isCampaignActive = !isExplicitlyStopped && (Boolean(is_campaign) || Boolean(this.activeParallelCampaign));
-      const resolvedCampaignId = isCampaignActive ? (targetCamp || null) : null;
+      // 1. Determine Session Type: Campaign Calling vs Agent Assigned Leads Queue
+      const isCampaignSession = Boolean(is_campaign);
+      const isAssignedQueueSession = Boolean(is_assigned_queue);
+
+      // ONLY campaign calls can be stopped by Admin campaign stop!
+      // Assigned leads auto-dialer (orange button) is an agent tool and must NEVER be stopped by campaign stoppage!
+      let isCampaignStopped = false;
+      let resolvedCampaignId: string | null = null;
+
+      if (isCampaignSession) {
+        const targetCamp = campaign_id || currentLeadRow.campaign_id;
+        isCampaignStopped = Boolean(targetCamp && this.stoppedCampaignIds.has(String(targetCamp)));
+        resolvedCampaignId = !isCampaignStopped ? (targetCamp || null) : null;
+      }
 
       // 2. Validate agent_id against system_users foreign key
+      const userIsAdmin = await this.checkIsAdmin(authUserId);
       let validAgentId: string | null = null;
-      const targetUserId = authUserId || clientAgentId || currentLeadRow.agent_id;
+      const targetUserId = (!userIsAdmin && authUserId) ? authUserId : (currentLeadRow.agent_id || clientAgentId || authUserId);
       if (targetUserId) {
         const [user]: any[] = await db.sequelize.query(
           `SELECT id FROM public.system_users WHERE id = :targetUserId LIMIT 1`,
@@ -696,9 +706,12 @@ export class AutoDialerController {
       );
 
       // 6. Check if advancing is enabled:
-      // Either an automated Campaign (resolvedCampaignId), OR an Agent Assigned Queue (is_assigned_queue && validAgentId)
-      const isAssignedQueueActive = Boolean(is_assigned_queue) && Boolean(validAgentId);
-      const shouldAdvance = advance === true && !isExplicitlyStopped && (Boolean(resolvedCampaignId) || isAssignedQueueActive);
+      // - Campaign Mode: advance only if NOT stopped
+      // - Assigned Queue Mode: ALWAYS advance when requested (advance === true)
+      const shouldAdvance = advance === true && (
+        (isCampaignSession && !isCampaignStopped && Boolean(resolvedCampaignId)) ||
+        isAssignedQueueSession
+      );
 
       if (!shouldAdvance) {
         this.activeCall = null;
@@ -706,8 +719,8 @@ export class AutoDialerController {
           success: true,
           has_next: false,
           completed: true,
-          campaign_stopped: isExplicitlyStopped,
-          message: isExplicitlyStopped
+          campaign_stopped: isCampaignSession && isCampaignStopped,
+          message: (isCampaignSession && isCampaignStopped)
             ? "Campaign calling was stopped by Admin. Activity saved successfully."
             : "Disposition and activity saved successfully!",
         });
@@ -727,27 +740,55 @@ export class AutoDialerController {
              AND agent_id IS NULL
              AND LOWER(COALESCE(lead_status, 'new')) = 'new'
              AND deleted_at IS NULL
-             AND (phone IS NOT NULL AND TRIM(phone) != '')
+             AND ((phone IS NOT NULL AND TRIM(phone) != '') OR (whatsapp_number IS NOT NULL AND TRIM(whatsapp_number) != ''))
            ORDER BY created_at DESC
            LIMIT 1`,
           { replacements: { campaign_id: resolvedCampaignId, excludedIds }, type: QueryTypes.SELECT }
         );
         nextLead = nextRow || null;
-      } else if (isAssignedQueueActive) {
-        // Individual assigned leads queue
-        const [nextRow]: any[] = await db.sequelize.query(
-          `SELECT id, lead_number, full_name, phone, whatsapp_number, email, city, state, country, note, campaign_id
-           FROM public.leads
-           WHERE agent_id = :agent_id
-             AND id NOT IN (:excludedIds)
-             AND LOWER(COALESCE(lead_status, '')) NOT IN ('won', 'lost', 'closed', 'junk')
-             AND deleted_at IS NULL
-             AND (phone IS NOT NULL AND TRIM(phone) != '')
-           ORDER BY created_at DESC
+      } else if (isAssignedQueueSession) {
+        // Assigned leads queue (matches getNextAssignedLead sequential order)
+        const targetAgentId = validAgentId || currentLeadRow.agent_id || null;
+        const agentFilter = targetAgentId ? `AND l.agent_id = :targetAgentId` : ``;
+        const currentCreatedAt = currentLeadRow.created_at;
+        const queueReplacements: any = {
+          targetAgentId,
+          excludedIds,
+          currentCreatedAt,
+          currentLeadId: lead_id,
+        };
+
+        // 1. Find next assigned lead down the sequence
+        const [nextDown]: any[] = await db.sequelize.query(
+          `SELECT l.id, l.lead_number, l.full_name, l.phone, l.whatsapp_number, l.email, l.city, l.state, l.country, l.note, l.campaign_id, l.agent_id, l.lead_status
+           FROM public.leads l
+           WHERE l.deleted_at IS NULL 
+             ${agentFilter}
+             AND l.id NOT IN (:excludedIds)
+             AND ((l.phone IS NOT NULL AND TRIM(l.phone) != '') OR (l.whatsapp_number IS NOT NULL AND TRIM(l.whatsapp_number) != ''))
+             AND (l.created_at < :currentCreatedAt OR (l.created_at = :currentCreatedAt AND l.id < :currentLeadId))
+           ORDER BY l.created_at DESC, l.id DESC 
            LIMIT 1`,
-          { replacements: { agent_id: validAgentId, excludedIds }, type: QueryTypes.SELECT }
+          { replacements: queueReplacements, type: QueryTypes.SELECT }
         );
-        nextLead = nextRow || null;
+
+        if (nextDown) {
+          nextLead = nextDown;
+        } else {
+          // 2. Loop back to top of assigned leads queue
+          const [loopLead]: any[] = await db.sequelize.query(
+            `SELECT l.id, l.lead_number, l.full_name, l.phone, l.whatsapp_number, l.email, l.city, l.state, l.country, l.note, l.campaign_id, l.agent_id, l.lead_status
+             FROM public.leads l
+             WHERE l.deleted_at IS NULL 
+               ${agentFilter}
+               AND l.id NOT IN (:excludedIds)
+               AND ((l.phone IS NOT NULL AND TRIM(phone) != '') OR (l.whatsapp_number IS NOT NULL AND TRIM(whatsapp_number) != ''))
+             ORDER BY l.created_at DESC, l.id DESC 
+             LIMIT 1`,
+            { replacements: queueReplacements, type: QueryTypes.SELECT }
+          );
+          nextLead = loopLead || null;
+        }
       }
 
       // 7. If no more leads, campaign/queue is complete
@@ -757,6 +798,7 @@ export class AutoDialerController {
           success: true,
           has_next: false,
           completed: true,
+          campaign_stopped: false,
           message: "All leads in queue have been completed!",
         });
       }
