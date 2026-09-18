@@ -1192,7 +1192,7 @@ export const getAssignedLeadNotifications = async (req: Request, res: Response) 
 // ==================== 15. EXPORT AGENT PERFORMANCE & SALES DATA ====================
 export const exportAgentData = async (req: Request, res: Response) => {
   try {
-    const { agent_id, from_date, to_date, lead_status, call_type } = req.query as any;
+    const { agent_id, from_date, to_date, lead_status, call_type, disposition_id } = req.query as any;
 
     const conditions: string[] = ["l.deleted_at IS NULL", "l.agent_id IS NOT NULL"];
     const replacements: any = {};
@@ -1217,32 +1217,19 @@ export const exportAgentData = async (req: Request, res: Response) => {
       replacements.lead_status = lead_status;
     }
 
+    if (disposition_id && disposition_id !== "all" && disposition_id !== "All") {
+      if (disposition_id === "none") {
+        conditions.push("lah.id IS NULL");
+      } else {
+        conditions.push("lah.disposition_id = :disposition_id");
+        replacements.disposition_id = disposition_id;
+      }
+    }
+
     if (call_type === "campaign") {
-      conditions.push(`EXISTS (
-        SELECT 1 FROM public.lead_activity_history lah 
-        WHERE lah.lead_id = l.id 
-          AND lah.deleted_at IS NULL 
-          AND (lah.conversation ILIKE '%auto-dialer%' OR lah.conversation ILIKE '%campaign%')
-      )`);
+      conditions.push("(lah.conversation ILIKE '%auto-dialer%' OR lah.conversation ILIKE '%campaign%')");
     } else if (call_type === "manual") {
-      conditions.push(`(
-        EXISTS (
-          SELECT 1 FROM public.lead_activity_history lah 
-          WHERE lah.lead_id = l.id 
-            AND lah.deleted_at IS NULL 
-            AND lah.conversation NOT ILIKE '%auto-dialer%' 
-            AND lah.conversation NOT ILIKE '%campaign%'
-        )
-        OR (
-          LOWER(COALESCE(l.lead_status, '')) NOT IN ('', 'new')
-          AND NOT EXISTS (
-            SELECT 1 FROM public.lead_activity_history lah 
-            WHERE lah.lead_id = l.id 
-              AND lah.deleted_at IS NULL 
-              AND (lah.conversation ILIKE '%auto-dialer%' OR lah.conversation ILIKE '%campaign%')
-          )
-        )
-      )`);
+      conditions.push("(lah.id IS NOT NULL AND lah.conversation NOT ILIKE '%auto-dialer%' AND lah.conversation NOT ILIKE '%campaign%')");
     }
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
@@ -1267,20 +1254,13 @@ export const exportAgentData = async (req: Request, res: Response) => {
          su.email AS agent_email,
          ls.name AS lead_source_name,
          camp.name AS campaign_name,
+         COALESCE(ld.name, 'None / Not Disposed') AS disposition_name,
+         COALESCE(lah.conversation, '-') AS conversation_notes,
+         lah.duration_seconds,
+         COALESCE(lah.occurred_at, lah.created_at) AS call_time,
          CASE
-           WHEN EXISTS (
-             SELECT 1 FROM public.lead_activity_history lah 
-             WHERE lah.lead_id = l.id 
-               AND lah.deleted_at IS NULL 
-               AND (lah.conversation ILIKE '%auto-dialer%' OR lah.conversation ILIKE '%campaign%')
-           ) THEN 'Campaign (Auto-Dialer)'
-           WHEN EXISTS (
-             SELECT 1 FROM public.lead_activity_history lah 
-             WHERE lah.lead_id = l.id 
-               AND lah.deleted_at IS NULL 
-               AND lah.conversation NOT ILIKE '%auto-dialer%' 
-               AND lah.conversation NOT ILIKE '%campaign%'
-           ) OR LOWER(COALESCE(l.lead_status, '')) NOT IN ('', 'new') THEN 'Manual Call'
+           WHEN (lah.conversation ILIKE '%auto-dialer%' OR lah.conversation ILIKE '%campaign%') THEN 'Campaign (Auto-Dialer)'
+           WHEN lah.id IS NOT NULL THEN 'Manual Call'
            ELSE 'Manual Assign'
          END AS calling_type_label,
          COALESCE(ord_agg.total_orders, 0)::int AS total_orders,
@@ -1293,6 +1273,8 @@ export const exportAgentData = async (req: Request, res: Response) => {
        INNER JOIN public.system_users su ON su.id = l.agent_id
        LEFT JOIN public.lead_sources ls ON ls.id = l.lead_source_id
        LEFT JOIN public.campaigns camp ON camp.id = l.campaign_id
+       LEFT JOIN public.lead_activity_history lah ON lah.lead_id = l.id AND lah.deleted_at IS NULL
+       LEFT JOIN public.lead_dispositions ld ON ld.id = lah.disposition_id
        LEFT JOIN LATERAL (
          SELECT
            COUNT(o.id)::int AS total_orders,
@@ -1310,7 +1292,7 @@ export const exportAgentData = async (req: Request, res: Response) => {
          WHERE o.lead_id = l.id AND o.deleted_at IS NULL AND (o.order_notes IS NULL OR o.order_notes NOT ILIKE '%bulk upload%')
        ) ord_agg ON true
        ${whereClause}
-       ORDER BY l.created_at DESC`,
+       ORDER BY COALESCE(lah.occurred_at, lah.created_at, l.created_at) DESC, l.created_at DESC`,
       { replacements, type: QueryTypes.SELECT }
     );
 
@@ -1322,6 +1304,8 @@ export const exportAgentData = async (req: Request, res: Response) => {
         : "-";
 
       const callingTypeFormatted = r.calling_type_label || (r.campaign_id ? "Campaign (Auto-Dialer)" : "Manual Call");
+      const formattedDuration = r.duration_seconds ? `${r.duration_seconds}s` : "-";
+      const formattedCallTime = r.call_time ? new Date(r.call_time).toLocaleString() : "-";
 
       return {
         "Agent Name": r.agent_name || "Unassigned",
@@ -1329,6 +1313,10 @@ export const exportAgentData = async (req: Request, res: Response) => {
         "Phone": r.phone || "-",
         "Email": r.email || "-",
         "Calling Type": callingTypeFormatted,
+        "Disposition": r.disposition_name || "None / Not Disposed",
+        "Call / Activity Date & Time": formattedCallTime,
+        "Call Duration": formattedDuration,
+        "Conversation Notes": r.conversation_notes || "-",
         "City": r.city || "-",
         "State": r.state || "-",
         "Country": r.country || "-",
@@ -1345,13 +1333,45 @@ export const exportAgentData = async (req: Request, res: Response) => {
       };
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(exportRows);
+    const headerCols = [
+      "Agent Name",
+      "Customer Name",
+      "Phone",
+      "Email",
+      "Calling Type",
+      "Disposition",
+      "Call / Activity Date & Time",
+      "Call Duration",
+      "Conversation Notes",
+      "City",
+      "State",
+      "Country",
+      "Lead Status",
+      "Last Purchase (Pre-CRM)",
+      "Total Orders Placed",
+      "Medicines Sold",
+      "Total Sales Revenue",
+      "Latest Order Status",
+      "Payment Status",
+      "Lead Source",
+      "Campaign",
+      "Assigned Date",
+    ];
+
+    const worksheet = exportRows.length > 0
+      ? XLSX.utils.json_to_sheet(exportRows)
+      : XLSX.utils.aoa_to_sheet([headerCols]);
+
     worksheet["!cols"] = [
       { wch: 20 }, // Agent Name
       { wch: 22 }, // Customer Name
       { wch: 18 }, // Phone
       { wch: 28 }, // Email
       { wch: 24 }, // Calling Type
+      { wch: 22 }, // Disposition
+      { wch: 25 }, // Call / Activity Date & Time
+      { wch: 14 }, // Call Duration
+      { wch: 35 }, // Conversation Notes
       { wch: 15 }, // City
       { wch: 15 }, // State
       { wch: 12 }, // Country
@@ -1371,11 +1391,39 @@ export const exportAgentData = async (req: Request, res: Response) => {
     XLSX.utils.book_append_sheet(workbook, worksheet, "Agent_Sales_Report");
     const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
 
-    const safeAgentLabel = rows[0]?.agent_name ? rows[0].agent_name.replace(/[^a-zA-Z0-9]/g, "_") : "All_Agents";
+    let agentNameLabel = "All_Agents";
+    if (rows[0]?.agent_name) {
+      agentNameLabel = rows[0].agent_name.replace(/[^a-zA-Z0-9]/g, "_");
+    } else if (agent_id && agent_id !== "all" && agent_id !== "All") {
+      try {
+        const [ag]: any = await db.sequelize.query(
+          `SELECT name FROM public.system_users WHERE id = :agent_id LIMIT 1`,
+          { replacements: { agent_id }, type: QueryTypes.SELECT }
+        );
+        if (ag?.name) agentNameLabel = ag.name.replace(/[^a-zA-Z0-9]/g, "_");
+      } catch {}
+    }
+
+    let dispNameLabel = "";
+    if (disposition_id && disposition_id !== "all" && disposition_id !== "All") {
+      if (disposition_id === "none") {
+        dispNameLabel = "_No_Disposition";
+      } else {
+        try {
+          const [d]: any = await db.sequelize.query(
+            `SELECT name FROM public.lead_dispositions WHERE id = :disposition_id LIMIT 1`,
+            { replacements: { disposition_id }, type: QueryTypes.SELECT }
+          );
+          if (d?.name) dispNameLabel = `_${d.name.replace(/[^a-zA-Z0-9]/g, "_")}`;
+        } catch {}
+      }
+    }
+
     const callTypeSuffix = call_type === "campaign" ? "_Campaign" : call_type === "manual" ? "_Manual" : "";
-    const filename = `Agent_${safeAgentLabel}${callTypeSuffix}_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
+    const filename = `Agent_${agentNameLabel}${callTypeSuffix}${dispNameLabel}_Report_${new Date().toISOString().slice(0, 10)}.xlsx`;
 
     res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("X-Row-Count", rows.length);
     res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
     return res.send(buffer);
   } catch (error: any) {
