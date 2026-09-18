@@ -2,3 +2,15 @@
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T10:42:59.119Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T11:13:26.358Z"}
 {"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T11:13:38.868Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T11:25:56.732Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T11:26:04.690Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6IjRlYmNkYzQ1LTQ3NDQtNGQ5MC05MGNkLWM3N2YyNDFhMTNkYiIsImVtYWlsIjoid2FzaXF1ZWtoYW44MEBnbWFpbC5jb20iLCJpYXQiOjE3ODk3MjY2NjAsImV4cCI6MTc4OTgxMzA2MH0.L0v-hUSAQ7DNw62KWqufSPg9mUu0GH4nqgcUOxHoRJg","timestamp":"2026-09-18T11:38:10.337Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6ImQ2YmYxZGQ1LTU3NzUtNDk2Yi04ZTFhLWQ0ZDY4MzQyOTY4MyIsImVtYWlsIjoid2FzaXF1ZWtoYW45MEBnbWFpbC5jb20iLCJpYXQiOjE3ODk3MjY2MjcsImV4cCI6MTc4OTgxMzAyN30.mhPHglWneZPANEVMkCHTLiuulASj0yMwW4O8ZX2hOY0","timestamp":"2026-09-18T11:59:32.815Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6ImQ2YmYxZGQ1LTU3NzUtNDk2Yi04ZTFhLWQ0ZDY4MzQyOTY4MyIsImVtYWlsIjoid2FzaXF1ZWtoYW45MEBnbWFpbC5jb20iLCJpYXQiOjE3ODk3MzI3ODgsImV4cCI6MTc4OTgxOTE4OH0.WaNIiDgmqg_WrPzY_Q_f21PawRsqOzs8zIbtIjtEMRg","timestamp":"2026-09-18T12:33:25.604Z"}
+{"level":"info","message":"Token blacklisted: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1fdXNlcl9pZCI6IjRlYmNkYzQ1LTQ3NDQtNGQ5MC05MGNkLWM3N2YyNDFhMTNkYiIsImVtYWlsIjoid2FzaXF1ZWtoYW44MEBnbWFpbC5jb20iLCJpYXQiOjE3ODk3MzI4MjUsImV4cCI6MTc4OTgxOTIyNX0.RLcqiIsg8wCbCEa3rIAYd2hlgfZV-ksctNLSIoO0cXQ","timestamp":"2026-09-18T12:33:43.701Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T13:37:56.698Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T13:38:19.103Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T13:38:49.980Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T13:39:05.677Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T13:39:21.320Z"}
+{"level":"info","message":"CompressCrmController instantiated","timestamp":"2026-09-18T13:39:34.065Z"}

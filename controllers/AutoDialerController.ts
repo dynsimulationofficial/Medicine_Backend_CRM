@@ -28,6 +28,8 @@ export class AutoDialerController {
   } | null = null;
 
   private stoppedAt: number = 0;
+  private stoppedCampaignIds: Set<string> = new Set();
+  private activeCampaignIds: Set<string> = new Set();
   private recentlyCompletedLeadIds: Map<string, number> = new Map();
 
   private markLeadCompleted(leadId: string) {
@@ -116,6 +118,10 @@ export class AutoDialerController {
         if (campaign_id) {
           whereConditions.push(`l.campaign_id = :campaign_id`);
           replacements.campaign_id = campaign_id;
+
+          // Reactivate campaign when queue is fetched to dial
+          this.stoppedCampaignIds.delete(String(campaign_id));
+          this.activeCampaignIds.add(String(campaign_id));
 
           // Default: only fetch pending leads that have NOT been dialed / assigned yet (anti-spam)
           const reDial = (req.query as any)?.re_dial === "true";
@@ -595,9 +601,11 @@ export class AutoDialerController {
         return res.status(404).json({ success: false, message: "Lead not found" });
       }
 
-      // Only associate campaign advancement if this is explicitly a campaign session
-      const isCampaignActive = Boolean(is_campaign) || Boolean(this.activeParallelCampaign);
-      const resolvedCampaignId = isCampaignActive ? (campaign_id || currentLeadRow.campaign_id || null) : null;
+      // Only associate campaign advancement if this is explicitly an active campaign session
+      const targetCamp = campaign_id || currentLeadRow.campaign_id;
+      const isExplicitlyStopped = Boolean(targetCamp && this.stoppedCampaignIds.has(String(targetCamp)));
+      const isCampaignActive = !isExplicitlyStopped && (Boolean(is_campaign) || Boolean(this.activeParallelCampaign));
+      const resolvedCampaignId = isCampaignActive ? (targetCamp || null) : null;
 
       // 2. Validate agent_id against system_users foreign key
       let validAgentId: string | null = null;
@@ -690,7 +698,7 @@ export class AutoDialerController {
       // 6. Check if advancing is enabled:
       // Either an automated Campaign (resolvedCampaignId), OR an Agent Assigned Queue (is_assigned_queue && validAgentId)
       const isAssignedQueueActive = Boolean(is_assigned_queue) && Boolean(validAgentId);
-      const shouldAdvance = advance === true && (Boolean(resolvedCampaignId) || isAssignedQueueActive);
+      const shouldAdvance = advance === true && !isExplicitlyStopped && (Boolean(resolvedCampaignId) || isAssignedQueueActive);
 
       if (!shouldAdvance) {
         this.activeCall = null;
@@ -698,7 +706,10 @@ export class AutoDialerController {
           success: true,
           has_next: false,
           completed: true,
-          message: "Disposition and activity saved successfully!",
+          campaign_stopped: isExplicitlyStopped,
+          message: isExplicitlyStopped
+            ? "Campaign calling was stopped by Admin. Activity saved successfully."
+            : "Disposition and activity saved successfully!",
         });
       }
 
@@ -1023,6 +1034,7 @@ export class AutoDialerController {
     return res.status(200).json({
       success: true,
       data: this.activeCall,
+      stopped_campaigns: Array.from(this.stoppedCampaignIds),
     });
   };
 
@@ -1201,16 +1213,22 @@ export class AutoDialerController {
   };
 
   /**
-   * 11. POST /leads/dialer/stop-parallel
-   * Stops/pauses the active CloudTalk Parallel Campaign
+   * 11. POST /leads/dialer/stop-parallel & /leads/dialer/stop
+   * Stops/pauses the active Campaign
    */
   public stopParallelCampaign = async (req: Request, res: Response) => {
     try {
-      const { cloudtalk_campaign_id } = req.body;
+      const { campaign_id, cloudtalk_campaign_id } = req.body;
       const targetCampId = cloudtalk_campaign_id || this.activeParallelCampaign?.cloudtalk_campaign_id;
 
       if (targetCampId) {
         await cloudTalkService.setParallelCampaignStatus(targetCampId, "inactive");
+      }
+
+      const stoppedCampId = campaign_id || this.activeParallelCampaign?.campaign_id;
+      if (stoppedCampId) {
+        this.stoppedCampaignIds.add(String(stoppedCampId));
+        this.activeCampaignIds.delete(String(stoppedCampId));
       }
 
       this.activeParallelCampaign = null;
@@ -1221,6 +1239,23 @@ export class AutoDialerController {
         success: true,
         message: "Campaign calling stopped successfully.",
       });
+    } catch (err: any) {
+      return res.status(500).json({ success: false, message: err.message });
+    }
+  };
+
+  /**
+   * 11.1 POST /leads/dialer/start
+   * Marks campaign active and removes from stoppedCampaignIds
+   */
+  public startCampaign = async (req: Request, res: Response) => {
+    try {
+      const { campaign_id } = req.body;
+      if (campaign_id) {
+        this.stoppedCampaignIds.delete(String(campaign_id));
+        this.activeCampaignIds.add(String(campaign_id));
+      }
+      return res.status(200).json({ success: true, message: "Campaign activated" });
     } catch (err: any) {
       return res.status(500).json({ success: false, message: err.message });
     }
