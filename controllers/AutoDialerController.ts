@@ -590,7 +590,7 @@ export class AutoDialerController {
 
       // Fetch current lead details from DB
       const [currentLeadRow]: any[] = await db.sequelize.query(
-        `SELECT id, lead_number, full_name, phone, whatsapp_number, campaign_id, agent_id, lead_status
+        `SELECT id, lead_number, full_name, phone, whatsapp_number, campaign_id, agent_id, lead_status, created_at
          FROM public.leads 
          WHERE id = :lead_id AND deleted_at IS NULL 
          LIMIT 1`,
@@ -749,14 +749,17 @@ export class AutoDialerController {
       } else if (isAssignedQueueSession) {
         // Assigned leads queue (matches getNextAssignedLead sequential order)
         const targetAgentId = validAgentId || currentLeadRow.agent_id || null;
-        const agentFilter = targetAgentId ? `AND l.agent_id = :targetAgentId` : ``;
-        const currentCreatedAt = currentLeadRow.created_at;
+        let agentFilter = "";
         const queueReplacements: any = {
-          targetAgentId,
           excludedIds,
-          currentCreatedAt,
+          currentCreatedAt: currentLeadRow.created_at ? new Date(currentLeadRow.created_at) : new Date(),
           currentLeadId: lead_id,
         };
+
+        if (targetAgentId) {
+          agentFilter = `AND l.agent_id = :targetAgentId`;
+          queueReplacements.targetAgentId = targetAgentId;
+        }
 
         // 1. Find next assigned lead down the sequence
         const [nextDown]: any[] = await db.sequelize.query(
@@ -776,16 +779,23 @@ export class AutoDialerController {
           nextLead = nextDown;
         } else {
           // 2. Loop back to top of assigned leads queue
+          const loopReplacements: any = { excludedIds };
+          let loopAgentFilter = "";
+          if (targetAgentId) {
+            loopAgentFilter = `AND l.agent_id = :targetAgentId`;
+            loopReplacements.targetAgentId = targetAgentId;
+          }
+
           const [loopLead]: any[] = await db.sequelize.query(
             `SELECT l.id, l.lead_number, l.full_name, l.phone, l.whatsapp_number, l.email, l.city, l.state, l.country, l.note, l.campaign_id, l.agent_id, l.lead_status
              FROM public.leads l
              WHERE l.deleted_at IS NULL 
-               ${agentFilter}
+               ${loopAgentFilter}
                AND l.id NOT IN (:excludedIds)
-               AND ((l.phone IS NOT NULL AND TRIM(phone) != '') OR (l.whatsapp_number IS NOT NULL AND TRIM(whatsapp_number) != ''))
+               AND ((l.phone IS NOT NULL AND TRIM(l.phone) != '') OR (l.whatsapp_number IS NOT NULL AND TRIM(l.whatsapp_number) != ''))
              ORDER BY l.created_at DESC, l.id DESC 
              LIMIT 1`,
-            { replacements: queueReplacements, type: QueryTypes.SELECT }
+            { replacements: loopReplacements, type: QueryTypes.SELECT }
           );
           nextLead = loopLead || null;
         }
