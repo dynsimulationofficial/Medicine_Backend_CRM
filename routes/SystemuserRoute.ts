@@ -61,6 +61,8 @@ SystemuserRouter.post("/leads/update", leadController.updateLead);
 SystemuserRouter.post("/leads/soft-delete", leadController.softDeleteLeads);
 SystemuserRouter.post("/assignlead", leadController.assignLeadToAgent);
 SystemuserRouter.post("/leads/assigned/bulk", leadController.bulkAssignLeads);
+SystemuserRouter.post("/leads/unassign", leadController.unassignLeads);
+SystemuserRouter.post("/leads/unassign/bulk", leadController.unassignLeads);
 SystemuserRouter.post("/leads/filter", leadController.searchLeads);
 SystemuserRouter.post("/unassignedleads/filter", leadController.filterUnassignedLeads);
 SystemuserRouter.post("/leads/unassigned/filter", leadController.filterUnassignedLeads);
