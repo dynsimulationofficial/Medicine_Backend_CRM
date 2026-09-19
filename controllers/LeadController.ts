@@ -332,6 +332,11 @@ export const updateLead = async (req: Request, res: Response) => {
 
     const validatedData = await updateLeadSchema.validate(req.body, { abortEarly: false });
     const now = new Date();
+    const clearAgent =
+      req.body.clear_agent === true ||
+      req.body.unassign === true ||
+      req.body.agent_id === null ||
+      (typeof req.body.agent_id === "string" && req.body.agent_id.trim() === "");
 
     const query = `
       UPDATE public.leads SET
@@ -348,7 +353,7 @@ export const updateLead = async (req: Request, res: Response) => {
         lead_score = COALESCE(:lead_score, lead_score),
         lead_quality = COALESCE(:lead_quality, lead_quality),
         best_time_to_call = COALESCE(:best_time_to_call, best_time_to_call),
-        agent_id = COALESCE(:agent_id, agent_id),
+        agent_id = CASE WHEN :clearAgent = true THEN NULL ELSE COALESCE(:agent_id, agent_id) END,
         lead_source_id = COALESCE(:lead_source_id, lead_source_id),
         campaign_id = COALESCE(:campaign_id, campaign_id),
         currency = COALESCE(:currency, currency),
@@ -362,6 +367,7 @@ export const updateLead = async (req: Request, res: Response) => {
     const result: any[] = await db.sequelize.query(query, {
       replacements: {
         id,
+        clearAgent: Boolean(clearAgent),
         full_name: validatedData.full_name || null,
         email: validatedData.email ? validatedData.email.toLowerCase().trim() : null,
         phone: validatedData.phone || null,
@@ -516,6 +522,47 @@ export const bulkAssignLeads = async (req: Request, res: Response) => {
     }
 
     return res.status(200).json({ success: true, message: `${lead_ids.length} leads assigned successfully` });
+  } catch (error: any) {
+    return res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// ==================== 8.1. UNASSIGN LEADS (SINGLE & BULK) ====================
+export const unassignLeads = async (req: Request, res: Response) => {
+  try {
+    const rawIds =
+      req.body.lead_ids ||
+      req.body.ids ||
+      req.body.lead_id ||
+      req.body.id ||
+      req.query.lead_id ||
+      req.query.id;
+
+    let ids: string[] = [];
+    if (Array.isArray(rawIds)) {
+      ids = rawIds.map(String).filter(Boolean);
+    } else if (typeof rawIds === "string" && rawIds.trim()) {
+      ids = rawIds.includes(",")
+        ? rawIds.split(",").map((s) => s.trim()).filter(Boolean)
+        : [rawIds.trim()];
+    }
+
+    if (!ids.length) {
+      return res.status(400).json({ success: false, message: "Lead ID(s) required" });
+    }
+
+    await db.sequelize.query(
+      `UPDATE public.leads 
+       SET agent_id = NULL, updated_at = NOW() 
+       WHERE id = ANY(ARRAY[:ids]::uuid[]) AND deleted_at IS NULL`,
+      { replacements: { ids }, type: QueryTypes.UPDATE }
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: `${ids.length} lead(s) unassigned successfully`,
+      count: ids.length,
+    });
   } catch (error: any) {
     return res.status(500).json({ success: false, message: error.message });
   }
@@ -1443,6 +1490,7 @@ export default {
   getAllAgents,
   updateLead,
   assignLeadToAgent,
+  unassignLeads,
   searchLeads,
   filterUnassignedLeads,
   softDeleteLeads,
